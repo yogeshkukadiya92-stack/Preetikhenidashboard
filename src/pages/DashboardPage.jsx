@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, StatusPill, Tag } from '../components/ui.jsx';
 import { FunnelChart, RevenueChart } from '../components/Charts.jsx';
 import { ChevronRight } from '../components/icons.jsx';
@@ -14,11 +16,20 @@ function KpiIcon({ accent }) {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate();
+  const [revenuePeriod, setRevenuePeriod] = useState('Week');
+
+  const kpiRoute = (label) => {
+    if (label.includes('Appointment')) return '/appointments';
+    if (label.includes('Payment')) return '/payments';
+    return '/crm';
+  };
+
   return (
     <>
       <section className="kpis">
         {kpis.map((kpi) => (
-          <article className="kpi" key={kpi.label}>
+          <article className="kpi action-card" key={kpi.label} role="button" tabIndex={0} onClick={() => navigate(kpiRoute(kpi.label))} onKeyDown={(event) => { if (event.key === 'Enter') navigate(kpiRoute(kpi.label)); }}>
             <div className="kpi-head">
               <KpiIcon accent={kpi.accent} />
               <div>
@@ -35,6 +46,24 @@ export function DashboardPage() {
         ))}
       </section>
 
+      <section className="quick-actions" aria-label="Quick actions">
+        {[
+          ['Add Lead', '/crm'],
+          ['Add Client', '/clients'],
+          ['Book Appointment', '/appointments'],
+          ['Send Form', '/operations?tab=forms'],
+          ['Create Invoice', '/finance?tab=payments'],
+          ['Add Payment', '/finance?tab=payments'],
+          ['Create Treatment Plan', '/operations?tab=treatments'],
+          ['Add Coaching Student', '/operations?tab=coaching'],
+        ].map(([label, path]) => (
+          <button className="quick-action" type="button" key={label} onClick={() => navigate(path)}>
+            <span>{label}</span>
+            <ChevronRight />
+          </button>
+        ))}
+      </section>
+
       <section className="grid">
         <div className="stack">
           <Card title="Lead Conversion Funnel">
@@ -46,22 +75,22 @@ export function DashboardPage() {
           </Card>
         </div>
 
-        <Card title="Revenue Trend" action={<button className="pill">By Week <ChevronRight /></button>}>
+        <Card title="Revenue Trend" action={<button className="pill" type="button" onClick={() => setRevenuePeriod((current) => (current === 'Week' ? 'Month' : 'Week'))}>By {revenuePeriod} <ChevronRight /></button>}>
           <RevenueChart />
           <div className="chart-stats">
             <div className="mini-stat">
-              <span>Total Revenue</span>
+              <span>Total Revenue ({revenuePeriod})</span>
               <strong>₹ 96,420 <span className="delta">↑ 18%</span></strong>
             </div>
             <div className="mini-stat">
-              <span>Total Collections</span>
+              <span>Total Collections ({revenuePeriod})</span>
               <strong>₹ 72,380 <span className="delta">↑ 16%</span></strong>
             </div>
           </div>
         </Card>
 
         <aside className="stack tasks">
-          <Card title="Today's Schedule" action={<ChevronRight />}>
+          <Card title="Today's Schedule" action={<button className="icon-btn inline-icon" type="button" onClick={() => navigate('/appointments')} aria-label="Open appointments"><ChevronRight /></button>}>
             <div className="schedule-list">
               {todaySchedule.map((item) => (
                 <div className="schedule-item" key={`${item.time}-${item.name}`}>
@@ -75,10 +104,10 @@ export function DashboardPage() {
                 </div>
               ))}
             </div>
-            <div className="footer-action">
+            <button className="footer-action button-reset" type="button" onClick={() => navigate('/appointments')}>
               <span>View Full Schedule</span>
               <ChevronRight />
-            </div>
+            </button>
           </Card>
 
           <Card title="Urgent Tasks" action={<StatusPill tone="st-bad">5</StatusPill>}>
@@ -94,19 +123,19 @@ export function DashboardPage() {
                 </div>
               ))}
             </div>
-            <div className="footer-action">
+            <button className="footer-action button-reset" type="button" onClick={() => navigate('/crm')}>
               <span>View All Tasks</span>
               <ChevronRight />
-            </div>
+            </button>
           </Card>
         </aside>
       </section>
 
       <section className="grid" style={{ marginTop: 16 }}>
-        <Card title="Recent Leads" action={<span className="subtle">View All</span>}>
+        <Card title="Recent Leads" action={<button className="row-link" type="button" onClick={() => navigate('/crm')}>View All</button>}>
           <ModuleTable type="leads" />
         </Card>
-        <Card title="Recent Payments" action={<span className="subtle">View All</span>}>
+        <Card title="Recent Payments" action={<button className="row-link" type="button" onClick={() => navigate('/payments')}>View All</button>}>
           <ModuleTable type="payments" />
         </Card>
       </section>
@@ -115,6 +144,7 @@ export function DashboardPage() {
 }
 
 function ModuleTable({ type }) {
+  const navigate = useNavigate();
   const rows = type === 'leads' ? leads : payments;
 
   return (
@@ -139,7 +169,7 @@ function ModuleTable({ type }) {
               <div><Tag tone={row.status === 'Hot' ? 'tag-hot' : row.status === 'Follow-up due' ? 'tag-follow' : row.status === 'Contacted' ? 'tag-contacted' : 'tag-new'}>{row.status}</Tag></div>
               <div>{row.score}</div>
               <div>{row.addedOn}</div>
-              <div>⋯</div>
+              <div><button className="row-link" type="button" onClick={() => navigate(type === 'leads' ? '/crm' : '/payments')}>View</button></div>
             </>
           ) : (
             <>
@@ -148,7 +178,7 @@ function ModuleTable({ type }) {
               <div>{row.amount}</div>
               <div><Tag tone={row.status === 'Paid' ? 'tag-paid' : row.status === 'Partial' ? 'tag-partial' : 'tag-pending'}>{row.status}</Tag></div>
               <div>{row.paidOn}</div>
-              <div>⋯</div>
+              <div><button className="row-link" type="button" onClick={() => navigate(type === 'leads' ? '/crm' : '/payments')}>View</button></div>
             </>
           )}
         </div>

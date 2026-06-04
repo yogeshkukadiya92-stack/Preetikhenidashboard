@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { BellIcon, CalendarIcon, ChartIcon, ChevronRight, FileIcon, HomeIcon, MoneyIcon, SearchIcon, SettingsIcon, UsersIcon } from './icons.jsx';
 import { navItems } from '../data/mockData.js';
 
@@ -9,13 +10,49 @@ const iconByPath = {
   '/users': UsersIcon,
   '/forms': FileIcon,
   '/appointments': CalendarIcon,
+  '/operations': ChartIcon,
+  '/treatments': ChartIcon,
+  '/packages': MoneyIcon,
+  '/coaching': UsersIcon,
+  '/staff': UsersIcon,
+  '/finance': MoneyIcon,
+  '/accounts': MoneyIcon,
+  '/inventory': FileIcon,
+  '/communication': BellIcon,
   '/payments': MoneyIcon,
   '/reports': ChartIcon,
+  '/client-portal': UsersIcon,
+  '/settings': SettingsIcon,
   '/integrations': SettingsIcon,
 };
 
 export function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [searchText, setSearchText] = useState('');
+  const [dateRange, setDateRange] = useState('May 18 - May 24, 2025');
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+  const handleSearch = (event) => {
+    event.preventDefault();
+    const term = searchText.trim().toLowerCase();
+    if (!term) return;
+    if (term.includes('package') || term.includes('program')) navigate('/operations?tab=packages');
+    else if (term.includes('treatment') || term.includes('plan') || term.includes('panchakarma') || term.includes('skin') || term.includes('hair') || term.includes('garbha') || term.includes('weight')) navigate('/operations?tab=treatments');
+    else if (term.includes('coach') || term.includes('student') || term.includes('batch') || term.includes('certificate')) navigate('/operations?tab=coaching');
+    else if (term.includes('staff') || term.includes('role') || term.includes('permission')) navigate('/settings?tab=users');
+    else if (term.includes('account') || term.includes('expense') || term.includes('gst')) navigate('/finance?tab=accounts');
+    else if (term.includes('inventory') || term.includes('stock') || term.includes('medicine') || term.includes('oil')) navigate('/operations?tab=inventory');
+    else if (term.includes('whatsapp') || term.includes('message') || term.includes('email') || term.includes('sms') || term.includes('template')) navigate('/operations?tab=communication');
+    else if (term.includes('portal') || term.includes('mobile') || term.includes('app')) navigate('/operations?tab=portal');
+    else if (term.includes('setting') || term.includes('branch') || term.includes('tax')) navigate('/settings');
+    else if (term.includes('report') || term.includes('analytics')) navigate('/reports');
+    else if (term.includes('pay') || term.includes('invoice') || term.includes('receipt')) navigate('/finance?tab=payments');
+    else if (term.includes('client')) navigate('/clients');
+    else if (term.includes('appoint') || term.includes('schedule')) navigate('/appointments');
+    else if (term.includes('form')) navigate('/forms');
+    else navigate('/crm');
+  };
 
   return (
     <div className="app-shell">
@@ -43,10 +80,6 @@ export function Layout() {
               </NavLink>
             );
           })}
-          <button className="nav-item">
-            <SettingsIcon />
-            <span>Settings</span>
-          </button>
         </nav>
         <div className="sidebar-art" aria-hidden="true" />
         <div className="clinic-card">
@@ -60,27 +93,35 @@ export function Layout() {
 
       <main className="main">
         <header className="topbar">
-          <div className="search">
+          <form className="search" onSubmit={handleSearch}>
             <SearchIcon />
-            <input placeholder="Search clients, leads, appointments..." aria-label="Search" />
-            <span className="kbd">⌘ K</span>
-          </div>
-          <div className="date-pill">
+            <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search leads, clients, stock, payments..." aria-label="Search" />
+            <button className="kbd" type="submit">Go</button>
+          </form>
+          <button className="date-pill" type="button" onClick={() => setDateRange((current) => (current === 'May 18 - May 24, 2025' ? 'May 2025' : 'May 18 - May 24, 2025'))}>
             <CalendarIcon />
-            <strong>May 18 - May 24, 2025</strong>
+            <strong>{dateRange}</strong>
             <ChevronRight />
-          </div>
-          <button className="icon-btn" aria-label="Notifications">
+          </button>
+          <button className="icon-btn" aria-label="Notifications" type="button" onClick={() => setNotificationsOpen((current) => !current)}>
             <BellIcon />
           </button>
-          <div className="profile">
+          {notificationsOpen && (
+            <div className="popover-panel">
+              <strong>Notifications</strong>
+              <p>8 lead follow-ups due today.</p>
+              <p>5 payments need collection review.</p>
+              <button className="row-link" type="button" onClick={() => { setNotificationsOpen(false); navigate('/crm'); }}>Open CRM</button>
+            </div>
+          )}
+          <button className="profile" type="button" onClick={() => navigate('/users')}>
             <div className="avatar" aria-hidden="true" />
             <div className="meta">
               <strong>Dr. Arjun Nair</strong>
               <span>{location.pathname === '/' ? 'Administrator' : 'Clinic Operator'}</span>
             </div>
             <ChevronRight />
-          </div>
+          </button>
         </header>
         <Outlet />
       </main>

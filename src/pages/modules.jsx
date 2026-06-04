@@ -1,8 +1,27 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronRight } from '../components/icons.jsx';
 import { Card, StatusPill, Tag } from '../components/ui.jsx';
 import { GenericModulePage } from './GenericModulePage.jsx';
-import { clients, forms, integrations, leads, payments, sheetTabs, syncPreviewRows, users } from '../data/mockData.js';
+import {
+  accounts,
+  clients,
+  coachingBatches,
+  communicationTemplates,
+  forms,
+  integrations,
+  inventoryItems,
+  leads,
+  packages,
+  payments,
+  portalFeatures,
+  settingsItems,
+  sheetTabs,
+  staffRoles,
+  syncPreviewRows,
+  treatmentPlans,
+  users,
+} from '../data/mockData.js';
 
 function downloadText(filename, content, mimeType = 'text/plain;charset=utf-8') {
   const blob = new Blob([content], { type: mimeType });
@@ -47,17 +66,24 @@ function ImportExportModule({
   const [preview, setPreview] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
   const [message, setMessage] = useState('Ready to import or export data.');
-  const [dropActive, setDropActive] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const bannerFileInputRef = useRef(null);
+
+  const rowToCsvValues = (row) => {
+    const values = rowToValues(row);
+    return headers.map((header) => values[header] ?? '');
+  };
 
   const exportCsv = () => {
-    downloadText(`${filenameBase}.csv`, rowsToCsv(headers, rows.map(rowToValues)), 'text/csv;charset=utf-8');
+    downloadText(`${filenameBase}.csv`, rowsToCsv(headers, rows.map(rowToCsvValues)), 'text/csv;charset=utf-8');
     setMessage('CSV export started.');
   };
 
-  const exportJson = () => {
-    downloadText(`${filenameBase}.json`, JSON.stringify(rows, null, 2), 'application/json;charset=utf-8');
-    setMessage('JSON export started.');
+  const downloadSample = () => {
+    const sampleRow = rows[0] ? rowToCsvValues(rows[0]) : headers.map(() => '');
+    downloadText(`${filenameBase}-sample.csv`, rowsToCsv(headers, [sampleRow]), 'text/csv;charset=utf-8');
+    setMessage('Sample CSV downloaded.');
   };
 
   const normalize = (entry) => parseRow(entry);
@@ -67,10 +93,16 @@ function ImportExportModule({
     setUploadName(file.name);
     const text = await file.text();
     let parsed = [];
-    if (file.name.toLowerCase().endsWith('.json')) {
-      parsed = JSON.parse(text);
-    } else {
-      parsed = parseCsv(text);
+    try {
+      if (file.name.toLowerCase().endsWith('.json')) {
+        parsed = JSON.parse(text);
+      } else {
+        parsed = parseCsv(text);
+      }
+    } catch {
+      setPreview([]);
+      setMessage('Import failed. Please upload a valid CSV or JSON file.');
+      return;
     }
     const normalized = parsed
       .map((row) => (Array.isArray(row) ? normalize(Object.fromEntries(headers.map((header, index) => [header, row[index] ?? '']))) : normalize(row)))
@@ -93,6 +125,16 @@ function ImportExportModule({
   };
 
   const visibleRows = customRows ?? rows.map((row) => row);
+  const openRecord = (row) => {
+    setSelectedRecord(row);
+    setMessage(`${rowToCsvValues(row)[0]} selected.`);
+  };
+
+  const defaultRowAction = (row) => (
+    <button className="row-link" type="button" onClick={() => openRecord(row)}>
+      View
+    </button>
+  );
 
   return (
     <section className="module-page">
@@ -111,55 +153,18 @@ function ImportExportModule({
         </div>
       </div>
 
-      <Card title="Import / Export Banner" subtitle={`Bring ${title.toLowerCase()} in from a spreadsheet or download the current records.`}>
-        <div className="import-banner">
-          <div>
-            <strong>Bulk upload ready.</strong>
-            <p>Drop a CSV or JSON file, review the preview, and import records directly into the module.</p>
-          </div>
-          <div className="sheet-actions">
-            <button className="pill" onClick={exportCsv} type="button">Export CSV <ChevronRight /></button>
-            <button className="pill" onClick={exportJson} type="button">Export JSON <ChevronRight /></button>
-          </div>
+      <Card title="Import / Export" className="compact-action-card single-row-actions">
+        <div className="import-banner compact-import-banner">
+          <input ref={bannerFileInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
+          <button className="pill" type="button" onClick={downloadSample}>Sample <ChevronRight /></button>
+          <button className="pill" type="button" onClick={() => bannerFileInputRef.current?.click()}>Import <ChevronRight /></button>
+          <button className="pill" type="button" onClick={exportCsv}>Export <ChevronRight /></button>
         </div>
       </Card>
 
       {extraTopCard}
 
-      <div className="grid" style={{ gridTemplateColumns: '1fr 0.9fr', alignItems: 'start' }}>
-        <Card title={`Bulk Upload ${title}`} subtitle={`Choose a .csv or .json file with the ${headers.join(', ')} columns.`}>
-          <div className="upload-box">
-            <label
-              className={`upload-dropzone ${dropActive ? 'active' : ''}`}
-              onDragOver={(event) => { event.preventDefault(); setDropActive(true); }}
-              onDragLeave={() => setDropActive(false)}
-              onDrop={async (event) => {
-                event.preventDefault();
-                setDropActive(false);
-                await handleFile(event.dataTransfer.files?.[0]);
-              }}
-            >
-              <input type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
-              <strong>Drop file here or click to browse</strong>
-              <span>Supports CSV and JSON imports from spreadsheets or other tools.</span>
-            </label>
-
-            <div className="sheet-actions">
-              <button className="pill" type="button" onClick={() => setModalOpen(true)} disabled={!preview.length}>Open Preview <ChevronRight /></button>
-              <button className="pill" type="button" onClick={() => setPreview([])}>Clear Preview <ChevronRight /></button>
-            </div>
-
-            <div className="mini-stat">
-              <span>Status</span>
-              <strong>{message}</strong>
-            </div>
-            <div className="mini-stat">
-              <span>Upload</span>
-              <strong>{uploadName}</strong>
-            </div>
-          </div>
-        </Card>
-
+      <div className="grid single-module-grid">
         <Card title={`Current ${title}`} subtitle={`Live records currently stored in ${title.toLowerCase()}.`}>
           <div className="table">
             <div className="table-head">
@@ -169,7 +174,7 @@ function ImportExportModule({
             {visibleRows.map((row, index) => (
               <div className="data-row" key={index}>
                 {headers.map((header) => <div key={header}>{rowToValues(row)[header]}</div>)}
-                <div>{rowActions ? rowActions(row) : '⋯'}</div>
+                <div>{rowActions ? rowActions(row) : defaultRowAction(row)}</div>
               </div>
             ))}
           </div>
@@ -204,7 +209,7 @@ function ImportExportModule({
               {preview.map((row, index) => (
                 <div className="data-row" key={index}>
                   {headers.map((header) => <div key={header}>{rowToValues(row)[header]}</div>)}
-                  <div>{rowActions ? rowActions(row) : '⋯'}</div>
+                  <div>{rowActions ? rowActions(row) : defaultRowAction(row)}</div>
                 </div>
               ))}
             </div>
@@ -220,10 +225,16 @@ function ImportExportModule({
 }
 
 export function CRMPage() {
+  const [activeTab, setActiveTab] = useState('leads');
   const [manualLeads, setManualLeads] = useState([]);
   const [editingIndex, setEditingIndex] = useState(null);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [showLeads, setShowLeads] = useState(true);
+  const [preview, setPreview] = useState([]);
+  const [uploadName, setUploadName] = useState('No file selected');
+  const [message, setMessage] = useState('Ready to manage leads.');
+  const [dropActive, setDropActive] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [leadForm, setLeadForm] = useState({
     name: '',
     source: 'Website',
@@ -236,15 +247,10 @@ export function CRMPage() {
     ...manualLeads.map((lead, index) => ({ ...lead, __manual: true, __manualIndex: index })),
     ...leads.slice(0, 5).map((lead) => ({ ...lead, __manual: false })),
   ];
+  const headers = ['Lead', 'Source', 'Status', 'Score', 'Added On'];
 
   const resetLeadForm = () => {
-    setLeadForm({
-      name: '',
-      source: 'Website',
-      status: 'New',
-      score: '',
-      addedOn: 'Today',
-    });
+    setLeadForm({ name: '', source: 'Website', status: 'New', score: '', addedOn: 'Today' });
     setEditingIndex(null);
   };
 
@@ -263,8 +269,10 @@ export function CRMPage() {
       addedOn: leadForm.addedOn.trim() || 'Today',
     };
     setManualLeads((current) => (editingIndex === null ? [nextLead, ...current] : current.map((lead, index) => (index === editingIndex ? nextLead : lead))));
+    setMessage(editingIndex === null ? 'Lead added successfully.' : 'Lead updated successfully.');
     resetLeadForm();
     setLeadModalOpen(false);
+    setShowLeads(true);
   };
 
   const startEditLead = (lead, index) => {
@@ -281,6 +289,7 @@ export function CRMPage() {
 
   const deleteManualLead = (index) => {
     setManualLeads((current) => current.filter((_, idx) => idx !== index));
+    setMessage('Lead deleted successfully.');
     if (editingIndex === index) {
       resetLeadForm();
       setLeadModalOpen(false);
@@ -294,69 +303,198 @@ export function CRMPage() {
     return 'tag-new';
   };
 
+  const leadValues = (lead) => [lead.name, lead.source, lead.status, lead.score, lead.addedOn];
+
+  const exportCsv = () => {
+    downloadText('ayurflow-leads.csv', rowsToCsv(headers, leadRows.map(leadValues)), 'text/csv;charset=utf-8');
+    setMessage('Lead CSV export started.');
+  };
+
+  const exportJson = () => {
+    const rows = leadRows.map(({ __manual, __manualIndex, ...lead }) => lead);
+    downloadText('ayurflow-leads.json', JSON.stringify(rows, null, 2), 'application/json;charset=utf-8');
+    setMessage('Lead JSON export started.');
+  };
+
+  const normalizeLead = (entry) => ({
+    name: entry.Lead ?? entry.lead ?? entry.name ?? '',
+    source: entry.Source ?? entry.source ?? 'Website',
+    status: entry.Status ?? entry.status ?? 'New',
+    score: entry.Score ?? entry.score ?? '',
+    addedOn: entry['Added On'] ?? entry.addedOn ?? 'Today',
+  });
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setUploadName(file.name);
+    const text = await file.text();
+    let parsed = [];
+    try {
+      parsed = file.name.toLowerCase().endsWith('.json')
+        ? JSON.parse(text)
+        : parseCsv(text).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
+    } catch {
+      setPreview([]);
+      setMessage('Import failed. Please upload a valid leads CSV or JSON file.');
+      return;
+    }
+    const normalized = parsed.map(normalizeLead).filter((lead) => lead.name);
+    setPreview(normalized);
+    setMessage(`${normalized.length} leads ready to import.`);
+    setModalOpen(true);
+  };
+
+  const commitImport = () => {
+    if (!preview.length) {
+      setMessage('No leads found to import.');
+      return;
+    }
+    setManualLeads((current) => [...preview, ...current]);
+    setPreview([]);
+    setUploadName('No file selected');
+    setModalOpen(false);
+    setMessage(`Imported ${preview.length} leads successfully.`);
+    setActiveTab('leads');
+    setShowLeads(true);
+  };
+
   return (
-    <>
-      <ImportExportModule
-        title="CRM"
-        description="Track leads, assign follow-ups, and keep every potential client moving through the pipeline."
-        stats={[
-          { label: 'Open Leads', value: '42' },
-          { label: 'Hot Leads', value: '14' },
-          { label: 'Follow-ups Today', value: '27' },
-        ]}
-        headers={['Lead', 'Source', 'Status', 'Score', 'Added On']}
-        seedRows={leads.slice(0, 5)}
-        filenameBase="ayurflow-leads"
-        rowToValues={(row) => ({
-          Lead: row.name,
-          Source: row.source,
-          Status: row.status,
-          Score: row.score,
-          'Added On': row.addedOn,
-        })}
-        parseRow={(entry) => ({
-          name: entry.Lead ?? entry.lead ?? entry.name ?? '',
-          source: entry.Source ?? entry.source ?? '',
-          status: entry.Status ?? entry.status ?? '',
-          score: entry.Score ?? entry.score ?? '',
-          addedOn: entry['Added On'] ?? entry.addedOn ?? '',
-        })}
-        extraTopCard={(
-          <Card title="Manual Lead Actions" subtitle="Open a popup form to add or edit a lead.">
+    <section className="module-page">
+      <div className="module-hero">
+        <div>
+          <h1>CRM</h1>
+          <p>Track leads, follow-ups, and conversion activity without showing upload tools until you need them.</p>
+        </div>
+        <div className="module-stats">
+          <div className="mini-stat"><span>Total leads</span><strong>{leadRows.length}</strong></div>
+          <div className="mini-stat"><span>Hot leads</span><strong>{leadRows.filter((lead) => lead.status === 'Hot').length}</strong></div>
+          <div className="mini-stat"><span>Status</span><strong>{message}</strong></div>
+        </div>
+      </div>
+
+      <div className="sheet-tabs">
+        <button className={`sheet-tab ${activeTab === 'leads' ? 'active' : ''}`} type="button" onClick={() => setActiveTab('leads')}>Leads</button>
+        <button className={`sheet-tab ${activeTab === 'import' ? 'active' : ''}`} type="button" onClick={() => setActiveTab('import')}>Import / Export</button>
+      </div>
+
+      {activeTab === 'leads' ? (
+        <>
+          <Card title="Lead Actions" subtitle="Only the daily CRM actions stay visible here.">
             <div className="sheet-actions">
-              <button className="pill" type="button" onClick={openCreateLead}>
-                Add Lead <ChevronRight />
-              </button>
-              <button className="pill" type="button" onClick={() => setShowLeads((current) => !current)}>
-                {showLeads ? 'Hide Leads' : 'Show Leads'} <ChevronRight />
-              </button>
-              <div className="mini-stat">
-                <span>Manual leads</span>
-                <strong>{manualLeads.length}</strong>
+              <button className="pill" type="button" onClick={openCreateLead}>Add Lead <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => setShowLeads((current) => !current)}>{showLeads ? 'Hide Leads' : 'Show Leads'} <ChevronRight /></button>
+              <div className="mini-stat"><span>Manual leads</span><strong>{manualLeads.length}</strong></div>
+            </div>
+          </Card>
+
+          <Card title="Current Leads" subtitle="Manual leads are editable. Seeded leads stay read-only.">
+            {showLeads ? (
+              <div className="table">
+                <div className="table-head">
+                  {headers.map((header) => <div key={header}>{header}</div>)}
+                  <div />
+                </div>
+                {leadRows.map((lead, index) => (
+                  <div className="data-row" key={`${lead.name}-${lead.addedOn}-${index}`}>
+                    <div>{lead.name}</div>
+                    <div>{lead.source}</div>
+                    <div><Tag tone={leadPriorityTone(lead.status)}>{lead.status}</Tag></div>
+                    <div>{lead.score}</div>
+                    <div>{lead.addedOn}</div>
+                    <div>
+                      {lead.__manual ? (
+                        <div className="row-actions">
+                          <button type="button" className="row-link" onClick={() => startEditLead(manualLeads[lead.__manualIndex], lead.__manualIndex)}>Edit</button>
+                          <button type="button" className="row-link danger" onClick={() => deleteManualLead(lead.__manualIndex)}>Delete</button>
+                        </div>
+                      ) : (
+                        <Tag tone={leadPriorityTone(lead.status)}>Read only</Tag>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <strong>Leads are hidden.</strong>
+                <p>Use Show Leads when you want the full CRM list back on screen.</p>
+              </div>
+            )}
+          </Card>
+        </>
+      ) : (
+        <div className="grid" style={{ gridTemplateColumns: '1fr 0.9fr', alignItems: 'start' }}>
+          <Card title="Import / Export Leads" subtitle="Hidden from the main CRM view to keep daily work clean.">
+            <div className="import-banner">
+              <div>
+                <strong>Spreadsheet tools are ready.</strong>
+                <p>Export the current leads or import a CSV/JSON file when the team needs bulk updates.</p>
+              </div>
+              <div className="sheet-actions">
+                <button className="pill" type="button" onClick={exportCsv}>Export CSV <ChevronRight /></button>
+                <button className="pill" type="button" onClick={exportJson}>Export JSON <ChevronRight /></button>
               </div>
             </div>
           </Card>
-        )}
-        customRows={showLeads ? leadRows.map((lead) => ({
-          Lead: lead.name,
-          Source: lead.source,
-          Status: lead.status,
-          Score: lead.score,
-          'Added On': lead.addedOn,
-          __manual: lead.__manual,
-          __manualIndex: lead.__manualIndex,
-        })) : []}
-        rowActions={(row) => {
-          if (!row.__manual) return <Tag tone={leadPriorityTone(row.Status)}>{row.Status}</Tag>;
-          return (
-            <div className="row-actions">
-              <Tag tone={leadPriorityTone(row.Status)}>{row.Status}</Tag>
-              <button type="button" className="row-link" onClick={() => startEditLead(manualLeads[row.__manualIndex], row.__manualIndex)}>Edit</button>
-              <button type="button" className="row-link danger" onClick={() => deleteManualLead(row.__manualIndex)}>Delete</button>
+
+          <Card title="Bulk Upload Leads" subtitle="Use Lead, Source, Status, Score, Added On columns.">
+            <div className="upload-box">
+              <label
+                className={`upload-dropzone ${dropActive ? 'active' : ''}`}
+                onDragOver={(event) => { event.preventDefault(); setDropActive(true); }}
+                onDragLeave={() => setDropActive(false)}
+                onDrop={async (event) => {
+                  event.preventDefault();
+                  setDropActive(false);
+                  await handleFile(event.dataTransfer.files?.[0]);
+                }}
+              >
+                <input type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
+                <strong>Drop leads file here or click to browse</strong>
+                <span>{uploadName}</span>
+              </label>
+              <div className="sheet-actions">
+                <button className="pill" type="button" onClick={() => setModalOpen(true)} disabled={!preview.length}>Open Preview <ChevronRight /></button>
+                <button className="pill" type="button" onClick={() => { setPreview([]); setMessage('Lead import preview cleared.'); }}>Clear Preview <ChevronRight /></button>
+              </div>
             </div>
-          );
-        }}
-      />
+          </Card>
+        </div>
+      )}
+
+      {modalOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setModalOpen(false)}>
+          <div className="modal-shell" role="dialog" aria-modal="true" aria-label="Lead import preview" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>Import Preview</h2>
+                <p>{preview.length} lead(s) detected from {uploadName}.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setModalOpen(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-table">
+              <div className="table-head">
+                {headers.map((header) => <div key={header}>{header}</div>)}
+                <div />
+              </div>
+              {preview.map((lead, index) => (
+                <div className="data-row" key={`${lead.name}-${index}`}>
+                  <div>{lead.name}</div>
+                  <div>{lead.source}</div>
+                  <div>{lead.status}</div>
+                  <div>{lead.score}</div>
+                  <div>{lead.addedOn}</div>
+                  <div><Tag tone="tag-follow">Preview</Tag></div>
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setModalOpen(false)}>Cancel <ChevronRight /></button>
+              <button className="pill" type="button" onClick={commitImport} disabled={!preview.length}>Import Now <ChevronRight /></button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {leadModalOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setLeadModalOpen(false)}>
@@ -409,7 +547,34 @@ export function CRMPage() {
           </div>
         </div>
       )}
-    </>
+
+      {selectedRecord && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedRecord(null)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`${title} options`} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>{title === 'Clients' ? 'Client Options' : `${title} Options`}</h2>
+                <p>{rowToCsvValues(selectedRecord)[0]} selected.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setSelectedRecord(null)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              {headers.map((header) => (
+                <div className="mini-stat" key={header}>
+                  <span>{header}</span>
+                  <strong>{rowToValues(selectedRecord)[header]}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setMessage('Appointment action ready.')}>Book Appointment <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => setMessage('Payment action ready.')}>Add Payment <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => setMessage('Treatment plan action ready.')}>Treatment Plan <ChevronRight /></button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -526,6 +691,13 @@ export function UsersPage() {
     setModalOpen(false);
   };
 
+  const toggleUserStatus = (email) => {
+    setPeople((current) => current.map((user) => (
+      user.email === email ? { ...user, status: user.status === 'Active' ? 'Pending' : 'Active' } : user
+    )));
+    setStatusMessage('User status updated.');
+  };
+
   return (
     <section className="module-page">
       <div className="module-hero">
@@ -582,7 +754,7 @@ export function UsersPage() {
 
             <div className="sheet-actions">
               <button className="pill" type="button" onClick={() => setModalOpen(true)} disabled={!importPreview.length}>Open Preview <ChevronRight /></button>
-              <button className="pill" type="button" onClick={() => setImportPreview([])}>Clear Preview <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => { setImportPreview([]); setStatusMessage('Preview cleared.'); }}>Clear Preview <ChevronRight /></button>
             </div>
 
             <div className="mini-stat">
@@ -611,7 +783,7 @@ export function UsersPage() {
                 <div>{user.role}</div>
                 <div>{user.email}</div>
                 <div><Tag tone={user.status === 'Active' ? 'tag-contacted' : 'tag-follow'}>{user.status}</Tag></div>
-                <div>⋯</div>
+                <div><button className="row-link" type="button" onClick={() => toggleUserStatus(user.email)}>Toggle</button></div>
               </div>
             ))}
           </div>
@@ -652,7 +824,7 @@ export function UsersPage() {
                   <div>{item.role}</div>
                   <div>{item.email}</div>
                   <div><Tag tone={item.status === 'Active' ? 'tag-contacted' : 'tag-follow'}>{item.status}</Tag></div>
-                  <div>⋯</div>
+                  <div><Tag tone="tag-follow">Preview</Tag></div>
                 </div>
               ))}
             </div>
@@ -664,6 +836,232 @@ export function UsersPage() {
         </div>
       )}
     </section>
+  );
+}
+
+function ModuleHubPage({ title, description, tabs, defaultTab }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryTab = searchParams.get('tab');
+  const firstTab = tabs.some((tab) => tab.id === queryTab) ? queryTab : defaultTab;
+  const [activeTab, setActiveTab] = useState(firstTab);
+  const [message, setMessage] = useState('Ready.');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterText, setFilterText] = useState('');
+
+  const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
+  const filteredRows = active.rows.filter((row) => row.join(' ').toLowerCase().includes(filterText.toLowerCase()));
+
+  const selectTab = (tabId) => {
+    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
+    setFilterText('');
+    setMessage(`${tabs.find((tab) => tab.id === tabId)?.label ?? title} opened.`);
+  };
+
+  const runAction = (action) => {
+    if (action === 'Add') setMessage(`New ${active.singular ?? active.label} form opened.`);
+    if (action === 'Import') setMessage(`${active.label} import tools opened.`);
+    if (action === 'Export') setMessage(`${active.label} export started.`);
+    if (action === 'Share') setMessage(`${active.label} share link copied.`);
+    if (action === 'Filter') {
+      setFilterOpen((current) => !current);
+      setMessage('Filter toggled.');
+    }
+  };
+
+  return (
+    <section className="module-page compact-page">
+      <div className="module-hero compact-hero">
+        <div>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </div>
+        <div className="module-stats">
+          <div className="mini-stat"><span>Section</span><strong>{active.label}</strong></div>
+          <div className="mini-stat"><span>Records</span><strong>{filteredRows.length}</strong></div>
+          <div className="mini-stat"><span>Status</span><strong>{message}</strong></div>
+        </div>
+      </div>
+
+      <Card title={`${title} Menu`} subtitle="Sub-pages are kept inside tabs so the sidebar stays clean.">
+        <div className="module-toolbar">
+          <div className="sheet-tabs compact-tabs">
+            {tabs.map((tab) => (
+              <button className={`sheet-tab ${active.id === tab.id ? 'active' : ''}`} type="button" key={tab.id} onClick={() => selectTab(tab.id)}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="sheet-actions toolbar-actions">
+            {['Add', 'Import', 'Export', 'Filter', 'Share'].map((action) => (
+              <button className="pill" type="button" key={action} onClick={() => runAction(action)}>{action} <ChevronRight /></button>
+            ))}
+          </div>
+        </div>
+        {filterOpen && (
+          <input className="lead-input compact-filter" value={filterText} onChange={(event) => setFilterText(event.target.value)} placeholder={`Filter ${active.label.toLowerCase()}...`} />
+        )}
+      </Card>
+
+      <Card title={active.title ?? active.label} subtitle={active.description}>
+        <div className="data-table">
+          <div className="table-head">
+            {active.columns.map((column) => <div key={column}>{column}</div>)}
+            <div />
+          </div>
+          {filteredRows.map((row, index) => (
+            <div className="data-row" key={`${active.id}-${index}`}>
+              {row.map((cell) => <div key={`${cell}-${index}`}>{cell}</div>)}
+              <div><button className="row-link" type="button" onClick={() => setMessage(`${row[0]} selected.`)}>Open</button></div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+const operationsTabs = [
+  {
+    id: 'forms',
+    label: 'Forms',
+    singular: 'form',
+    title: 'Forms Builder',
+    description: 'Intake, assessment, admission, consent, feedback, and registration forms stay here.',
+    columns: ['Form', 'Status', 'Updated'],
+    rows: forms.map((form) => [form.title, form.status, form.updated]),
+  },
+  {
+    id: 'treatments',
+    label: 'Treatment',
+    singular: 'plan',
+    description: 'Client journeys, goals, services, and therapy progress.',
+    columns: ['Client', 'Service', 'Goal', 'Duration', 'Status'],
+    rows: treatmentPlans.map((plan) => [plan.client, plan.service, plan.goal, plan.duration, plan.status]),
+  },
+  {
+    id: 'packages',
+    label: 'Packages',
+    singular: 'package',
+    description: 'Clinic and coaching packages with session and price details.',
+    columns: ['Package', 'Category', 'Duration', 'Sessions', 'Price'],
+    rows: packages.map((item) => [item.name, item.category, item.duration, item.sessions, item.price]),
+  },
+  {
+    id: 'coaching',
+    label: 'Coaching',
+    singular: 'student',
+    description: 'Students, batches, assignments, tests, material, and certificates.',
+    columns: ['Batch', 'Course', 'Trainer', 'Students', 'Status'],
+    rows: coachingBatches.map((batch) => [batch.batch, batch.course, batch.trainer, batch.students, batch.status]),
+  },
+  {
+    id: 'staff',
+    label: 'Staff',
+    singular: 'staff member',
+    description: 'Team roles and operational permissions.',
+    columns: ['Name', 'Role', 'Permissions', 'Status'],
+    rows: staffRoles.map((member) => [member.name, member.role, member.permissions, member.status]),
+  },
+  {
+    id: 'inventory',
+    label: 'Inventory',
+    singular: 'item',
+    description: 'Medicine, oils, products, course material, expiry, and stock alerts.',
+    columns: ['Item', 'Category', 'Quantity', 'Expiry', 'Status'],
+    rows: inventoryItems.map((item) => [item.item, item.category, item.quantity, item.expiry, item.status]),
+  },
+  {
+    id: 'communication',
+    label: 'Comms',
+    singular: 'template',
+    description: 'WhatsApp, SMS, and email templates with automation triggers.',
+    columns: ['Template', 'Channel', 'Trigger', 'Status'],
+    rows: communicationTemplates.map((template) => [template.template, template.channel, template.trigger, template.status]),
+  },
+  {
+    id: 'portal',
+    label: 'Portal',
+    singular: 'portal feature',
+    description: 'Client-side booking, forms, invoices, and progress uploads.',
+    columns: ['Feature', 'Owner', 'Mode', 'Status'],
+    rows: portalFeatures.map((item) => [item.feature, item.owner, item.mode, item.status]),
+  },
+  {
+    id: 'integrations',
+    label: 'Apps',
+    singular: 'app',
+    description: 'Google Sheets, WhatsApp Business, and webhook connections.',
+    columns: ['App', 'Type', 'Status', 'Last Sync'],
+    rows: integrations.map((item) => [item.name, item.type, item.status, item.lastSync]),
+  },
+];
+
+const financeTabs = [
+  {
+    id: 'payments',
+    label: 'Payments',
+    singular: 'payment',
+    description: 'Invoices, collections, pending dues, partial payments, and receipts.',
+    columns: ['Client', 'Invoice', 'Amount', 'Status', 'Paid On'],
+    rows: payments.map((payment) => [payment.client, payment.invoice, payment.amount, payment.status, payment.paidOn]),
+  },
+  {
+    id: 'accounts',
+    label: 'Accounts',
+    singular: 'account entry',
+    description: 'Income, expenses, payment modes, GST notes, refunds, and profit/loss review.',
+    columns: ['Item', 'Type', 'Amount', 'Mode', 'Status'],
+    rows: accounts.map((row) => [row.item, row.type, row.amount, row.mode, row.status]),
+  },
+];
+
+const settingsTabs = [
+  {
+    id: 'clinic',
+    label: 'Clinic',
+    singular: 'setting',
+    description: 'Clinic profile, branches, services, invoice, tax, notifications, and payment modes.',
+    columns: ['Setting', 'Area', 'Value', 'Status'],
+    rows: settingsItems.map((item) => [item.setting, item.area, item.value, item.status]),
+  },
+  {
+    id: 'users',
+    label: 'Users',
+    singular: 'user',
+    description: 'User roles, access levels, and staff account status.',
+    columns: ['Name', 'Role', 'Email', 'Status'],
+    rows: users.map((user) => [user.name, user.role, user.email, user.status]),
+  },
+  {
+    id: 'integrations',
+    label: 'Integrations',
+    singular: 'integration',
+    description: 'External app connections and automation setup.',
+    columns: ['App', 'Type', 'Status', 'Last Sync'],
+    rows: integrations.map((item) => [item.name, item.type, item.status, item.lastSync]),
+  },
+];
+
+export function OperationsPage() {
+  return (
+    <ModuleHubPage
+      title="Operations"
+      description="Forms, treatment plans, packages, coaching, staff, inventory, communication, portal, and apps in one compact page."
+      tabs={operationsTabs}
+      defaultTab="forms"
+    />
+  );
+}
+
+export function FinancePage() {
+  return (
+    <ModuleHubPage
+      title="Finance"
+      description="Payments and account entries grouped into one compact finance workspace."
+      tabs={financeTabs}
+      defaultTab="payments"
+    />
   );
 }
 
@@ -704,6 +1102,145 @@ export function AppointmentsPage() {
   );
 }
 
+export function TreatmentPlansPage() {
+  return (
+    <GenericModulePage
+      title="Treatment Plans"
+      description="Track client treatment journeys, goals, therapy schedules, progress, and consultant notes."
+      stats={[
+        { label: 'Active Plans', value: treatmentPlans.filter((plan) => plan.status === 'Active').length },
+        { label: 'Paused', value: treatmentPlans.filter((plan) => plan.status === 'Paused').length },
+        { label: 'Renewals', value: treatmentPlans.filter((plan) => plan.status === 'Renewed').length },
+      ]}
+      columns={['Client', 'Service', 'Goal', 'Duration', 'Status']}
+      rows={treatmentPlans.map((plan) => [plan.client, plan.service, plan.goal, plan.duration, plan.status])}
+    />
+  );
+}
+
+export function PackagesPage() {
+  return (
+    <GenericModulePage
+      title="Packages"
+      description="Manage clinic and coaching packages with duration, sessions, price, renewal, and payment plan context."
+      stats={[
+        { label: 'Packages', value: packages.length },
+        { label: 'Clinic', value: packages.filter((item) => item.category === 'Clinic').length },
+        { label: 'Coaching', value: packages.filter((item) => item.category === 'Coaching').length },
+      ]}
+      columns={['Package', 'Category', 'Duration', 'Sessions', 'Price']}
+      rows={packages.map((item) => [item.name, item.category, item.duration, item.sessions, item.price])}
+    />
+  );
+}
+
+export function CoachingPage() {
+  return (
+    <GenericModulePage
+      title="Coaching"
+      description="Handle student admissions, batches, attendance, course progress, assignments, tests, and certificates."
+      stats={[
+        { label: 'Active Batches', value: coachingBatches.filter((batch) => batch.status === 'Active').length },
+        { label: 'Students', value: coachingBatches.reduce((total, batch) => total + batch.students, 0) },
+        { label: 'Scheduled', value: coachingBatches.filter((batch) => batch.status === 'Scheduled').length },
+      ]}
+      columns={['Batch', 'Course', 'Trainer', 'Students', 'Status']}
+      rows={coachingBatches.map((batch) => [batch.batch, batch.course, batch.trainer, batch.students, batch.status])}
+    />
+  );
+}
+
+export function StaffPage() {
+  return (
+    <GenericModulePage
+      title="Staff"
+      description="Manage staff roles, permissions, and who can access CRM, health records, invoices, reports, and operations."
+      stats={[
+        { label: 'Team Members', value: staffRoles.length },
+        { label: 'Active', value: staffRoles.filter((member) => member.status === 'Active').length },
+        { label: 'Pending', value: staffRoles.filter((member) => member.status === 'Pending').length },
+      ]}
+      columns={['Name', 'Role', 'Permissions', 'Status']}
+      rows={staffRoles.map((member) => [member.name, member.role, member.permissions, member.status])}
+    />
+  );
+}
+
+export function AccountsPage() {
+  return (
+    <GenericModulePage
+      title="Accounts"
+      description="Track income, expenses, invoices, pending payments, refunds, and profit/loss level finance operations."
+      stats={[
+        { label: 'Income Rows', value: accounts.filter((row) => row.type === 'Income').length },
+        { label: 'Expense Rows', value: accounts.filter((row) => row.type === 'Expense').length },
+        { label: 'Pending', value: accounts.filter((row) => row.status === 'Pending').length },
+      ]}
+      columns={['Item', 'Type', 'Amount', 'Mode', 'Status']}
+      rows={accounts.map((row) => [row.item, row.type, row.amount, row.mode, row.status])}
+    />
+  );
+}
+
+export function InventoryPage() {
+  return (
+    <GenericModulePage
+      title="Inventory"
+      description="Monitor medicines, oils, products, course material, supplier stock, expiry dates, and low stock alerts."
+      stats={[
+        { label: 'Items', value: inventoryItems.length },
+        { label: 'Low Stock', value: inventoryItems.filter((item) => item.status === 'Low Stock').length },
+        { label: 'Categories', value: new Set(inventoryItems.map((item) => item.category)).size },
+      ]}
+      columns={['Item', 'Category', 'Quantity', 'Expiry', 'Status']}
+      rows={inventoryItems.map((item) => [item.item, item.category, item.quantity, item.expiry, item.status])}
+    />
+  );
+}
+
+export function CommunicationPage() {
+  return (
+    <GenericModulePage
+      title="Communication"
+      description="Manage WhatsApp, SMS, and email templates for leads, appointments, payments, forms, coaching, and certificates."
+      stats={[
+        { label: 'Templates', value: communicationTemplates.length },
+        { label: 'Active', value: communicationTemplates.filter((template) => template.status === 'Active').length },
+        { label: 'Drafts', value: communicationTemplates.filter((template) => template.status === 'Draft').length },
+      ]}
+      columns={['Template', 'Channel', 'Trigger', 'Status']}
+      rows={communicationTemplates.map((template) => [template.template, template.channel, template.trigger, template.status])}
+    />
+  );
+}
+
+export function ClientPortalPage() {
+  return (
+    <GenericModulePage
+      title="Client Portal"
+      description="Preview client-side access for appointment booking, forms, payment history, invoices, diet plan, and progress uploads."
+      stats={[
+        { label: 'Enabled', value: portalFeatures.filter((item) => item.status === 'Enabled').length },
+        { label: 'Planned', value: portalFeatures.filter((item) => item.status === 'Planned').length },
+        { label: 'Modes', value: new Set(portalFeatures.map((item) => item.mode)).size },
+      ]}
+      columns={['Feature', 'Owner', 'Mode', 'Status']}
+      rows={portalFeatures.map((item) => [item.feature, item.owner, item.mode, item.status])}
+    />
+  );
+}
+
+export function SettingsPage() {
+  return (
+    <ModuleHubPage
+      title="Settings"
+      description="Clinic setup, users, permissions, notifications, tax, payment modes, and integrations in one compact page."
+      tabs={settingsTabs}
+      defaultTab="clinic"
+    />
+  );
+}
+
 export function ReportsPage() {
   return (
     <GenericModulePage
@@ -727,7 +1264,32 @@ export function ReportsPage() {
 
 export function IntegrationsPage() {
   const [activeTab, setActiveTab] = useState(sheetTabs[0]);
+  const [connectedApps, setConnectedApps] = useState(() => integrations.filter((integration) => integration.status === 'Connected').map((integration) => integration.name));
+  const [syncMessage, setSyncMessage] = useState('Google Sheets sync is healthy.');
   const preview = useMemo(() => syncPreviewRows, []);
+
+  const handleIntegrationAction = async (integration) => {
+    if (integration.name === 'Google Sheets') {
+      setSyncMessage('Sample Google Sheet opened in a new tab.');
+      window.open('https://docs.google.com/spreadsheets/', '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (integration.name === 'Zapier / Webhooks') {
+      let copied = true;
+      try {
+        await navigator.clipboard?.writeText('https://ayurflow.local/webhooks/crm-events');
+      } catch {
+        copied = false;
+      }
+      setConnectedApps((current) => Array.from(new Set([...current, integration.name])));
+      setSyncMessage(copied ? 'Webhook URL copied and Zapier marked connected.' : 'Webhook ready. Copy permission was blocked by the browser.');
+      return;
+    }
+
+    setConnectedApps((current) => Array.from(new Set([...current, integration.name])));
+    setSyncMessage(`${integration.name} connected successfully.`);
+  };
 
   return (
     <section className="module-page">
@@ -739,11 +1301,11 @@ export function IntegrationsPage() {
         <div className="module-stats">
           <div className="mini-stat">
             <span>Connected apps</span>
-            <strong>1 live, 2 ready</strong>
+            <strong>{connectedApps.length} live</strong>
           </div>
           <div className="mini-stat">
             <span>Sync status</span>
-            <strong>Healthy</strong>
+            <strong>{syncMessage}</strong>
           </div>
           <div className="mini-stat">
             <span>Rows synced today</span>
@@ -756,12 +1318,14 @@ export function IntegrationsPage() {
         <div className="stack">
           <Card title="Connected & Available Apps" subtitle="Pick one to connect or extend the CRM outward.">
             <div className="integration-list">
-              {integrations.map((integration) => (
+              {integrations.map((integration) => {
+                const isConnected = connectedApps.includes(integration.name);
+                return (
                 <div className="integration-card" key={integration.name}>
                   <div>
                     <div className="integration-top">
                       <h3>{integration.name}</h3>
-                      <StatusPill tone={integration.status === 'Connected' ? 'st-ok' : 'st-warning'}>{integration.status}</StatusPill>
+                      <StatusPill tone={isConnected ? 'st-ok' : 'st-warning'}>{isConnected ? 'Connected' : 'Available'}</StatusPill>
                     </div>
                     <p>{integration.description}</p>
                     <div className="integration-meta">
@@ -769,9 +1333,10 @@ export function IntegrationsPage() {
                       <span>{integration.lastSync}</span>
                     </div>
                   </div>
-                  <button className="pill">{integration.primaryAction} <ChevronRight /></button>
+                  <button className="pill" type="button" onClick={() => handleIntegrationAction(integration)}>{isConnected && integration.name !== 'Google Sheets' ? 'Connected' : integration.primaryAction} <ChevronRight /></button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
 
@@ -793,8 +1358,8 @@ export function IntegrationsPage() {
                 <strong>Auto-sync enabled for {activeTab.toLowerCase()}.</strong>
                 <p>Every change in the CRM can be pushed into a Google Sheet so your staff can continue reporting in spreadsheets without duplicate entry.</p>
                 <div className="sheet-actions">
-                  <button className="pill">Connect Google Account <ChevronRight /></button>
-                  <button className="pill">Open Sample Sheet <ChevronRight /></button>
+                  <button className="pill" type="button" onClick={() => { setConnectedApps((current) => Array.from(new Set([...current, 'Google Sheets']))); setSyncMessage(`Google account connected for ${activeTab}.`); }}>Connect Google Account <ChevronRight /></button>
+                  <button className="pill" type="button" onClick={() => { setSyncMessage(`Sample sheet opened for ${activeTab}.`); window.open('https://docs.google.com/spreadsheets/', '_blank', 'noopener,noreferrer'); }}>Open Sample Sheet <ChevronRight /></button>
                 </div>
               </div>
               <div className="sheet-form">
@@ -830,7 +1395,7 @@ export function IntegrationsPage() {
                 <div>{row[1]}</div>
                 <div>{row[2]}</div>
                 <div><Tag tone="tag-contacted">{row[3]}</Tag></div>
-                <div>⋯</div>
+                <div><button className="row-link" type="button" onClick={() => setSyncMessage(`Reviewed sync activity for ${row[1]}.`)}>Review</button></div>
               </div>
             ))}
           </div>

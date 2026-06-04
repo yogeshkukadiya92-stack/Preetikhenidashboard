@@ -2,12 +2,11 @@ export const navItems = [
   { path: '/', label: 'Dashboard' },
   { path: '/crm', label: 'CRM' },
   { path: '/clients', label: 'Clients' },
-  { path: '/users', label: 'Users' },
-  { path: '/forms', label: 'Forms' },
   { path: '/appointments', label: 'Appointments' },
-  { path: '/payments', label: 'Payments' },
+  { path: '/operations', label: 'Operations' },
+  { path: '/finance', label: 'Finance' },
   { path: '/reports', label: 'Reports' },
-  { path: '/integrations', label: 'Integrations' },
+  { path: '/settings', label: 'Settings' },
 ];
 
 export const users = [
@@ -120,4 +119,67 @@ export const forms = [
   { title: 'Consultation Admission', status: 'Published', updated: 'Yesterday' },
   { title: 'Panchakarma Assessment', status: 'Published', updated: 'May 21, 2025' },
   { title: 'Garbhasanskar Registration', status: 'Draft', updated: 'May 20, 2025' },
+];
+
+export const treatmentPlans = [
+  { client: 'Anjali Menon', service: 'Weight Loss', goal: 'Lose 8 kg', duration: '12 weeks', status: 'Active' },
+  { client: 'Sneha Nair', service: 'Skin Treatment', goal: 'Reduce pigmentation', duration: '8 weeks', status: 'Active' },
+  { client: 'Vikram Pillai', service: 'Garbhasanskar', goal: 'Monthly pregnancy plan', duration: '6 months', status: 'Renewed' },
+  { client: 'Ramesh Kumar', service: 'Panchakarma', goal: 'Therapy completion', duration: '14 days', status: 'Paused' },
+];
+
+export const packages = [
+  { name: 'Weight Loss 3 Months', category: 'Clinic', duration: '3 months', sessions: 12, price: '₹ 28,000' },
+  { name: 'Skin Treatment Package', category: 'Clinic', duration: '8 weeks', sessions: 8, price: '₹ 18,500' },
+  { name: 'Panchakarma Package', category: 'Clinic', duration: '14 days', sessions: 14, price: '₹ 42,000' },
+  { name: 'Beautician Advanced Course', category: 'Coaching', duration: '10 weeks', sessions: 20, price: '₹ 35,000' },
+];
+
+export const coachingBatches = [
+  { batch: 'Beautician Basic June', course: 'Beautician Coaching', trainer: 'Meera Menon', students: 18, status: 'Active' },
+  { batch: 'Weight Loss Coach Hybrid', course: 'Coach Training', trainer: 'Dr. Arjun Nair', students: 12, status: 'Active' },
+  { batch: 'Ayurveda Wellness Online', course: 'Wellness Coach', trainer: 'Nikhil Das', students: 24, status: 'Scheduled' },
+  { batch: 'Recorded Course Access', course: 'Online Program', trainer: 'Anjali Reddy', students: 39, status: 'Active' },
+];
+
+export const staffRoles = [
+  { name: 'Dr. Arjun Nair', role: 'Doctor/Consultant', permissions: 'Health records, plans, forms', status: 'Active' },
+  { name: 'Meera Menon', role: 'Receptionist', permissions: 'Leads, appointments, payments', status: 'Active' },
+  { name: 'Nikhil Das', role: 'CRM Executive', permissions: 'Leads, follow-ups, reports', status: 'Active' },
+  { name: 'Anjali Reddy', role: 'Therapist', permissions: 'Therapy notes, room schedule', status: 'Pending' },
+];
+
+export const accounts = [
+  { item: 'Consultation Fees', type: 'Income', amount: '₹ 24,500', mode: 'UPI', status: 'Collected' },
+  { item: 'Package Installments', type: 'Income', amount: '₹ 68,450', mode: 'Mixed', status: 'Pending' },
+  { item: 'Medicine Purchase', type: 'Expense', amount: '₹ 12,800', mode: 'Bank', status: 'Paid' },
+  { item: 'Marketing Expense', type: 'Expense', amount: '₹ 9,500', mode: 'Card', status: 'Reviewed' },
+];
+
+export const inventoryItems = [
+  { item: 'Triphala Tablets', category: 'Medicine', quantity: 42, expiry: 'Dec 2026', status: 'In Stock' },
+  { item: 'Panchakarma Oil', category: 'Oil/Material', quantity: 8, expiry: 'Aug 2026', status: 'Low Stock' },
+  { item: 'Skin Care Kit', category: 'Product', quantity: 16, expiry: 'Jan 2027', status: 'In Stock' },
+  { item: 'Course Workbook', category: 'Course Material', quantity: 55, expiry: 'NA', status: 'In Stock' },
+];
+
+export const communicationTemplates = [
+  { template: 'New Lead Welcome', channel: 'WhatsApp', trigger: 'Lead created', status: 'Active' },
+  { template: 'Appointment Reminder', channel: 'WhatsApp/SMS', trigger: '1 day before visit', status: 'Active' },
+  { template: 'Payment Pending', channel: 'WhatsApp/Email', trigger: 'Invoice pending', status: 'Active' },
+  { template: 'Certificate Email', channel: 'Email', trigger: 'Course completed', status: 'Draft' },
+];
+
+export const settingsItems = [
+  { setting: 'Clinic Profile', area: 'Branch details', value: 'Vaidhya Wellness Clinic', status: 'Configured' },
+  { setting: 'Payment Modes', area: 'Finance', value: 'Cash, UPI, Bank, Card', status: 'Configured' },
+  { setting: 'Tax Settings', area: 'Invoice', value: 'GST optional', status: 'Configured' },
+  { setting: 'Role Permissions', area: 'Staff', value: 'Role based access', status: 'Needs Review' },
+];
+
+export const portalFeatures = [
+  { feature: 'Appointment Booking', owner: 'Client', mode: 'Online/Hybrid', status: 'Enabled' },
+  { feature: 'Form Filling', owner: 'Client', mode: 'Online', status: 'Enabled' },
+  { feature: 'Invoice Download', owner: 'Client', mode: 'Online', status: 'Enabled' },
+  { feature: 'Progress Photo Upload', owner: 'Client', mode: 'Treatment', status: 'Planned' },
 ];
