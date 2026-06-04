@@ -19,6 +19,7 @@ import {
   ReportsPage,
   SettingsPage,
   StaffPage,
+  ServicesPage,
   TreatmentPlansPage,
   UsersPage,
 } from './pages/modules.jsx';
@@ -33,6 +34,7 @@ export function App() {
         <Route path="/users" element={<UsersPage />} />
         <Route path="/forms" element={<FormsPage />} />
         <Route path="/appointments" element={<AppointmentsPage />} />
+        <Route path="/services" element={<ServicesPage />} />
         <Route path="/operations" element={<OperationsPage />} />
         <Route path="/treatments" element={<TreatmentPlansPage />} />
         <Route path="/packages" element={<PackagesPage />} />

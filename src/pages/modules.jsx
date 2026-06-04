@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from '../components/icons.jsx';
 import { Card, StatusPill, Tag } from '../components/ui.jsx';
 import { GenericModulePage } from './GenericModulePage.jsx';
@@ -19,6 +19,7 @@ import {
   sheetTabs,
   staffRoles,
   syncPreviewRows,
+  services,
   treatmentPlans,
   users,
 } from '../data/mockData.js';
@@ -58,16 +59,21 @@ function ImportExportModule({
   filenameBase,
   rowToValues,
   parseRow,
+  filterPresets = [],
   extraTopCard = null,
   customRows = null,
   rowActions = null,
 }) {
+  const navigate = useNavigate();
   const [rows, setRows] = useState(seedRows);
   const [preview, setPreview] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
   const [message, setMessage] = useState('Ready to import or export data.');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const [activeFilter, setActiveFilter] = useState(filterPresets[0]?.column ?? '');
   const bannerFileInputRef = useRef(null);
 
   const rowToCsvValues = (row) => {
@@ -125,9 +131,23 @@ function ImportExportModule({
   };
 
   const visibleRows = customRows ?? rows.map((row) => row);
+  const filteredRows = visibleRows.filter((row) => {
+    if (!filterText) return true;
+    const mapped = rowToValues(row);
+    if (!activeFilter) {
+      return Object.values(mapped).join(' ').toLowerCase().includes(filterText.toLowerCase());
+    }
+    return String(mapped[activeFilter] ?? '').toLowerCase().includes(filterText.toLowerCase());
+  });
   const openRecord = (row) => {
     setSelectedRecord(row);
     setMessage(`${rowToCsvValues(row)[0]} selected.`);
+  };
+
+  const openClientAction = (path, label) => {
+    setSelectedRecord(null);
+    setMessage(`${label} opened.`);
+    navigate(path);
   };
 
   const defaultRowAction = (row) => (
@@ -164,6 +184,43 @@ function ImportExportModule({
 
       {extraTopCard}
 
+      {filterPresets.length > 0 && (
+        <Card title="Filters" className="compact-action-card">
+          <div className="module-toolbar">
+            <div className="sheet-actions toolbar-actions">
+              <button className="pill" type="button" onClick={() => setFilterOpen((current) => !current)}>Filter <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => { setActiveFilter(filterPresets[0]?.column ?? ''); setFilterText(''); setMessage('Filters reset.'); }}>Reset <ChevronRight /></button>
+            </div>
+          </div>
+          {filterOpen && (
+            <div className="filter-panel">
+              <div className="filter-pills">
+                {filterPresets.map((preset) => (
+                  <button
+                    className={`sheet-tab filter-pill ${activeFilter === preset.column ? 'active' : ''}`}
+                    type="button"
+                    key={preset.column}
+                    onClick={() => {
+                      setActiveFilter(preset.column);
+                      setFilterText('');
+                      setMessage(`${preset.label} selected.`);
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                className="lead-input compact-filter"
+                value={filterText}
+                onChange={(event) => setFilterText(event.target.value)}
+                placeholder={activeFilter ? `Search by ${activeFilter.toLowerCase()}...` : `Filter ${title.toLowerCase()}...`}
+              />
+            </div>
+          )}
+        </Card>
+      )}
+
       <div className="grid single-module-grid">
         <Card title={`Current ${title}`} subtitle={`Live records currently stored in ${title.toLowerCase()}.`}>
           <div className="table">
@@ -171,7 +228,7 @@ function ImportExportModule({
               {headers.map((header) => <div key={header}>{header}</div>)}
               <div />
             </div>
-            {visibleRows.map((row, index) => (
+            {filteredRows.map((row, index) => (
               <div className="data-row" key={index}>
                 {headers.map((header) => <div key={header}>{rowToValues(row)[header]}</div>)}
                 <div>{rowActions ? rowActions(row) : defaultRowAction(row)}</div>
@@ -567,9 +624,9 @@ export function CRMPage() {
               ))}
             </div>
             <div className="modal-actions">
-              <button className="pill" type="button" onClick={() => setMessage('Appointment action ready.')}>Book Appointment <ChevronRight /></button>
-              <button className="pill" type="button" onClick={() => setMessage('Payment action ready.')}>Add Payment <ChevronRight /></button>
-              <button className="pill" type="button" onClick={() => setMessage('Treatment plan action ready.')}>Treatment Plan <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => openClientAction('/appointments', 'Book Appointment')}>Book Appointment <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => openClientAction('/payments', 'Add Payment')}>Add Payment <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => openClientAction('/treatments', 'Treatment Plan')}>Treatment Plan <ChevronRight /></button>
             </div>
           </div>
         </div>
@@ -591,6 +648,13 @@ export function ClientsPage() {
       headers={['Client', 'Age', 'Program', 'Progress', 'Next Visit']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
+      filterPresets={[
+        { label: 'Name wise', column: 'Client' },
+        { label: 'Age wise', column: 'Age' },
+        { label: 'Program wise', column: 'Program' },
+        { label: 'Progress wise', column: 'Progress' },
+        { label: 'Next visit wise', column: 'Next Visit' },
+      ]}
       rowToValues={(row) => ({
         Client: row.name,
         Age: row.age,
@@ -995,6 +1059,19 @@ const operationsTabs = [
     columns: ['App', 'Type', 'Status', 'Last Sync'],
     rows: integrations.map((item) => [item.name, item.type, item.status, item.lastSync]),
   },
+  {
+    id: 'services',
+    label: 'Services',
+    singular: 'service',
+    description: 'Service catalog used by appointments and treatment workflows.',
+    columns: ['Service', 'Category', 'Duration', 'Status'],
+    rows: services.map((service) => [
+      service,
+      service === 'Consultation' || service === 'Follow-up' ? 'General' : 'Clinic',
+      service === 'Panchakarma' ? '14 days' : '30 min',
+      'Active',
+    ]),
+  },
 ];
 
 const financeTabs = [
@@ -1087,17 +1164,78 @@ export function AppointmentsPage() {
       title="Appointments"
       description="Track booking slots, confirmations, and visit flow across the day."
       stats={[
-        { label: 'Today', value: '18' },
+        { label: 'Today', value: '2' },
         { label: 'Confirmed', value: '12' },
         { label: 'Pending', value: '6' },
-      ]}
-      columns={['Client', 'Time', 'Type', 'Status']}
+      ]} 
+      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status']}
       rows={[
-        ['Anjali Menon', '09:00 AM', 'Consultation', 'Confirmed'],
-        ['Ramesh Kumar', '09:45 AM', 'Follow-up', 'Confirmed'],
-        ['Sneha Nair', '10:30 AM', 'Panchakarma', 'In Progress'],
-        ['Vikram Pillai', '11:30 AM', 'Consultation', 'Confirmed'],
+        ['Anjali Menon', '9876543210', '2026-06-04', '09:00 AM', 'Consultation', 'Confirmed'],
+        ['Ramesh Kumar', '9876501234', '2026-06-04', '09:45 AM', 'Follow-up', 'Confirmed'],
+        ['Sneha Nair', '9876512345', '2026-06-05', '10:30 AM', 'Panchakarma', 'In Progress'],
+        ['Vikram Pillai', '9876598765', '2026-06-05', '11:30 AM', 'Consultation', 'Confirmed'],
       ]}
+      fieldOptions={{ Type: services }}
+      filterPresets={[
+        { label: 'Date wise', column: 'Date' },
+        { label: 'Type wise', column: 'Type' },
+        { label: 'Mobile wise', column: 'Mobile' },
+        { label: 'Client wise', column: 'Client' },
+      ]}
+      viewPresets={[
+        {
+          id: 'all',
+          label: 'All Appointments',
+          match: () => true,
+        },
+        {
+          id: 'today',
+          label: 'Today Appointments',
+          match: (row) => row[2] === '2026-06-04',
+        },
+      ]}
+      rowActions={(row, setSelectedRow, setActionMessage) => (
+        <div className="row-actions">
+          <button className="row-link" type="button" onClick={() => setSelectedRow(row[0])}>View</button>
+          <button
+            className="row-link"
+            type="button"
+            onClick={() => {
+              const phone = String(row[1] ?? '').replace(/\D/g, '');
+              const text = encodeURIComponent(`Hello ${row[0]}, your appointment for ${row[4]} on ${row[2]} at ${row[3]} is scheduled.`);
+              if (!phone) {
+                setActionMessage('Mobile number is missing.');
+                return;
+              }
+              setActionMessage(`Opening WhatsApp for ${row[0]}.`);
+              window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer');
+            }}
+          >
+            WhatsApp
+          </button>
+        </div>
+      )}
+    />
+  );
+}
+
+export function ServicesPage() {
+  return (
+    <GenericModulePage
+      title="Services"
+      description="Maintain the service catalog used by appointment booking, treatment plans, and future scheduling."
+      stats={[
+        { label: 'Services', value: services.length },
+        { label: 'Popular', value: '4 core' },
+        { label: 'Status', value: 'Editable' },
+      ]}
+      columns={['Service', 'Category', 'Duration', 'Status']}
+      rows={services.map((service) => [
+        service,
+        service === 'Consultation' || service === 'Follow-up' ? 'General' : 'Clinic',
+        service === 'Panchakarma' ? '14 days' : '30 min',
+        'Active',
+      ])}
     />
   );
 }

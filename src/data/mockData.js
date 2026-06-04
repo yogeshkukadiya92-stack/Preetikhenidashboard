@@ -121,6 +121,18 @@ export const forms = [
   { title: 'Garbhasanskar Registration', status: 'Draft', updated: 'May 20, 2025' },
 ];
 
+export const services = [
+  'Consultation',
+  'Follow-up',
+  'Weight Loss',
+  'Skin Care',
+  'Hair Treatment',
+  'Panchakarma',
+  'Garbhasanskar',
+  'Diet Counseling',
+  'Therapy Session',
+];
+
 export const treatmentPlans = [
   { client: 'Anjali Menon', service: 'Weight Loss', goal: 'Lose 8 kg', duration: '12 weeks', status: 'Active' },
   { client: 'Sneha Nair', service: 'Skin Treatment', goal: 'Reduce pigmentation', duration: '8 weeks', status: 'Active' },
