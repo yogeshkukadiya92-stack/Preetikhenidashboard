@@ -6,10 +6,12 @@ const iconByPath = {
   '/': HomeIcon,
   '/crm': UsersIcon,
   '/clients': UsersIcon,
+  '/users': UsersIcon,
   '/forms': FileIcon,
   '/appointments': CalendarIcon,
   '/payments': MoneyIcon,
   '/reports': ChartIcon,
+  '/integrations': SettingsIcon,
 };
 
 export function Layout() {

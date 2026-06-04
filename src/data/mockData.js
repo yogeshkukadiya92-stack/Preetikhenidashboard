@@ -2,10 +2,54 @@ export const navItems = [
   { path: '/', label: 'Dashboard' },
   { path: '/crm', label: 'CRM' },
   { path: '/clients', label: 'Clients' },
+  { path: '/users', label: 'Users' },
   { path: '/forms', label: 'Forms' },
   { path: '/appointments', label: 'Appointments' },
   { path: '/payments', label: 'Payments' },
   { path: '/reports', label: 'Reports' },
+  { path: '/integrations', label: 'Integrations' },
+];
+
+export const users = [
+  { name: 'Dr. Arjun Nair', role: 'Administrator', email: 'arjun@ayurflow.in', status: 'Active' },
+  { name: 'Meera Menon', role: 'Receptionist', email: 'meera@ayurflow.in', status: 'Active' },
+  { name: 'Nikhil Das', role: 'CRM Executive', email: 'nikhil@ayurflow.in', status: 'Active' },
+  { name: 'Anjali Reddy', role: 'Therapist', email: 'anjali@ayurflow.in', status: 'Pending' },
+];
+
+export const integrations = [
+  {
+    name: 'Google Sheets',
+    type: 'Spreadsheet sync',
+    status: 'Connected',
+    description: 'Automatically export leads, payments, and appointment updates into a live sheet.',
+    lastSync: '2 min ago',
+    primaryAction: 'Open Sheet Link',
+  },
+  {
+    name: 'WhatsApp Business',
+    type: 'Messaging',
+    status: 'Available',
+    description: 'Send follow-up reminders and missed-appointment alerts to leads and clients.',
+    lastSync: 'Ready to connect',
+    primaryAction: 'Connect Channel',
+  },
+  {
+    name: 'Zapier / Webhooks',
+    type: 'Automation',
+    status: 'Available',
+    description: 'Push CRM events to other tools like accounting apps, forms, or internal portals.',
+    lastSync: 'Webhook endpoint ready',
+    primaryAction: 'Copy Webhook URL',
+  },
+];
+
+export const sheetTabs = ['Leads', 'Clients', 'Appointments', 'Payments', 'Reports'];
+
+export const syncPreviewRows = [
+  ['May 24, 2025', 'Priya Nair', 'Lead created', 'Google Sheets'],
+  ['May 24, 2025', 'Anjali Menon', 'Payment received', 'Google Sheets'],
+  ['May 24, 2025', 'Sneha Nair', 'Appointment updated', 'Google Sheets'],
 ];
 
 export const kpis = [
