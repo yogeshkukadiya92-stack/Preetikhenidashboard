@@ -223,6 +223,7 @@ export function CRMPage() {
   const [manualLeads, setManualLeads] = useState([]);
   const [editingIndex, setEditingIndex] = useState(null);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const [showLeads, setShowLeads] = useState(true);
   const [leadForm, setLeadForm] = useState({
     name: '',
     source: 'Website',
@@ -326,6 +327,9 @@ export function CRMPage() {
               <button className="pill" type="button" onClick={openCreateLead}>
                 Add Lead <ChevronRight />
               </button>
+              <button className="pill" type="button" onClick={() => setShowLeads((current) => !current)}>
+                {showLeads ? 'Hide Leads' : 'Show Leads'} <ChevronRight />
+              </button>
               <div className="mini-stat">
                 <span>Manual leads</span>
                 <strong>{manualLeads.length}</strong>
@@ -333,7 +337,7 @@ export function CRMPage() {
             </div>
           </Card>
         )}
-        customRows={leadRows.map((lead) => ({
+        customRows={showLeads ? leadRows.map((lead) => ({
           Lead: lead.name,
           Source: lead.source,
           Status: lead.status,
@@ -341,7 +345,7 @@ export function CRMPage() {
           'Added On': lead.addedOn,
           __manual: lead.__manual,
           __manualIndex: lead.__manualIndex,
-        }))}
+        })) : []}
         rowActions={(row) => {
           if (!row.__manual) return <Tag tone={leadPriorityTone(row.Status)}>{row.Status}</Tag>;
           return (
