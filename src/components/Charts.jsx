@@ -1,6 +1,15 @@
 import { revenueSeries } from '../data/mockData.js';
 
 export function FunnelChart({ stages }) {
+  if (!stages.length) {
+    return (
+      <div className="empty-state chart-empty">
+        <strong>No funnel data yet.</strong>
+        <p>Add leads to see the funnel fill in.</p>
+      </div>
+    );
+  }
+
   const widths = [220, 190, 160, 128, 102];
   const classNames = ['fr1', 'fr2', 'fr3', 'fr4', 'fr5'];
 
@@ -26,6 +35,15 @@ export function FunnelChart({ stages }) {
 }
 
 export function RevenueChart() {
+  if (!revenueSeries.length) {
+    return (
+      <div className="empty-state chart-empty">
+        <strong>No revenue trend yet.</strong>
+        <p>Import payments or book visits to generate a line chart.</p>
+      </div>
+    );
+  }
+
   const maxRevenue = Math.max(...revenueSeries.map((item) => item.revenue));
   const maxCollections = Math.max(...revenueSeries.map((item) => item.collections));
   const width = 700;
@@ -84,4 +102,3 @@ export function RevenueChart() {
     </div>
   );
 }
-

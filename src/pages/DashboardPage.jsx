@@ -37,7 +37,7 @@ export function DashboardPage() {
                 <div className="value">{kpi.value}</div>
               </div>
             </div>
-            <div className="delta">{kpi.delta} <span className="subtle">vs last 7 days</span></div>
+            <div className="delta">{kpi.delta} <span className="subtle">No live data</span></div>
             <div className="kpi-footer">
               <ChevronRight />
               View Details
@@ -69,8 +69,8 @@ export function DashboardPage() {
           <Card title="Lead Conversion Funnel">
             <FunnelChart stages={funnelStages} />
             <div className="footer-action" style={{ marginTop: 18 }}>
-              <span>Conversion Rate: <strong style={{ color: 'var(--green)' }}>7%</strong> <span className="subtle">vs last 7 days</span></span>
-              <span className="delta">↑ 1.2%</span>
+              <span>Conversion Rate: <strong style={{ color: 'var(--green)' }}>0%</strong> <span className="subtle">No live data</span></span>
+              <span className="delta">No live data</span>
             </div>
           </Card>
         </div>
@@ -80,49 +80,63 @@ export function DashboardPage() {
           <div className="chart-stats">
             <div className="mini-stat">
               <span>Total Revenue ({revenuePeriod})</span>
-              <strong>₹ 96,420 <span className="delta">↑ 18%</span></strong>
+              <strong>0 <span className="delta">No live data</span></strong>
             </div>
             <div className="mini-stat">
               <span>Total Collections ({revenuePeriod})</span>
-              <strong>₹ 72,380 <span className="delta">↑ 16%</span></strong>
+              <strong>0 <span className="delta">No live data</span></strong>
             </div>
           </div>
         </Card>
 
         <aside className="stack tasks">
           <Card title="Today's Schedule" action={<button className="icon-btn inline-icon" type="button" onClick={() => navigate('/appointments')} aria-label="Open appointments"><ChevronRight /></button>}>
-            <div className="schedule-list">
-              {todaySchedule.map((item) => (
-                <div className="schedule-item" key={`${item.time}-${item.name}`}>
-                  <div className="time">{item.time}</div>
-                  <div className="tiny-avatar" />
-                  <div>
-                    <div className="item-title">{item.name}</div>
-                    <div className="item-sub">{item.note}</div>
+            {todaySchedule.length ? (
+              <div className="schedule-list">
+                {todaySchedule.map((item) => (
+                  <div className="schedule-item" key={`${item.time}-${item.name}`}>
+                    <div className="time">{item.time}</div>
+                    <div className="tiny-avatar" />
+                    <div>
+                      <div className="item-title">{item.name}</div>
+                      <div className="item-sub">{item.note}</div>
+                    </div>
+                    <StatusPill tone={`st-${item.tone}`}>{item.status}</StatusPill>
                   </div>
-                  <StatusPill tone={`st-${item.tone}`}>{item.status}</StatusPill>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state compact-empty">
+                <strong>No appointments yet today.</strong>
+                <p>Create the first booking or import data to populate this panel.</p>
+              </div>
+            )}
             <button className="footer-action button-reset" type="button" onClick={() => navigate('/appointments')}>
               <span>View Full Schedule</span>
               <ChevronRight />
             </button>
           </Card>
 
-          <Card title="Urgent Tasks" action={<StatusPill tone="st-bad">5</StatusPill>}>
-            <div className="task-list">
-              {urgentTasks.map((task, index) => (
-                <div className="task-item" key={task.title}>
-                  <div className={`task-icon ${index === 1 ? 'gold' : index === 2 ? 'blue' : index === 3 ? 'green' : ''}`} />
-                  <div>
-                    <div className="item-title">{task.title}</div>
-                    <div className="item-sub">{task.note}</div>
+          <Card title="Urgent Tasks" action={<StatusPill tone="st-bad">{urgentTasks.length}</StatusPill>}>
+            {urgentTasks.length ? (
+              <div className="task-list">
+                {urgentTasks.map((task, index) => (
+                  <div className="task-item" key={task.title}>
+                    <div className={`task-icon ${index === 1 ? 'gold' : index === 2 ? 'blue' : index === 3 ? 'green' : ''}`} />
+                    <div>
+                      <div className="item-title">{task.title}</div>
+                      <div className="item-sub">{task.note}</div>
+                    </div>
+                    <span style={{ color: index === 0 ? '#e35c3e' : '#d98a17', fontWeight: 700 }}>{task.due}</span>
                   </div>
-                  <span style={{ color: index === 0 ? '#e35c3e' : '#d98a17', fontWeight: 700 }}>{task.due}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state compact-empty">
+                <strong>No urgent tasks.</strong>
+                <p>Once records arrive, follow-ups and collections will appear here.</p>
+              </div>
+            )}
             <button className="footer-action button-reset" type="button" onClick={() => navigate('/crm')}>
               <span>View All Tasks</span>
               <ChevronRight />
@@ -146,6 +160,18 @@ export function DashboardPage() {
 function ModuleTable({ type }) {
   const navigate = useNavigate();
   const rows = type === 'leads' ? leads : payments;
+
+  if (!rows.length) {
+    return (
+      <div className="empty-state compact-empty">
+        <strong>No {type} yet.</strong>
+        <p>Use the app actions to add the first record, then this table will populate automatically.</p>
+        <button className="pill" type="button" onClick={() => navigate(type === 'leads' ? '/crm' : '/finance')}>
+          Open {type === 'leads' ? 'CRM' : 'Finance'} <ChevronRight />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="data-table">
@@ -186,3 +212,7 @@ function ModuleTable({ type }) {
     </div>
   );
 }
+
+
+
+

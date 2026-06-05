@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from '../components/icons.jsx';
 import { Card, StatusPill, Tag } from '../components/ui.jsx';
@@ -9,6 +9,7 @@ import {
   coachingBatches,
   communicationTemplates,
   forms,
+  formResponses,
   integrations,
   inventoryItems,
   leads,
@@ -50,6 +51,15 @@ function parseCsv(text) {
     .map((line) => line.split(',').map((cell) => cell.trim().replace(/^"|"$/g, '').replaceAll('""', '"')));
 }
 
+function loadSavedState(key, fallback) {
+  try {
+    const saved = window.localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function ImportExportModule({
   title,
   description,
@@ -65,7 +75,8 @@ function ImportExportModule({
   rowActions = null,
 }) {
   const navigate = useNavigate();
-  const [rows, setRows] = useState(seedRows);
+  const storageKey = `ayurflow:${filenameBase}:rows:v2`;
+  const [rows, setRows] = useState(() => loadSavedState(storageKey, seedRows));
   const [preview, setPreview] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
   const [message, setMessage] = useState('Ready to import or export data.');
@@ -75,6 +86,14 @@ function ImportExportModule({
   const [filterText, setFilterText] = useState('');
   const [activeFilter, setActiveFilter] = useState(filterPresets[0]?.column ?? '');
   const bannerFileInputRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(rows));
+    } catch {
+      setMessage('Local browser storage is full or blocked.');
+    }
+  }, [rows, storageKey]);
 
   const rowToCsvValues = (row) => {
     const values = rowToValues(row);
@@ -444,32 +463,39 @@ export function CRMPage() {
             </div>
           </Card>
 
-          <Card title="Current Leads" subtitle="Manual leads are editable. Seeded leads stay read-only.">
+        <Card title="Current Leads" subtitle="Manual leads are editable. Seeded leads stay read-only.">
             {showLeads ? (
               <div className="table">
                 <div className="table-head">
                   {headers.map((header) => <div key={header}>{header}</div>)}
                   <div />
                 </div>
-                {leadRows.map((lead, index) => (
-                  <div className="data-row" key={`${lead.name}-${lead.addedOn}-${index}`}>
-                    <div>{lead.name}</div>
-                    <div>{lead.source}</div>
-                    <div><Tag tone={leadPriorityTone(lead.status)}>{lead.status}</Tag></div>
-                    <div>{lead.score}</div>
-                    <div>{lead.addedOn}</div>
-                    <div>
-                      {lead.__manual ? (
-                        <div className="row-actions">
-                          <button type="button" className="row-link" onClick={() => startEditLead(manualLeads[lead.__manualIndex], lead.__manualIndex)}>Edit</button>
-                          <button type="button" className="row-link danger" onClick={() => deleteManualLead(lead.__manualIndex)}>Delete</button>
-                        </div>
-                      ) : (
-                        <Tag tone={leadPriorityTone(lead.status)}>Read only</Tag>
-                      )}
+                {leadRows.length ? (
+                  leadRows.map((lead, index) => (
+                    <div className="data-row" key={`${lead.name}-${lead.addedOn}-${index}`}>
+                      <div>{lead.name}</div>
+                      <div>{lead.source}</div>
+                      <div><Tag tone={leadPriorityTone(lead.status)}>{lead.status}</Tag></div>
+                      <div>{lead.score}</div>
+                      <div>{lead.addedOn}</div>
+                      <div>
+                        {lead.__manual ? (
+                          <div className="row-actions">
+                            <button type="button" className="row-link" onClick={() => startEditLead(manualLeads[lead.__manualIndex], lead.__manualIndex)}>Edit</button>
+                            <button type="button" className="row-link danger" onClick={() => deleteManualLead(lead.__manualIndex)}>Delete</button>
+                          </div>
+                        ) : (
+                          <Tag tone={leadPriorityTone(lead.status)}>Read only</Tag>
+                        )}
+                      </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="empty-state compact-empty table-empty">
+                    <strong>No leads yet.</strong>
+                    <p>Add the first lead or import a file to start the CRM list.</p>
                   </div>
-                ))}
+                )}
               </div>
             ) : (
               <div className="empty-state">
@@ -641,9 +667,9 @@ export function ClientsPage() {
       title="Clients"
       description="View active client profiles, treatment progress, and upcoming visit timelines."
       stats={[
-        { label: 'Active Clients', value: '128' },
-        { label: 'Treatment Plans', value: '74' },
-        { label: 'Next Visits', value: '19' },
+        { label: 'Active Clients', value: '0' },
+        { label: 'Treatment Plans', value: '0' },
+        { label: 'Next Visits', value: '0' },
       ]}
       headers={['Client', 'Age', 'Program', 'Progress', 'Next Visit']}
       seedRows={clients}
@@ -679,9 +705,9 @@ export function PaymentsPage() {
       title="Payments"
       description="Monitor invoices, partial collections, pending dues, and total cash flow in one place."
       stats={[
-        { label: 'Collected Today', value: '₹ 19,500' },
-        { label: 'Pending', value: '₹ 68,450' },
-        { label: 'Invoices', value: '36' },
+        { label: 'Collected Today', value: '0' },
+        { label: 'Pending', value: '0' },
+        { label: 'Invoices', value: '0' },
       ]}
       headers={['Client', 'Invoice', 'Amount', 'Status', 'Paid On']}
       seedRows={payments}
@@ -705,12 +731,20 @@ export function PaymentsPage() {
 }
 
 export function UsersPage() {
-  const [people, setPeople] = useState(users);
+  const [people, setPeople] = useState(() => loadSavedState('ayurflow:users:rows:v2', users));
   const [uploadName, setUploadName] = useState('No file selected');
   const [importPreview, setImportPreview] = useState([]);
   const [statusMessage, setStatusMessage] = useState('Ready to import or export users.');
   const [dropActive, setDropActive] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('ayurflow:users:rows:v2', JSON.stringify(people));
+    } catch {
+      setStatusMessage('Local browser storage is full or blocked.');
+    }
+  }, [people]);
 
   const exportCsv = () => {
     downloadText('ayurflow-users.csv', rowsToCsv(['Name', 'Role', 'Email', 'Status'], people.map((user) => [user.name, user.role, user.email, user.status])), 'text/csv;charset=utf-8');
@@ -841,15 +875,22 @@ export function UsersPage() {
               <div>Status</div>
               <div />
             </div>
-            {people.map((user) => (
-              <div className="data-row" key={user.email}>
-                <div>{user.name}</div>
-                <div>{user.role}</div>
-                <div>{user.email}</div>
-                <div><Tag tone={user.status === 'Active' ? 'tag-contacted' : 'tag-follow'}>{user.status}</Tag></div>
-                <div><button className="row-link" type="button" onClick={() => toggleUserStatus(user.email)}>Toggle</button></div>
+            {people.length ? (
+              people.map((user) => (
+                <div className="data-row" key={user.email}>
+                  <div>{user.name}</div>
+                  <div>{user.role}</div>
+                  <div>{user.email}</div>
+                  <div><Tag tone={user.status === 'Active' ? 'tag-contacted' : 'tag-follow'}>{user.status}</Tag></div>
+                  <div><button className="row-link" type="button" onClick={() => toggleUserStatus(user.email)}>Toggle</button></div>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state compact-empty table-empty">
+                <strong>No team members yet.</strong>
+                <p>Import a users file to create the roster.</p>
               </div>
-            ))}
+            )}
           </div>
         </Card>
       </div>
@@ -882,15 +923,22 @@ export function UsersPage() {
                 <div>Status</div>
                 <div />
               </div>
-              {importPreview.map((item) => (
-                <div className="data-row" key={`${item.email}-${item.name}`}>
-                  <div>{item.name}</div>
-                  <div>{item.role}</div>
-                  <div>{item.email}</div>
-                  <div><Tag tone={item.status === 'Active' ? 'tag-contacted' : 'tag-follow'}>{item.status}</Tag></div>
-                  <div><Tag tone="tag-follow">Preview</Tag></div>
+              {importPreview.length ? (
+                importPreview.map((item) => (
+                  <div className="data-row" key={`${item.email}-${item.name}`}>
+                    <div>{item.name}</div>
+                    <div>{item.role}</div>
+                    <div>{item.email}</div>
+                    <div><Tag tone={item.status === 'Active' ? 'tag-contacted' : 'tag-follow'}>{item.status}</Tag></div>
+                    <div><Tag tone="tag-follow">Preview</Tag></div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state compact-empty table-empty">
+                  <strong>No preview loaded.</strong>
+                  <p>Drop a CSV or JSON file to see rows here.</p>
                 </div>
-              ))}
+              )}
             </div>
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setModalOpen(false)}>Cancel <ChevronRight /></button>
@@ -911,9 +959,37 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const [message, setMessage] = useState('Ready.');
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
+  const [activeFilter, setActiveFilter] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editIndex, setEditIndex] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [previewRows, setPreviewRows] = useState([]);
+  const [uploadName, setUploadName] = useState('No file selected');
+  const [draftRow, setDraftRow] = useState(tabs[0]?.columns?.map(() => '') ?? []);
+  const [editRow, setEditRow] = useState([]);
+  const storageKey = `ayurflow:${title}:tabs:v2`;
+  const [rowsByTab, setRowsByTab] = useState(() => loadSavedState(storageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows]))));
+  const importInputRef = useRef(null);
 
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
-  const filteredRows = active.rows.filter((row) => row.join(' ').toLowerCase().includes(filterText.toLowerCase()));
+  const activeRows = rowsByTab[active.id] ?? active.rows;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(rowsByTab));
+    } catch {
+      setMessage('Local browser storage is full or blocked.');
+    }
+  }, [rowsByTab, storageKey]);
+
+  const filteredRows = activeRows.filter((row) => {
+    if (!filterText) return true;
+    if (!activeFilter) return row.join(' ').toLowerCase().includes(filterText.toLowerCase());
+    const index = active.columns.indexOf(activeFilter);
+    if (index === -1) return row.join(' ').toLowerCase().includes(filterText.toLowerCase());
+    return String(row[index] ?? '').toLowerCase().includes(filterText.toLowerCase());
+  });
 
   const selectTab = (tabId) => {
     setActiveTab(tabId);
@@ -923,14 +999,101 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   };
 
   const runAction = (action) => {
-    if (action === 'Add') setMessage(`New ${active.singular ?? active.label} form opened.`);
-    if (action === 'Import') setMessage(`${active.label} import tools opened.`);
-    if (action === 'Export') setMessage(`${active.label} export started.`);
-    if (action === 'Share') setMessage(`${active.label} share link copied.`);
+    if (action === 'Add') {
+      setDraftRow(active.columns.map((column, index) => {
+        if (index === 0) return `${active.label} ${activeRows.length + 1}`;
+        if (column === 'Status') return 'Pending';
+        if (column === 'Duration') return '30 min';
+        if (column === 'Type') return 'Consultation';
+        return '';
+      }));
+      setAddOpen(true);
+      setMessage(`New ${active.singular ?? active.label} form opened.`);
+      return;
+    }
+    if (action === 'Import') {
+      importInputRef.current?.click();
+      setMessage(`${active.label} import tools opened.`);
+      return;
+    }
+    if (action === 'Export') {
+      downloadText(`${active.label.toLowerCase()}-export.csv`, rowsToCsv(active.columns, activeRows), 'text/csv;charset=utf-8');
+      setMessage(`${active.label} export started.`);
+      return;
+    }
     if (action === 'Filter') {
       setFilterOpen((current) => !current);
       setMessage('Filter toggled.');
+      return;
     }
+    if (action === 'Share') {
+      navigator.clipboard?.writeText(`${title} / ${active.label} / ${activeRows.length} records`).catch(() => {});
+      setMessage(`${active.label} share link copied.`);
+    }
+  };
+
+  const saveDraft = () => {
+    setRowsByTab((current) => ({
+      ...current,
+      [active.id]: [draftRow, ...(current[active.id] ?? activeRows)],
+    }));
+    setMessage(`${draftRow[0] || active.label} added.`);
+    setAddOpen(false);
+  };
+
+  const saveEdit = () => {
+    if (editIndex === null) return;
+    setRowsByTab((current) => {
+      const next = [...(current[active.id] ?? activeRows)];
+      next[editIndex] = editRow;
+      return { ...current, [active.id]: next };
+    });
+    setMessage(`${editRow[0] || active.label} updated.`);
+    setEditOpen(false);
+    setEditIndex(null);
+  };
+
+  const openEdit = (row) => {
+    const sourceIndex = activeRows.findIndex((candidate) => candidate === row);
+    if (sourceIndex === -1) {
+      setMessage('Could not find this row after filtering. Clear filter and try again.');
+      return;
+    }
+    setEditIndex(sourceIndex);
+    setEditRow([...row]);
+    setEditOpen(true);
+    setMessage(`${row[0]} edit opened.`);
+  };
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setUploadName(file.name);
+    const text = await file.text();
+    let parsed = [];
+    try {
+      parsed = file.name.toLowerCase().endsWith('.json') ? JSON.parse(text) : parseCsv(text);
+    } catch {
+      setMessage('Import failed.');
+      return;
+    }
+    const normalized = parsed
+      .map((row) => (Array.isArray(row) ? row : active.columns.map((column) => row[column] ?? row[column.toLowerCase()] ?? '')))
+      .map((row) => active.columns.map((_, index) => row[index] ?? ''))
+      .filter((row) => row.some(Boolean));
+    setPreviewRows(normalized);
+    setImportOpen(true);
+    setMessage(`${normalized.length} record(s) ready to import.`);
+  };
+
+  const commitImport = () => {
+    if (!previewRows.length) return;
+    setRowsByTab((current) => ({
+      ...current,
+      [active.id]: [...previewRows, ...(current[active.id] ?? activeRows)],
+    }));
+    setPreviewRows([]);
+    setImportOpen(false);
+    setMessage(`${previewRows.length} record(s) imported.`);
   };
 
   return (
@@ -948,6 +1111,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       </div>
 
       <Card title={`${title} Menu`} subtitle="Sub-pages are kept inside tabs so the sidebar stays clean.">
+        <input ref={importInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
         <div className="module-toolbar">
           <div className="sheet-tabs compact-tabs">
             {tabs.map((tab) => (
@@ -963,7 +1127,24 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
           </div>
         </div>
         {filterOpen && (
-          <input className="lead-input compact-filter" value={filterText} onChange={(event) => setFilterText(event.target.value)} placeholder={`Filter ${active.label.toLowerCase()}...`} />
+          <div className="filter-panel">
+            <div className="filter-pills">
+              {active.columns.map((column) => (
+                <button
+                  className={`sheet-tab filter-pill ${activeFilter === column ? 'active' : ''}`}
+                  type="button"
+                  key={column}
+                  onClick={() => {
+                    setActiveFilter(column);
+                    setFilterText('');
+                  }}
+                >
+                  {column}
+                </button>
+              ))}
+            </div>
+            <input className="lead-input compact-filter" value={filterText} onChange={(event) => setFilterText(event.target.value)} placeholder={`Search ${active.label.toLowerCase()}...`} />
+          </div>
         )}
       </Card>
 
@@ -973,14 +1154,120 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
             {active.columns.map((column) => <div key={column}>{column}</div>)}
             <div />
           </div>
-          {filteredRows.map((row, index) => (
-            <div className="data-row" key={`${active.id}-${index}`}>
-              {row.map((cell) => <div key={`${cell}-${index}`}>{cell}</div>)}
-              <div><button className="row-link" type="button" onClick={() => setMessage(`${row[0]} selected.`)}>Open</button></div>
+          {filteredRows.length ? (
+            filteredRows.map((row, index) => (
+              <div className="data-row" key={`${active.id}-${index}`}>
+                {row.map((cell) => <div key={`${cell}-${index}`}>{cell}</div>)}
+                <div><button className="row-link" type="button" onClick={() => openEdit(row)}>Open</button></div>
+              </div>
+            ))
+          ) : (
+            <div className="empty-state compact-empty table-empty">
+              <strong>No records yet.</strong>
+              <p>Add or import the first row to unlock this section.</p>
             </div>
-          ))}
+          )}
         </div>
       </Card>
+
+      {addOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setAddOpen(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Add ${active.label}`} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>Add {active.label}</h2>
+                <p>Fill the fields and save the new record.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setAddOpen(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              {active.columns.map((column, index) => (
+                <label className="field-block" key={column}>
+                  <span>{column}</span>
+                  <input
+                    className="lead-input"
+                    value={draftRow[index] ?? ''}
+                    onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
+                    placeholder={`Enter ${column.toLowerCase()}`}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setAddOpen(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={saveDraft}>Save <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setEditOpen(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Edit ${active.label}`} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>Edit {active.label}</h2>
+                <p>Update the selected record and save changes.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setEditOpen(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              {active.columns.map((column, index) => (
+                <label className="field-block" key={column}>
+                  <span>{column}</span>
+                  <input
+                    className="lead-input"
+                    value={editRow[index] ?? ''}
+                    onChange={(event) => setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
+                    placeholder={`Enter ${column.toLowerCase()}`}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setEditOpen(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={saveEdit}>Save Changes <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {importOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setImportOpen(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Import ${active.label}`} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>Import {active.label}</h2>
+                <p>{uploadName} - {previewRows.length} record(s) detected.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setImportOpen(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-table">
+              <div className="table-head">
+                {active.columns.map((column) => <div key={column}>{column}</div>)}
+                <div />
+              </div>
+              {previewRows.length ? (
+                previewRows.map((row, index) => (
+                  <div className="data-row" key={index}>
+                    {row.map((cell) => <div key={`${cell}-${index}`}>{cell}</div>)}
+                    <div />
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state compact-empty table-empty">
+                  <strong>No preview loaded.</strong>
+                  <p>Select a CSV or JSON file to inspect it before importing.</p>
+                </div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setImportOpen(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={commitImport}>Import Now <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -989,11 +1276,11 @@ const operationsTabs = [
   {
     id: 'forms',
     label: 'Forms',
-    singular: 'form',
-    title: 'Forms Builder',
-    description: 'Intake, assessment, admission, consent, feedback, and registration forms stay here.',
-    columns: ['Form', 'Status', 'Updated'],
-    rows: forms.map((form) => [form.title, form.status, form.updated]),
+    singular: 'response',
+    title: 'Google Form Responses',
+    description: 'Only response entries from Google Forms are shown here. Import the responses and keep this as the live inbox.',
+    columns: ['Name', 'Form', 'Submitted', 'Phone', 'Status'],
+    rows: formResponses.map((response) => [response.name, response.form, response.submitted, response.phone, response.status]),
   },
   {
     id: 'treatments',
@@ -1148,12 +1435,12 @@ export function FormsPage() {
       title="Forms"
       description="Manage clinic intake forms, assessments, and registration templates from one place."
       stats={[
-        { label: 'Forms live', value: '14' },
-        { label: 'Drafts', value: '6' },
-        { label: 'Published', value: '8' },
+        { label: 'Forms live', value: '0' },
+        { label: 'Drafts', value: '0' },
+        { label: 'Published', value: '0' },
       ]}
       columns={['Form', 'Status', 'Updated']}
-      rows={forms.map((form) => [form.title, form.status, form.updated])}
+      rows={[]}
     />
   );
 }
@@ -1164,17 +1451,12 @@ export function AppointmentsPage() {
       title="Appointments"
       description="Track booking slots, confirmations, and visit flow across the day."
       stats={[
-        { label: 'Today', value: '2' },
-        { label: 'Confirmed', value: '12' },
-        { label: 'Pending', value: '6' },
-      ]} 
-      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status']}
-      rows={[
-        ['Anjali Menon', '9876543210', '2026-06-04', '09:00 AM', 'Consultation', 'Confirmed'],
-        ['Ramesh Kumar', '9876501234', '2026-06-04', '09:45 AM', 'Follow-up', 'Confirmed'],
-        ['Sneha Nair', '9876512345', '2026-06-05', '10:30 AM', 'Panchakarma', 'In Progress'],
-        ['Vikram Pillai', '9876598765', '2026-06-05', '11:30 AM', 'Consultation', 'Confirmed'],
+        { label: 'Today', value: '0' },
+        { label: 'Confirmed', value: '0' },
+        { label: 'Pending', value: '0' },
       ]}
+      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status']}
+      rows={[]}
       fieldOptions={{ Type: services }}
       filterPresets={[
         { label: 'Date wise', column: 'Date' },
@@ -1191,7 +1473,7 @@ export function AppointmentsPage() {
         {
           id: 'today',
           label: 'Today Appointments',
-          match: (row) => row[2] === '2026-06-04',
+          match: (row) => row[2] === new Date().toISOString().slice(0, 10),
         },
       ]}
       rowActions={(row, setSelectedRow, setActionMessage) => (
@@ -1385,17 +1667,12 @@ export function ReportsPage() {
       title="Reports"
       description="Review clinic performance, revenue patterns, and team activity snapshots."
       stats={[
-        { label: 'This month', value: '92%' },
-        { label: 'Conversion', value: '28%' },
-        { label: 'Collections', value: 'â‚¹ 1.8L' },
+        { label: 'This month', value: '0%' },
+        { label: 'Conversion', value: '0%' },
+        { label: 'Collections', value: '0' },
       ]}
       columns={['Report', 'Owner', 'Period', 'Status']}
-      rows={[
-        ['Lead Performance', 'CRM Team', 'May 2025', 'Ready'],
-        ['Revenue Summary', 'Finance', 'May 2025', 'Ready'],
-        ['Visit Trends', 'Front Desk', 'May 2025', 'Draft'],
-        ['Follow-up Health', 'Operations', 'Weekly', 'Ready'],
-      ]}
+      rows={[]}
     />
   );
 }
@@ -1447,7 +1724,7 @@ export function IntegrationsPage() {
           </div>
           <div className="mini-stat">
             <span>Rows synced today</span>
-            <strong>84</strong>
+            <strong>0</strong>
           </div>
         </div>
       </div>
@@ -1527,18 +1804,29 @@ export function IntegrationsPage() {
               <div>Target</div>
               <div />
             </div>
-            {preview.map((row) => (
-              <div className="data-row" key={row[0] + row[1]}>
-                <div>{row[0]}</div>
-                <div>{row[1]}</div>
-                <div>{row[2]}</div>
-                <div><Tag tone="tag-contacted">{row[3]}</Tag></div>
-                <div><button className="row-link" type="button" onClick={() => setSyncMessage(`Reviewed sync activity for ${row[1]}.`)}>Review</button></div>
+            {preview.length ? (
+              preview.map((row) => (
+                <div className="data-row" key={row[0] + row[1]}>
+                  <div>{row[0]}</div>
+                  <div>{row[1]}</div>
+                  <div>{row[2]}</div>
+                  <div><Tag tone="tag-contacted">{row[3]}</Tag></div>
+                  <div><button className="row-link" type="button" onClick={() => setSyncMessage(`Reviewed sync activity for ${row[1]}.`)}>Review</button></div>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state compact-empty table-empty">
+                <strong>No sync activity yet.</strong>
+                <p>Connect Google Sheets or another app to start streaming live events here.</p>
               </div>
-            ))}
+            )}
           </div>
         </Card>
       </div>
     </section>
   );
 }
+
+
+
+

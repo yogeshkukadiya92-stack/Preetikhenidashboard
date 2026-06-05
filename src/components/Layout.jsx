@@ -26,11 +26,19 @@ const iconByPath = {
   '/integrations': SettingsIcon,
 };
 
+function getCurrentDateRange() {
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(today.getDate() - 6);
+  const format = (date) => date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${format(start)} - ${format(today)}`;
+}
+
 export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchText, setSearchText] = useState('');
-  const [dateRange, setDateRange] = useState('May 18 - May 24, 2025');
+  const [dateRange, setDateRange] = useState(() => getCurrentDateRange());
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const handleSearch = (event) => {
@@ -50,7 +58,7 @@ export function Layout() {
     else if (term.includes('pay') || term.includes('invoice') || term.includes('receipt')) navigate('/finance?tab=payments');
     else if (term.includes('client')) navigate('/clients');
     else if (term.includes('appoint') || term.includes('schedule')) navigate('/appointments');
-    else if (term.includes('form')) navigate('/forms');
+    else if (term.includes('form')) navigate('/operations?tab=forms');
     else navigate('/crm');
   };
 
@@ -98,7 +106,7 @@ export function Layout() {
             <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search leads, clients, stock, payments..." aria-label="Search" />
             <button className="kbd" type="submit">Go</button>
           </form>
-          <button className="date-pill" type="button" onClick={() => setDateRange((current) => (current === 'May 18 - May 24, 2025' ? 'May 2025' : 'May 18 - May 24, 2025'))}>
+          <button className="date-pill" type="button" onClick={() => setDateRange((current) => (current === getCurrentDateRange() ? new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : getCurrentDateRange()))}>
             <CalendarIcon />
             <strong>{dateRange}</strong>
             <ChevronRight />

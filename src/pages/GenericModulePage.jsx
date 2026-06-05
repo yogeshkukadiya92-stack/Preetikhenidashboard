@@ -1,5 +1,5 @@
 import { Card } from '../components/ui.jsx';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 function downloadText(filename, content, mimeType = 'text/plain;charset=utf-8') {
   const blob = new Blob([content], { type: mimeType });
@@ -27,14 +27,25 @@ function parseCsv(text) {
     .map((line) => line.split(',').map((cell) => cell.trim().replace(/^"|"$/g, '').replaceAll('""', '"')));
 }
 
+function loadSavedRows(key, fallbackRows) {
+  try {
+    const saved = window.localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : fallbackRows;
+  } catch {
+    return fallbackRows;
+  }
+}
+
 export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, rowActions = null, filterPresets = [], viewPresets = [] }) {
   const [selectedRow, setSelectedRow] = useState(null);
-  const [tableRows, setTableRows] = useState(rows);
+  const storageKey = `ayurflow:${title}:rows:v2`;
+  const [tableRows, setTableRows] = useState(() => loadSavedRows(storageKey, rows));
   const [actionMessage, setActionMessage] = useState('Ready.');
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [activeFilter, setActiveFilter] = useState(filterPresets[0]?.column ?? '');
   const [activeView, setActiveView] = useState(viewPresets[0]?.id ?? 'all');
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [draftRow, setDraftRow] = useState(columns.map(() => ''));
   const [importOpen, setImportOpen] = useState(false);
@@ -42,6 +53,16 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const [uploadName, setUploadName] = useState('No file selected');
   const importInputRef = useRef(null);
   const activeViewPredicate = viewPresets.find((preset) => preset.id === activeView)?.match ?? null;
+  const activeViewLabel = viewPresets.find((preset) => preset.id === activeView)?.label ?? 'All';
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(tableRows));
+    } catch {
+      setActionMessage('Local browser storage is full or blocked.');
+    }
+  }, [storageKey, tableRows]);
+
   const filteredRows = tableRows.filter((row) => {
     if (activeViewPredicate && !activeViewPredicate(row, columns)) return false;
     if (!filterText) return true;
@@ -145,21 +166,30 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
 
       {viewPresets.length > 0 && (
         <Card title={`${title} Views`} className="compact-action-card">
-          <div className="filter-pills">
-            {viewPresets.map((preset) => (
-              <button
-                className={`sheet-tab filter-pill ${activeView === preset.id ? 'active' : ''}`}
-                type="button"
-                key={preset.id}
-                onClick={() => {
-                  setActiveView(preset.id);
-                  setActionMessage(`${preset.label} view opened.`);
-                }}
-              >
-                {preset.label}
-              </button>
-            ))}
+          <div className="module-toolbar compact-view-toolbar">
+            <div className="mini-stat compact-status"><span>Selected view</span><strong>{activeViewLabel}</strong></div>
+            <button className="pill" type="button" onClick={() => setViewMenuOpen((current) => !current)}>
+              {viewMenuOpen ? 'Hide Views' : 'Open Views'}
+            </button>
           </div>
+          {viewMenuOpen && (
+            <div className="filter-pills">
+              {viewPresets.map((preset) => (
+                <button
+                  className={`sheet-tab filter-pill ${activeView === preset.id ? 'active' : ''}`}
+                  type="button"
+                  key={preset.id}
+                  onClick={() => {
+                    setActiveView(preset.id);
+                    setViewMenuOpen(false);
+                    setActionMessage(`${preset.label} view opened.`);
+                  }}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 
@@ -209,16 +239,23 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
             {columns.map((column) => <div key={column}>{column}</div>)}
             <div />
           </div>
-          {filteredRows.map((row, index) => (
-            <div className="data-row" key={index}>
-              {row.map((cell) => <div key={cell}>{cell}</div>)}
-              <div>
-                {rowActions ? rowActions(row, setSelectedRow, setActionMessage) : (
-                  <button className="row-link" type="button" onClick={() => setSelectedRow(row[0])}>View</button>
-                )}
+          {filteredRows.length ? (
+            filteredRows.map((row, index) => (
+              <div className="data-row" key={index}>
+                {row.map((cell) => <div key={cell}>{cell}</div>)}
+                <div>
+                  {rowActions ? rowActions(row, setSelectedRow, setActionMessage) : (
+                    <button className="row-link" type="button" onClick={() => setSelectedRow(row[0])}>View</button>
+                  )}
+                </div>
               </div>
+            ))
+          ) : (
+            <div className="empty-state compact-empty table-empty">
+              <strong>No records yet.</strong>
+              <p>Add a record or import a file to start using this module.</p>
             </div>
-          ))}
+          )}
         </div>
       </Card>
 
