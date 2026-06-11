@@ -301,6 +301,7 @@ function ImportExportModule({
 }
 
 export function CRMPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('leads');
   const [manualLeads, setManualLeads] = useState([]);
   const [editingIndex, setEditingIndex] = useState(null);
@@ -311,6 +312,7 @@ export function CRMPage() {
   const [message, setMessage] = useState('Ready to manage leads.');
   const [dropActive, setDropActive] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState(null);
   const [leadForm, setLeadForm] = useState({
     name: '',
     source: 'Website',
@@ -318,6 +320,24 @@ export function CRMPage() {
     score: '',
     addedOn: 'Today',
   });
+
+  const title = 'CRM';
+
+  const rowToValues = (lead) => ({
+    Lead: lead.name,
+    Source: lead.source,
+    Status: lead.status,
+    Score: lead.score,
+    'Added On': lead.addedOn,
+  });
+
+  const rowToCsvValues = (lead) => [lead.name, lead.source, lead.status, lead.score, lead.addedOn];
+
+  const openClientAction = (path, label) => {
+    setSelectedRecord(null);
+    setMessage(`${label} opened.`);
+    navigate(path);
+  };
 
   const leadRows = [
     ...manualLeads.map((lead, index) => ({ ...lead, __manual: true, __manualIndex: index })),
@@ -485,7 +505,7 @@ export function CRMPage() {
                             <button type="button" className="row-link danger" onClick={() => deleteManualLead(lead.__manualIndex)}>Delete</button>
                           </div>
                         ) : (
-                          <Tag tone={leadPriorityTone(lead.status)}>Read only</Tag>
+                          <button type="button" className="row-link" onClick={() => setSelectedRecord(lead)}>View</button>
                         )}
                       </div>
                     </div>
