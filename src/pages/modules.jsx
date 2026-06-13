@@ -247,12 +247,17 @@ function ImportExportModule({
               {headers.map((header) => <div key={header}>{header}</div>)}
               <div />
             </div>
-            {filteredRows.map((row, index) => (
+            {filteredRows.length ? filteredRows.map((row, index) => (
               <div className="data-row" key={index}>
                 {headers.map((header) => <div key={header}>{rowToValues(row)[header]}</div>)}
                 <div>{rowActions ? rowActions(row) : defaultRowAction(row)}</div>
               </div>
-            ))}
+            )) : (
+              <div className="empty-state compact-empty table-empty">
+                <strong>No records yet.</strong>
+                <p>Import a file or add records to populate this table.</p>
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -781,10 +786,15 @@ export function UsersPage() {
     setUploadName(file.name);
     const text = await file.text();
     let parsed = [];
-    if (file.name.toLowerCase().endsWith('.json')) {
-      parsed = JSON.parse(text);
-    } else {
-      parsed = parseCsv(text);
+    try {
+      if (file.name.toLowerCase().endsWith('.json')) {
+        parsed = JSON.parse(text);
+      } else {
+        parsed = parseCsv(text);
+      }
+    } catch {
+      setStatusMessage('Import failed. Please upload a valid CSV or JSON file.');
+      return;
     }
     const normalized = parsed.map((entry) => ({
       name: entry.name ?? entry.Name ?? '',
@@ -1768,7 +1778,7 @@ export function IntegrationsPage() {
                       <span>{integration.lastSync}</span>
                     </div>
                   </div>
-                  <button className="pill" type="button" onClick={() => handleIntegrationAction(integration)}>{isConnected && integration.name !== 'Google Sheets' ? 'Connected' : integration.primaryAction} <ChevronRight /></button>
+                  <button className="pill" type="button" onClick={() => handleIntegrationAction(integration)} disabled={isConnected && integration.name !== 'Google Sheets'}>{isConnected && integration.name !== 'Google Sheets' ? 'Connected' : integration.primaryAction} <ChevronRight /></button>
                 </div>
                 );
               })}

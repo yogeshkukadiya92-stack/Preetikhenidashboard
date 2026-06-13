@@ -205,22 +205,24 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
         </div>
         {filterOpen && (
           <div className="filter-panel">
-            <div className="filter-pills">
-              {filterPresets.map((preset) => (
-                <button
-                  className={`sheet-tab filter-pill ${activeFilter === preset.column ? 'active' : ''}`}
-                  type="button"
-                  key={preset.column}
-                  onClick={() => {
-                    setActiveFilter(preset.column);
-                    setFilterText('');
-                    setActionMessage(`${preset.label} filter selected.`);
-                  }}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
+            {filterPresets.length > 0 && (
+              <div className="filter-pills">
+                {filterPresets.map((preset) => (
+                  <button
+                    className={`sheet-tab filter-pill ${activeFilter === preset.column ? 'active' : ''}`}
+                    type="button"
+                    key={preset.column}
+                    onClick={() => {
+                      setActiveFilter(preset.column);
+                      setFilterText('');
+                      setActionMessage(`${preset.label} filter selected.`);
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <input
               className="lead-input compact-filter"
               value={filterText}
@@ -242,7 +244,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
           {filteredRows.length ? (
             filteredRows.map((row, index) => (
               <div className="data-row" key={index}>
-                {row.map((cell) => <div key={cell}>{cell}</div>)}
+                {row.map((cell, colIndex) => <div key={`${colIndex}-${cell}`}>{cell}</div>)}
                 <div>
                   {rowActions ? rowActions(row, setSelectedRow, setActionMessage) : (
                     <button className="row-link" type="button" onClick={() => setSelectedRow(row[0])}>View</button>
@@ -282,9 +284,23 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
                       <option value="">{`Select ${column.toLowerCase()}`}</option>
                       {fieldOptions[column].map((option) => <option value={option} key={option}>{option}</option>)}
                     </select>
+                  ) : column === 'Status' ? (
+                    <select
+                      className="lead-input"
+                      value={draftRow[index] ?? ''}
+                      onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
+                    >
+                      <option value="">Select status</option>
+                      <option>Pending</option>
+                      <option>Confirmed</option>
+                      <option>Active</option>
+                      <option>Completed</option>
+                      <option>Cancelled</option>
+                    </select>
                   ) : (
                     <input
                       className="lead-input"
+                      type={column === 'Date' ? 'date' : column === 'Time' ? 'time' : 'text'}
                       value={draftRow[index] ?? ''}
                       onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
                       placeholder={`Enter ${column.toLowerCase()}`}

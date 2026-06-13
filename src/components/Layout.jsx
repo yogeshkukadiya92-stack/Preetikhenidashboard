@@ -90,7 +90,7 @@ export function Layout() {
           })}
         </nav>
         <div className="sidebar-art" aria-hidden="true" />
-        <div className="clinic-card">
+        <div className="clinic-card" role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => navigate('/settings')} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/settings'); }}>
           <div>
             <strong>Vaidhya Wellness Clinic</strong>
             <span>Thrissur, Kerala</span>

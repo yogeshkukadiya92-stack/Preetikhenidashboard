@@ -37,7 +37,7 @@ export function DashboardPage() {
                 <div className="value">{kpi.value}</div>
               </div>
             </div>
-            <div className="delta">{kpi.delta} <span className="subtle">No live data</span></div>
+            <div className="delta">{kpi.delta}</div>
             <div className="kpi-footer">
               <ChevronRight />
               View Details
