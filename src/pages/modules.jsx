@@ -1692,18 +1692,305 @@ export function SettingsPage() {
 }
 
 export function ReportsPage() {
+  const [activeReport, setActiveReport] = useState('appointments');
+  const [financeSubTab, setFinanceSubTab] = useState('payments');
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  // Load data from all localStorage sources (standalone + hub)
+  const opsTabs = loadSavedState('ayurflow:Operations:tabs:v2', {});
+  const finTabs = loadSavedState('ayurflow:Finance:tabs:v2', {});
+
+  const appointmentRows = loadSavedState('ayurflow:Appointments:rows:v2', []);
+
+  const treatmentRows = [
+    ...loadSavedState('ayurflow:Treatment Plans:rows:v2', []),
+    ...(opsTabs.treatments ?? []),
+  ];
+
+  const formRows = [
+    ...loadSavedState('ayurflow:Forms:rows:v2', []),
+    ...(opsTabs.forms ?? []),
+  ];
+
+  const inventoryRows = [
+    ...loadSavedState('ayurflow:Inventory:rows:v2', []),
+    ...(opsTabs.inventory ?? []),
+  ];
+
+  const paymentObjRows = loadSavedState('ayurflow:ayurflow-payments:rows:v2', [])
+    .map((p) => [p.client ?? '', p.invoice ?? '', p.amount ?? '', p.status ?? '', p.paidOn ?? '']);
+  const paymentRows = [...(finTabs.payments ?? []), ...paymentObjRows];
+
+  const accountRows = [
+    ...(finTabs.accounts ?? []),
+    ...loadSavedState('ayurflow:Accounts:rows:v2', []),
+  ];
+
+  // Revenue helpers
+  const sumAmount = (rows, colIndex) =>
+    rows.reduce((s, r) => s + (parseFloat(String(r[colIndex] ?? '').replace(/[^\d.]/g, '')) || 0), 0);
+  const fmtRs = (n) => `₹${n.toLocaleString('en-IN')}`;
+
+  // Summary rows for Finance → Revenue Summary tab
+  const incomeTotal = sumAmount(accountRows.filter((r) => r[1] === 'Income'), 2);
+  const expenseTotal = sumAmount(accountRows.filter((r) => r[1] === 'Expense'), 2);
+  const paidTotal = sumAmount(paymentRows.filter((r) => r[3] === 'Paid'), 2);
+  const pendingTotal = sumAmount(paymentRows.filter((r) => r[3] === 'Pending'), 2);
+
+  const summaryRows = [
+    ['Income', `${accountRows.filter((r) => r[1] === 'Income').length} entries`, incomeTotal > 0 ? fmtRs(incomeTotal) : '—'],
+    ['Expenses', `${accountRows.filter((r) => r[1] === 'Expense').length} entries`, expenseTotal > 0 ? fmtRs(expenseTotal) : '—'],
+    ['Net Profit / Loss', '—', incomeTotal - expenseTotal !== 0 ? fmtRs(incomeTotal - expenseTotal) : '—'],
+    ['Payments Collected', `${paymentRows.filter((r) => r[3] === 'Paid').length} invoices`, paidTotal > 0 ? fmtRs(paidTotal) : '—'],
+    ['Payments Pending', `${paymentRows.filter((r) => r[3] === 'Pending').length} invoices`, pendingTotal > 0 ? fmtRs(pendingTotal) : '—'],
+    ['Partial Payments', `${paymentRows.filter((r) => r[3] === 'Partial').length} invoices`, '—'],
+    ['Total Appointments', `${appointmentRows.length}`, '—'],
+    ['Confirmed Appointments', `${appointmentRows.filter((r) => r[5] === 'Confirmed').length}`, '—'],
+    ['Active Treatment Plans', `${treatmentRows.filter((r) => r[4] === 'Active').length}`, '—'],
+    ['Inventory Items', `${inventoryRows.length}`, '—'],
+    ['Low Stock Alerts', `${inventoryRows.filter((r) => r[4] === 'Low Stock').length}`, '—'],
+    ['Form Responses', `${formRows.length}`, '—'],
+  ];
+
+  // Report map
+  const reportMap = {
+    treatments: { id: 'treatments', title: 'Treatment Report', columns: ['Client', 'Service', 'Goal', 'Duration', 'Status'], rows: treatmentRows },
+    appointments: { id: 'appointments', title: 'Appointment Report', columns: ['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status'], rows: appointmentRows },
+    finance_payments: { id: 'payments', title: 'Payments Report', columns: ['Client', 'Invoice', 'Amount', 'Status', 'Paid On'], rows: paymentRows },
+    finance_accounts: { id: 'accounts', title: 'Accounts Report', columns: ['Item', 'Type', 'Amount', 'Mode', 'Status'], rows: accountRows },
+    finance_summary: { id: 'revenue-summary', title: 'Revenue & Business Summary', columns: ['Category', 'Details', 'Amount'], rows: summaryRows },
+    forms: { id: 'forms', title: 'Form Responses Report', columns: ['Name', 'Form', 'Submitted', 'Phone', 'Status'], rows: formRows },
+    inventory: { id: 'inventory', title: 'Inventory Report', columns: ['Item', 'Category', 'Quantity', 'Expiry', 'Status'], rows: inventoryRows },
+  };
+
+  const currentReportKey = activeReport === 'finance' ? `finance_${financeSubTab}` : activeReport;
+  const currentReport = reportMap[currentReportKey];
+
+  // Stats per active tab
+  const stats = (() => {
+    if (activeReport === 'appointments') return [
+      { label: 'Total', value: appointmentRows.length },
+      { label: 'Confirmed', value: appointmentRows.filter((r) => r[5] === 'Confirmed').length },
+      { label: 'Pending', value: appointmentRows.filter((r) => r[5] === 'Pending').length },
+      { label: 'Cancelled', value: appointmentRows.filter((r) => r[5] === 'Cancelled').length },
+    ];
+    if (activeReport === 'treatments') return [
+      { label: 'Total Plans', value: treatmentRows.length },
+      { label: 'Active', value: treatmentRows.filter((r) => r[4] === 'Active').length },
+      { label: 'Completed', value: treatmentRows.filter((r) => r[4] === 'Completed').length },
+      { label: 'Pending', value: treatmentRows.filter((r) => r[4] === 'Pending').length },
+    ];
+    if (activeReport === 'finance' && financeSubTab === 'payments') return [
+      { label: 'Total', value: paymentRows.length },
+      { label: 'Paid', value: paymentRows.filter((r) => r[3] === 'Paid').length },
+      { label: 'Pending', value: paymentRows.filter((r) => r[3] === 'Pending').length },
+      { label: 'Total Amount', value: paidTotal > 0 ? fmtRs(paidTotal) : '—' },
+    ];
+    if (activeReport === 'finance' && financeSubTab === 'accounts') return [
+      { label: 'Total Entries', value: accountRows.length },
+      { label: 'Income', value: accountRows.filter((r) => r[1] === 'Income').length },
+      { label: 'Expense', value: accountRows.filter((r) => r[1] === 'Expense').length },
+      { label: 'Net P/L', value: incomeTotal - expenseTotal !== 0 ? fmtRs(incomeTotal - expenseTotal) : '—' },
+    ];
+    if (activeReport === 'finance' && financeSubTab === 'summary') return [
+      { label: 'Total Income', value: incomeTotal > 0 ? fmtRs(incomeTotal) : '—' },
+      { label: 'Total Expense', value: expenseTotal > 0 ? fmtRs(expenseTotal) : '—' },
+      { label: 'Net P/L', value: fmtRs(incomeTotal - expenseTotal) },
+      { label: 'Invoices Paid', value: paymentRows.filter((r) => r[3] === 'Paid').length },
+    ];
+    if (activeReport === 'forms') return [
+      { label: 'Total Responses', value: formRows.length },
+      { label: 'Pending', value: formRows.filter((r) => r[4] === 'Pending').length },
+      { label: 'Contacted', value: formRows.filter((r) => r[4] === 'Contacted').length },
+    ];
+    if (activeReport === 'inventory') return [
+      { label: 'Total Items', value: inventoryRows.length },
+      { label: 'Low Stock', value: inventoryRows.filter((r) => r[4] === 'Low Stock').length },
+      { label: 'Out of Stock', value: inventoryRows.filter((r) => r[4] === 'Out of Stock').length },
+      { label: 'Categories', value: new Set(inventoryRows.map((r) => r[1])).size },
+    ];
+    return [];
+  })();
+
+  // Export helpers
+  const escH = (v) => String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+  const exportExcel = () => {
+    const { columns, rows, title, id } = currentReport;
+    const statsHtml = stats.map((s) => `<td style="background:#f0f7f3;border:1px solid #c5ddd1;padding:6px 12px;border-radius:4px;"><strong style="color:#1f6b4a;font-size:13pt;">${escH(String(s.value))}</strong><br><span style="color:#617167;font-size:9pt;">${escH(s.label)}</span></td>`).join('');
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><style>
+body{font-family:Calibri,Arial;}
+h2{color:#1f6b4a;margin:0 0 4px;}
+p{color:#617167;font-size:10pt;margin:0 0 12px;}
+th{background:#1f6b4a;color:white;font-weight:bold;padding:8px 12px;border:1px solid #ccc;}
+td{border:1px solid #ddd;padding:6px 12px;}
+tr:nth-child(even) td{background:#f8f4eb;}
+table{border-collapse:collapse;width:100%;}
+</style></head>
+<body>
+<h2>${escH(title)}</h2>
+<p>Generated: ${dateStr} &nbsp;|&nbsp; AyurFlow CRM – Vaidhya Wellness Clinic</p>
+<table style="margin-bottom:16px;width:auto;"><tr>${statsHtml}</tr></table>
+<table>
+<thead><tr>${columns.map((h) => `<th>${escH(h)}</th>`).join('')}</tr></thead>
+<tbody>${rows.length ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escH(cell)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${columns.length}" style="text-align:center;color:#9aa89e;padding:20px;">No records found</td></tr>`}</tbody>
+</table>
+</body></html>`;
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${id}-report-${today}.xls`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = () => {
+    const { columns, rows, title } = currentReport;
+    const statsHtml = stats.map((s) => `<div class="stat"><span>${escH(s.label)}</span><strong>${escH(String(s.value))}</strong></div>`).join('');
+    const tableRows = rows.length
+      ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escH(cell)}</td>`).join('')}</tr>`).join('')
+      : `<tr><td colspan="${columns.length}" class="empty-cell">No records found. Add data to generate this report.</td></tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escH(title)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;font-size:11pt;color:#173528;padding:30px 36px;}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1f6b4a;padding-bottom:14px;margin-bottom:16px;}
+.hdr h1{font-size:20pt;color:#1f6b4a;margin-bottom:4px;}
+.hdr .sub{color:#617167;font-size:10pt;}
+.hdr .right{text-align:right;color:#617167;font-size:9pt;line-height:1.7;}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+.stat{background:#f0f7f3;border:1px solid #c5ddd1;border-radius:8px;padding:8px 16px;min-width:90px;}
+.stat span{display:block;font-size:8pt;color:#617167;margin-bottom:2px;}
+.stat strong{font-size:14pt;color:#1f6b4a;font-weight:700;}
+table{width:100%;border-collapse:collapse;font-size:10pt;}
+thead th{background:#1f6b4a;color:white;padding:8px 10px;text-align:left;font-weight:600;}
+tbody td{padding:7px 10px;border-bottom:1px solid #e8e0d0;vertical-align:top;}
+tbody tr:nth-child(even) td{background:#f8f4eb;}
+.empty-cell{text-align:center;color:#9aa89e;padding:28px;}
+.footer{margin-top:20px;font-size:8pt;color:#9aa89e;border-top:1px solid #e8e0d0;padding-top:8px;display:flex;justify-content:space-between;}
+@media print{
+body{padding:16px 20px;}
+thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
+</style></head>
+<body>
+<div class="hdr">
+  <div><h1>${escH(title)}</h1><div class="sub">Vaidhya Wellness Clinic, Thrissur, Kerala</div></div>
+  <div class="right"><strong>AyurFlow CRM</strong><br>Generated: ${dateStr}<br>Total Records: ${rows.length}</div>
+</div>
+<div class="stats">${statsHtml}</div>
+<table>
+<thead><tr>${columns.map((h) => `<th>${escH(h)}</th>`).join('')}</tr></thead>
+<tbody>${tableRows}</tbody>
+</table>
+<div class="footer"><span>AyurFlow CRM | Vaidhya Wellness Clinic</span><span>${dateStr}</span></div>
+<script>window.onload=function(){window.print()};<\/script>
+</body></html>`;
+    const win = window.open('', '_blank', 'noopener,noreferrer');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  const exportCsv = () => {
+    const { columns, rows, id } = currentReport;
+    const esc = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
+    const csv = [columns, ...rows].map((row) => row.map(esc).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${id}-report-${today}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <GenericModulePage
-      title="Reports"
-      description="Review clinic performance, revenue patterns, and team activity snapshots."
-      stats={[
-        { label: 'This month', value: '0%' },
-        { label: 'Conversion', value: '0%' },
-        { label: 'Collections', value: '0' },
-      ]}
-      columns={['Report', 'Owner', 'Period', 'Status']}
-      rows={[]}
-    />
+    <section className="module-page">
+      <div className="module-hero">
+        <div>
+          <h1>Reports</h1>
+          <p>Generate and export detailed reports — Treatment, Appointments, Finance, Forms, and Inventory.</p>
+        </div>
+        <div className="module-stats">
+          {stats.map((s) => (
+            <div className="mini-stat" key={s.label}>
+              <span>{s.label}</span>
+              <strong>{s.value}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="sheet-tabs">
+        {[
+          { id: 'treatments', label: 'Treatment' },
+          { id: 'appointments', label: 'Appointments' },
+          { id: 'finance', label: 'Finance' },
+          { id: 'forms', label: 'Forms' },
+          { id: 'inventory', label: 'Inventory' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            className={`sheet-tab ${activeReport === tab.id ? 'active' : ''}`}
+            type="button"
+            onClick={() => setActiveReport(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeReport === 'finance' && (
+        <Card title="Finance Report Type" className="compact-action-card">
+          <div className="sheet-tabs compact-tabs">
+            {[
+              { id: 'payments', label: 'Payments' },
+              { id: 'accounts', label: 'Accounts' },
+              { id: 'summary', label: 'Revenue Summary' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                className={`sheet-tab ${financeSubTab === tab.id ? 'active' : ''}`}
+                type="button"
+                onClick={() => setFinanceSubTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {currentReport && (
+        <Card title={currentReport.title} subtitle={`${currentReport.rows.length} record${currentReport.rows.length !== 1 ? 's' : ''} found`}>
+          <div className="sheet-actions" style={{ marginBottom: 14 }}>
+            <button className="pill" type="button" onClick={exportExcel}>Export Excel <ChevronRight /></button>
+            <button className="pill" type="button" onClick={exportPdf}>Export PDF <ChevronRight /></button>
+            <button className="pill" type="button" onClick={exportCsv}>Export CSV <ChevronRight /></button>
+          </div>
+          <div className="data-table">
+            <div className="table-head">
+              {currentReport.columns.map((col) => <div key={col}>{col}</div>)}
+              <div />
+            </div>
+            {currentReport.rows.length ? currentReport.rows.map((row, i) => (
+              <div className="data-row" key={i}>
+                {row.map((cell, j) => <div key={j}>{cell}</div>)}
+                <div />
+              </div>
+            )) : (
+              <div className="empty-state compact-empty table-empty">
+                <strong>No {currentReport.title.replace(' Report', '').replace(' Summary', '')} data yet.</strong>
+                <p>Add records in the relevant section — they will appear here automatically for reporting and export.</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+    </section>
   );
 }
 
