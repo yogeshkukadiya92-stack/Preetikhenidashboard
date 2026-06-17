@@ -826,7 +826,12 @@ function ClientProfile({ client, onBack }) {
   const [apptModal, setApptModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
   const [treatTemplates] = useState(() => loadSavedArray('ayurflow:treatment-templates:v1', []));
-  const [treatForm, setTreatForm] = useState({ service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
+  const [treatServiceOptions] = useState(() => {
+    const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
+    const savedNames = saved.map((row) => row[0]).filter(Boolean);
+    return Array.from(new Set([...savedNames, ...services]));
+  });
+  const [treatForm, setTreatForm] = useState({ service: treatServiceOptions[0] ?? services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
   const [apptForm, setApptForm] = useState({ mobile: '', date: '', time: '', type: services[0] ?? '', status: 'Confirmed' });
   const [payForm, setPayForm] = useState({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
 
@@ -1022,7 +1027,7 @@ function ClientProfile({ client, onBack }) {
               <label className="field-block">
                 <span>Service</span>
                 <select className="lead-input" value={treatForm.service} onChange={(e) => setTreatForm((f) => ({ ...f, service: e.target.value }))}>
-                  {services.map((s) => <option key={s}>{s}</option>)}
+                  {treatServiceOptions.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </label>
               <label className="field-block">
@@ -2666,12 +2671,17 @@ export function TreatmentPlansPage() {
   const [clientNames] = useState(() =>
     loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
   );
+  const [serviceOptions] = useState(() => {
+    const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
+    const savedNames = saved.map((row) => row[0]).filter(Boolean);
+    return Array.from(new Set([...savedNames, ...services]));
+  });
   const [plans, setPlans] = useState(() => loadSavedArray(PLANS_KEY, []));
   const [templates, setTemplates] = useState(() => loadSavedArray(TEMPLATES_KEY, []));
   const [activeTab, setActiveTab] = useState('plans');
 
-  const blankPlan = { client: '', service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' };
-  const blankTemplate = { name: '', service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '' };
+  const blankPlan = { client: '', service: serviceOptions[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' };
+  const blankTemplate = { name: '', service: serviceOptions[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '' };
 
   const [planModal, setPlanModal] = useState(false);
   const [planForm, setPlanForm] = useState(blankPlan);
@@ -2831,7 +2841,7 @@ export function TreatmentPlansPage() {
               <label className="field-block">
                 <span>Service</span>
                 <select className="lead-input" value={planForm.service} onChange={(e) => setPlanForm((f) => ({ ...f, service: e.target.value }))}>
-                  {services.map((s) => <option key={s}>{s}</option>)}
+                  {serviceOptions.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </label>
               <label className="field-block">
@@ -2884,7 +2894,7 @@ export function TreatmentPlansPage() {
               <label className="field-block">
                 <span>Service</span>
                 <select className="lead-input" value={templateForm.service} onChange={(e) => setTemplateForm((f) => ({ ...f, service: e.target.value }))}>
-                  {services.map((s) => <option key={s}>{s}</option>)}
+                  {serviceOptions.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </label>
               <label className="field-block">
