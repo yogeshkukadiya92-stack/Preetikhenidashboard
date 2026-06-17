@@ -1459,19 +1459,287 @@ export function FinancePage() {
   );
 }
 
+const FIELD_TYPES = [
+  { value: 'text', label: 'Text' },
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'number', label: 'Number' },
+  { value: 'date', label: 'Date' },
+  { value: 'select', label: 'Dropdown' },
+  { value: 'textarea', label: 'Long Text' },
+  { value: 'checkbox', label: 'Yes / No' },
+];
+
+function makeUid() { return `id_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`; }
+function makeBlankField() { return { id: makeUid(), type: 'text', label: '', placeholder: '', required: false, options: [] }; }
+
 export function FormsPage() {
+  const [view, setView] = useState('list');
+  const [forms, setForms] = useState(() => loadSavedState('ayurflow:forms:v1', []));
+  const [editingId, setEditingId] = useState(null);
+  const [previewId, setPreviewId] = useState(null);
+  const [previewAnswers, setPreviewAnswers] = useState({});
+  const [submitted, setSubmitted] = useState(false);
+  const [fTitle, setFTitle] = useState('');
+  const [fDesc, setFDesc] = useState('');
+  const [fStatus, setFStatus] = useState('Draft');
+  const [fFields, setFFields] = useState([makeBlankField()]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem('ayurflow:forms:v1', JSON.stringify(forms)); } catch {}
+  }, [forms]);
+
+  const startCreate = () => {
+    setEditingId(null); setFTitle(''); setFDesc(''); setFStatus('Draft');
+    setFFields([makeBlankField()]); setView('builder');
+  };
+
+  const startEdit = (form) => {
+    setEditingId(form.id); setFTitle(form.title); setFDesc(form.description ?? '');
+    setFStatus(form.status); setFFields(form.fields.length ? form.fields : [makeBlankField()]);
+    setView('builder');
+  };
+
+  const saveForm = (status) => {
+    if (!fTitle.trim()) return;
+    const validFields = fFields.filter((f) => f.label.trim());
+    const now = new Date().toISOString().slice(0, 10);
+    const entry = { title: fTitle.trim(), description: fDesc.trim(), status: status ?? fStatus, fields: validFields, updatedAt: now };
+    setForms((prev) => editingId
+      ? prev.map((f) => (f.id === editingId ? { ...f, ...entry } : f))
+      : [{ id: makeUid(), createdAt: now, ...entry }, ...prev]);
+    setView('list');
+  };
+
+  const deleteForm = (id) => setForms((prev) => prev.filter((f) => f.id !== id));
+
+  const toggleStatus = (id) => setForms((prev) =>
+    prev.map((f) => (f.id === id ? { ...f, status: f.status === 'Published' ? 'Draft' : 'Published' } : f)));
+
+  const openPreview = (form) => { setPreviewId(form.id); setPreviewAnswers({}); setSubmitted(false); setView('preview'); };
+
+  const updateField = (id, key, val) => setFFields((prev) => prev.map((f) => (f.id === id ? { ...f, [key]: val } : f)));
+  const removeField = (id) => setFFields((prev) => prev.filter((f) => f.id !== id));
+  const moveField = (id, dir) => setFFields((prev) => {
+    const idx = prev.findIndex((f) => f.id === id);
+    const next = [...prev];
+    const to = idx + dir;
+    if (to < 0 || to >= next.length) return prev;
+    [next[idx], next[to]] = [next[to], next[idx]];
+    return next;
+  });
+  const addOption = (fid) => setFFields((prev) => prev.map((f) => (f.id === fid ? { ...f, options: [...f.options, ''] } : f)));
+  const updateOption = (fid, oi, val) => setFFields((prev) => prev.map((f) => (f.id === fid ? { ...f, options: f.options.map((o, i) => (i === oi ? val : o)) } : f)));
+  const removeOption = (fid, oi) => setFFields((prev) => prev.map((f) => (f.id === fid ? { ...f, options: f.options.filter((_, i) => i !== oi) } : f)));
+
+  const currentPreview = forms.find((f) => f.id === previewId);
+
+  // ── PREVIEW ──
+  if (view === 'preview' && currentPreview) {
+    return (
+      <section className="module-page">
+        <div className="module-hero compact-hero">
+          <div><h1>{currentPreview.title}</h1><p>{currentPreview.description || 'Fill in the form and submit.'}</p></div>
+          <div className="module-stats">
+            <div className="mini-stat"><span>Status</span><strong>{currentPreview.status}</strong></div>
+            <div className="mini-stat"><span>Fields</span><strong>{currentPreview.fields.length}</strong></div>
+          </div>
+        </div>
+        <button className="pill" type="button" style={{ marginBottom: 16 }} onClick={() => setView('list')}>← Back to Forms</button>
+        <Card title="Form Preview" subtitle="This is how the form appears to a client.">
+          {submitted ? (
+            <div className="empty-state">
+              <strong>Form submitted!</strong>
+              <p>Thank you. Your response has been recorded.</p>
+              <button className="pill" type="button" style={{ marginTop: 12 }} onClick={() => { setPreviewAnswers({}); setSubmitted(false); }}>Fill Again <ChevronRight /></button>
+            </div>
+          ) : (
+            <div style={{ maxWidth: 560 }}>
+              {currentPreview.fields.map((field) => (
+                <label key={field.id} style={{ display: 'block', marginBottom: 16 }}>
+                  <span style={{ display: 'block', marginBottom: 4, fontWeight: 600, fontSize: '0.93rem' }}>
+                    {field.label || 'Untitled field'}
+                    {field.required && <span style={{ color: '#e35c3e' }}> *</span>}
+                  </span>
+                  {field.type === 'textarea' ? (
+                    <textarea className="lead-input" rows={3} style={{ resize: 'vertical', width: '100%' }}
+                      value={previewAnswers[field.id] ?? ''}
+                      onChange={(e) => setPreviewAnswers((p) => ({ ...p, [field.id]: e.target.value }))}
+                      placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`} />
+                  ) : field.type === 'select' ? (
+                    <select className="lead-input" value={previewAnswers[field.id] ?? ''}
+                      onChange={(e) => setPreviewAnswers((p) => ({ ...p, [field.id]: e.target.value }))}>
+                      <option value="">Select an option</option>
+                      {field.options.filter(Boolean).map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                    </select>
+                  ) : field.type === 'checkbox' ? (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 400 }}>
+                      <input type="checkbox" checked={!!previewAnswers[field.id]}
+                        onChange={(e) => setPreviewAnswers((p) => ({ ...p, [field.id]: e.target.checked }))}
+                        style={{ width: 18, height: 18 }} />
+                      {field.placeholder || 'Yes'}
+                    </label>
+                  ) : (
+                    <input className="lead-input" type={field.type === 'phone' ? 'tel' : field.type}
+                      value={previewAnswers[field.id] ?? ''}
+                      onChange={(e) => setPreviewAnswers((p) => ({ ...p, [field.id]: e.target.value }))}
+                      placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`} />
+                  )}
+                </label>
+              ))}
+              <div className="sheet-actions" style={{ marginTop: 20 }}>
+                <button className="pill" type="button" onClick={() => setView('list')}>Cancel</button>
+                <button className="pill" type="button" onClick={() => setSubmitted(true)}>Submit Form <ChevronRight /></button>
+              </div>
+            </div>
+          )}
+        </Card>
+      </section>
+    );
+  }
+
+  // ── BUILDER ──
+  if (view === 'builder') {
+    return (
+      <section className="module-page">
+        <div className="module-hero compact-hero">
+          <div><h1>{editingId ? 'Edit Form' : 'Create New Form'}</h1><p>Add fields, configure them, then save as draft or publish.</p></div>
+          <div className="module-stats">
+            <div className="mini-stat"><span>Fields added</span><strong>{fFields.filter((f) => f.label.trim()).length}</strong></div>
+            <div className="mini-stat"><span>Status</span><strong>{fStatus}</strong></div>
+          </div>
+        </div>
+
+        <Card title="Form Details">
+          <div className="lead-form">
+            <label className="field-block">
+              <span className="subtle">Form Title *</span>
+              <input className="lead-input" value={fTitle} onChange={(e) => setFTitle(e.target.value)} placeholder="e.g. Patient Intake Form, Assessment Form" />
+            </label>
+            <label className="field-block">
+              <span className="subtle">Description (shown to client)</span>
+              <input className="lead-input" value={fDesc} onChange={(e) => setFDesc(e.target.value)} placeholder="Brief note shown above the form" />
+            </label>
+            <label className="field-block" style={{ maxWidth: 200 }}>
+              <span className="subtle">Status</span>
+              <select className="lead-input" value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
+                <option>Draft</option>
+                <option>Published</option>
+              </select>
+            </label>
+          </div>
+        </Card>
+
+        <Card title="Form Fields" subtitle="Add fields in the order you want them to appear.">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {fFields.map((field, idx) => (
+              <div key={field.id} style={{ background: 'rgba(31,107,74,0.04)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 14px' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: field.type === 'select' ? 10 : 0 }}>
+                  <select className="lead-input" style={{ width: 'auto', flex: '0 0 auto' }}
+                    value={field.type} onChange={(e) => updateField(field.id, 'type', e.target.value)}>
+                    {FIELD_TYPES.map((ft) => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
+                  </select>
+                  <input className="lead-input" style={{ flex: 1, minWidth: 140 }}
+                    value={field.label} onChange={(e) => updateField(field.id, 'label', e.target.value)}
+                    placeholder="Field label (e.g. Full Name, Age, Chief Complaint)" />
+                  <input className="lead-input" style={{ flex: 1, minWidth: 120 }}
+                    value={field.placeholder} onChange={(e) => updateField(field.id, 'placeholder', e.target.value)}
+                    placeholder="Placeholder text (optional)" />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: '0.86rem', whiteSpace: 'nowrap' }}>
+                    <input type="checkbox" checked={field.required} onChange={(e) => updateField(field.id, 'required', e.target.checked)} />
+                    Required
+                  </label>
+                  <button className="pill" type="button" onClick={() => moveField(field.id, -1)} disabled={idx === 0} style={{ padding: '4px 9px', minWidth: 0 }}>↑</button>
+                  <button className="pill" type="button" onClick={() => moveField(field.id, 1)} disabled={idx === fFields.length - 1} style={{ padding: '4px 9px', minWidth: 0 }}>↓</button>
+                  <button className="row-link danger" type="button" onClick={() => removeField(field.id)}>Remove</button>
+                </div>
+                {field.type === 'select' && (
+                  <div style={{ paddingLeft: 10, borderLeft: '3px solid var(--gold)', marginTop: 8 }}>
+                    <div className="subtle" style={{ fontSize: '0.81rem', marginBottom: 6 }}>Dropdown Options</div>
+                    {field.options.map((opt, oi) => (
+                      <div key={oi} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                        <input className="lead-input" style={{ flex: 1 }} value={opt}
+                          onChange={(e) => updateOption(field.id, oi, e.target.value)} placeholder={`Option ${oi + 1}`} />
+                        <button className="row-link danger" type="button" onClick={() => removeOption(field.id, oi)}>✕</button>
+                      </div>
+                    ))}
+                    <button className="pill" type="button" onClick={() => addOption(field.id)}>+ Add Option</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="sheet-actions" style={{ marginTop: 14 }}>
+            <button className="pill" type="button" onClick={() => setFFields((prev) => [...prev, makeBlankField()])}>Add Field <ChevronRight /></button>
+          </div>
+        </Card>
+
+        <Card title="Save">
+          <div className="sheet-actions">
+            <button className="pill" type="button" onClick={() => setView('list')}>Cancel</button>
+            <button className="pill" type="button" onClick={() => saveForm('Draft')} disabled={!fTitle.trim()}>Save as Draft <ChevronRight /></button>
+            <button className="pill" type="button" onClick={() => saveForm('Published')} disabled={!fTitle.trim()}>Publish Form <ChevronRight /></button>
+          </div>
+          {!fTitle.trim() && <p className="subtle" style={{ marginTop: 8, fontSize: '0.85rem' }}>Please enter a form title before saving.</p>}
+        </Card>
+      </section>
+    );
+  }
+
+  // ── LIST ──
   return (
-    <GenericModulePage
-      title="Forms"
-      description="Manage clinic intake forms, assessments, and registration templates from one place."
-      stats={[
-        { label: 'Forms live', value: '0' },
-        { label: 'Drafts', value: '0' },
-        { label: 'Published', value: '0' },
-      ]}
-      columns={['Form', 'Status', 'Updated']}
-      rows={[]}
-    />
+    <section className="module-page">
+      <div className="module-hero">
+        <div><h1>Forms</h1><p>Create and manage clinic intake forms, assessments, and registration templates.</p></div>
+        <div className="module-stats">
+          <div className="mini-stat"><span>Total Forms</span><strong>{forms.length}</strong></div>
+          <div className="mini-stat"><span>Published</span><strong>{forms.filter((f) => f.status === 'Published').length}</strong></div>
+          <div className="mini-stat"><span>Drafts</span><strong>{forms.filter((f) => f.status === 'Draft').length}</strong></div>
+        </div>
+      </div>
+
+      <Card title="Form Actions" className="compact-action-card">
+        <div className="sheet-actions">
+          <button className="pill" type="button" onClick={startCreate}>Create New Form <ChevronRight /></button>
+        </div>
+      </Card>
+
+      <Card title="All Forms" subtitle="Preview to see how it looks, Edit to change fields.">
+        {forms.length ? (
+          <div className="data-table">
+            <div className="table-head">
+              <div>Form Name</div><div>Fields</div><div>Status</div><div>Updated</div><div />
+            </div>
+            {forms.map((form) => (
+              <div className="data-row" key={form.id}>
+                <div>
+                  <strong>{form.title}</strong>
+                  {form.description && <div className="subtle" style={{ fontSize: '0.81rem', marginTop: 2 }}>{form.description}</div>}
+                </div>
+                <div>{form.fields.length} field{form.fields.length !== 1 ? 's' : ''}</div>
+                <div><Tag tone={form.status === 'Published' ? 'tag-contacted' : 'tag-follow'}>{form.status}</Tag></div>
+                <div>{form.updatedAt ?? form.createdAt ?? '—'}</div>
+                <div>
+                  <div className="row-actions">
+                    <button className="row-link" type="button" onClick={() => openPreview(form)}>Preview</button>
+                    <button className="row-link" type="button" onClick={() => startEdit(form)}>Edit</button>
+                    <button className="row-link" type="button" onClick={() => toggleStatus(form.id)}>
+                      {form.status === 'Published' ? 'Unpublish' : 'Publish'}
+                    </button>
+                    <button className="row-link danger" type="button" onClick={() => deleteForm(form.id)}>Delete</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact-empty table-empty">
+            <strong>No forms created yet.</strong>
+            <p>Click "Create New Form" to build your first intake form, assessment, or registration template.</p>
+          </div>
+        )}
+      </Card>
+    </section>
   );
 }
 
