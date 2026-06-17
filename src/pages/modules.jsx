@@ -660,8 +660,10 @@ export function CRMPage() {
                             <button type="button" className="row-link danger" onClick={() => deleteManualLead(lead.__manualIndex)}>Delete</button>
                           </div>
                         ) : (
-                          <button type="button" className="row-link" onClick={() => setSelectedRecord(lead)}>View</button>
-                          <Tag tone={leadPriorityTone(lead.status)}>System</Tag>
+                          <>
+                            <button type="button" className="row-link" onClick={() => setSelectedRecord(lead)}>View</button>
+                            <Tag tone={leadPriorityTone(lead.status)}>System</Tag>
+                          </>
                         )}
                       </div>
                     </div>
