@@ -818,7 +818,306 @@ export function CRMPage() {
   );
 }
 
+function ClientProfile({ client, onBack }) {
+  const clientName = client.name ?? '';
+  const [activeTab, setActiveTab] = useState('overview');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [treatModal, setTreatModal] = useState(false);
+  const [apptModal, setApptModal] = useState(false);
+  const [payModal, setPayModal] = useState(false);
+  const [treatForm, setTreatForm] = useState({ service: services[0] ?? '', goal: '', duration: '30 days', status: 'Active' });
+  const [apptForm, setApptForm] = useState({ mobile: '', date: '', time: '', type: services[0] ?? '', status: 'Confirmed' });
+  const [payForm, setPayForm] = useState({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
+
+  const allTreatments = useMemo(() => {
+    const saved = loadSavedState('ayurflow:Treatment Plans:rows:v2', []);
+    return saved.filter((row) => String(row[0] ?? '').toLowerCase().includes(clientName.toLowerCase()));
+  }, [clientName, refreshKey]);
+
+  const allAppointments = useMemo(() => {
+    const saved = loadSavedState('ayurflow:Appointments:rows:v2', []);
+    return saved.filter((row) => String(row[0] ?? '').toLowerCase().includes(clientName.toLowerCase()));
+  }, [clientName, refreshKey]);
+
+  const allPayments = useMemo(() => {
+    const saved = loadSavedState('ayurflow:ayurflow-payments:rows:v2', []);
+    return saved.filter((row) => String(row.client ?? '').toLowerCase().includes(clientName.toLowerCase()));
+  }, [clientName, refreshKey]);
+
+  const saveTreatment = () => {
+    const key = 'ayurflow:Treatment Plans:rows:v2';
+    const current = loadSavedState(key, []);
+    window.localStorage.setItem(key, JSON.stringify([[clientName, treatForm.service, treatForm.goal, treatForm.duration, treatForm.status], ...current]));
+    setRefreshKey((k) => k + 1);
+    setTreatModal(false);
+    setTreatForm({ service: services[0] ?? '', goal: '', duration: '30 days', status: 'Active' });
+  };
+
+  const saveAppointment = () => {
+    const key = 'ayurflow:Appointments:rows:v2';
+    const current = loadSavedState(key, []);
+    window.localStorage.setItem(key, JSON.stringify([[clientName, apptForm.mobile, apptForm.date, apptForm.time, apptForm.type, apptForm.status], ...current]));
+    setRefreshKey((k) => k + 1);
+    setApptModal(false);
+    setApptForm({ mobile: '', date: '', time: '', type: services[0] ?? '', status: 'Confirmed' });
+  };
+
+  const savePayment = () => {
+    const key = 'ayurflow:ayurflow-payments:rows:v2';
+    const current = loadSavedState(key, []);
+    window.localStorage.setItem(key, JSON.stringify([{ client: clientName, invoice: payForm.invoice, amount: payForm.amount, status: payForm.status, paidOn: payForm.paidOn }, ...current]));
+    setRefreshKey((k) => k + 1);
+    setPayModal(false);
+    setPayForm({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
+  };
+
+  return (
+    <section className="module-page">
+      <div className="module-hero">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button className="pill" type="button" onClick={onBack}>← Back</button>
+          <div className="client-avatar">{clientName.charAt(0).toUpperCase()}</div>
+          <div>
+            <h1>{clientName}</h1>
+            <p>{client.program || 'No program'} · Age: {client.age || '—'} · Next Visit: {client.nextVisit || '—'}</p>
+          </div>
+        </div>
+        <div className="module-stats">
+          <div className="mini-stat"><span>Treatments</span><strong>{allTreatments.length}</strong></div>
+          <div className="mini-stat"><span>Appointments</span><strong>{allAppointments.length}</strong></div>
+          <div className="mini-stat"><span>Payments</span><strong>{allPayments.length}</strong></div>
+        </div>
+      </div>
+
+      <Card title="Quick Actions" className="compact-action-card single-row-actions">
+        <div className="import-banner compact-import-banner">
+          <button className="pill" type="button" onClick={() => setTreatModal(true)}>Add Treatment Plan <ChevronRight /></button>
+          <button className="pill" type="button" onClick={() => setApptModal(true)}>Book Appointment <ChevronRight /></button>
+          <button className="pill" type="button" onClick={() => setPayModal(true)}>Add Payment <ChevronRight /></button>
+        </div>
+      </Card>
+
+      <div className="sheet-tabs">
+        {[['overview', 'Overview'], ['treatments', 'Treatments'], ['appointments', 'Appointments'], ['payments', 'Payments']].map(([id, label]) => (
+          <button key={id} className={`sheet-tab ${activeTab === id ? 'active' : ''}`} type="button" onClick={() => setActiveTab(id)}>{label}</button>
+        ))}
+      </div>
+
+      {activeTab === 'overview' && (
+        <Card title="Client Details">
+          <div className="detail-grid">
+            {[['Client', client.name], ['Age', client.age], ['Program', client.program], ['Progress', client.progress], ['Next Visit', client.nextVisit]].map(([label, value]) => (
+              <div className="mini-stat" key={label}>
+                <span>{label}</span>
+                <strong>{value || '—'}</strong>
+              </div>
+            ))}
+            <div className="mini-stat"><span>Treatment Plans</span><strong>{allTreatments.length}</strong></div>
+            <div className="mini-stat"><span>Appointments</span><strong>{allAppointments.length}</strong></div>
+            <div className="mini-stat"><span>Payments</span><strong>{allPayments.length}</strong></div>
+          </div>
+        </Card>
+      )}
+
+      {activeTab === 'treatments' && (
+        <Card title="Treatment Plans" subtitle={`Plans linked to ${clientName}`}>
+          <div className="table">
+            <div className="table-head">
+              {['Service', 'Goal', 'Duration', 'Status'].map((h) => <div key={h}>{h}</div>)}
+              <div />
+            </div>
+            {allTreatments.length ? allTreatments.map((row, i) => (
+              <div className="data-row" key={i}>
+                <div>{row[1]}</div>
+                <div>{row[2]}</div>
+                <div>{row[3]}</div>
+                <div>{row[4]}</div>
+                <div />
+              </div>
+            )) : (
+              <div className="empty-state compact-empty table-empty">
+                <strong>No treatment plans yet.</strong>
+                <p>Click Add Treatment Plan above to create one.</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {activeTab === 'appointments' && (
+        <Card title="Appointments" subtitle={`Appointments linked to ${clientName}`}>
+          <div className="table">
+            <div className="table-head">
+              {['Date', 'Time', 'Type', 'Mobile', 'Status'].map((h) => <div key={h}>{h}</div>)}
+              <div />
+            </div>
+            {allAppointments.length ? allAppointments.map((row, i) => (
+              <div className="data-row" key={i}>
+                <div>{row[2]}</div>
+                <div>{row[3]}</div>
+                <div>{row[4]}</div>
+                <div>{row[1]}</div>
+                <div>{row[5]}</div>
+                <div />
+              </div>
+            )) : (
+              <div className="empty-state compact-empty table-empty">
+                <strong>No appointments yet.</strong>
+                <p>Click Book Appointment above to schedule one.</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {activeTab === 'payments' && (
+        <Card title="Payments" subtitle={`Payments linked to ${clientName}`}>
+          <div className="table">
+            <div className="table-head">
+              {['Invoice', 'Amount', 'Status', 'Paid On'].map((h) => <div key={h}>{h}</div>)}
+              <div />
+            </div>
+            {allPayments.length ? allPayments.map((row, i) => (
+              <div className="data-row" key={i}>
+                <div>{row.invoice}</div>
+                <div>{row.amount}</div>
+                <div>{row.status}</div>
+                <div>{row.paidOn}</div>
+                <div />
+              </div>
+            )) : (
+              <div className="empty-state compact-empty table-empty">
+                <strong>No payments yet.</strong>
+                <p>Click Add Payment above to record one.</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {treatModal && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setTreatModal(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Add Treatment Plan" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div><h2>Add Treatment Plan</h2><p>For {clientName}</p></div>
+              <button className="icon-btn" type="button" onClick={() => setTreatModal(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              <label className="field-block">
+                <span>Service</span>
+                <select className="lead-input" value={treatForm.service} onChange={(e) => setTreatForm((f) => ({ ...f, service: e.target.value }))}>
+                  {services.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="field-block">
+                <span>Goal</span>
+                <input className="lead-input" value={treatForm.goal} onChange={(e) => setTreatForm((f) => ({ ...f, goal: e.target.value }))} placeholder="Treatment goal" />
+              </label>
+              <label className="field-block">
+                <span>Duration</span>
+                <input className="lead-input" value={treatForm.duration} onChange={(e) => setTreatForm((f) => ({ ...f, duration: e.target.value }))} placeholder="30 days" />
+              </label>
+              <label className="field-block">
+                <span>Status</span>
+                <select className="lead-input" value={treatForm.status} onChange={(e) => setTreatForm((f) => ({ ...f, status: e.target.value }))}>
+                  <option>Active</option><option>Pending</option><option>Paused</option><option>Completed</option>
+                </select>
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setTreatModal(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={saveTreatment}>Save <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {apptModal && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setApptModal(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Book Appointment" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div><h2>Book Appointment</h2><p>For {clientName}</p></div>
+              <button className="icon-btn" type="button" onClick={() => setApptModal(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              <label className="field-block">
+                <span>Mobile</span>
+                <input className="lead-input" type="text" value={apptForm.mobile} onChange={(e) => setApptForm((f) => ({ ...f, mobile: e.target.value }))} placeholder="Mobile number" />
+              </label>
+              <label className="field-block">
+                <span>Date</span>
+                <input className="lead-input" type="date" value={apptForm.date} onChange={(e) => setApptForm((f) => ({ ...f, date: e.target.value }))} />
+              </label>
+              <label className="field-block">
+                <span>Time</span>
+                <input className="lead-input" type="time" value={apptForm.time} onChange={(e) => setApptForm((f) => ({ ...f, time: e.target.value }))} />
+              </label>
+              <label className="field-block">
+                <span>Type</span>
+                <select className="lead-input" value={apptForm.type} onChange={(e) => setApptForm((f) => ({ ...f, type: e.target.value }))}>
+                  {services.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="field-block">
+                <span>Status</span>
+                <select className="lead-input" value={apptForm.status} onChange={(e) => setApptForm((f) => ({ ...f, status: e.target.value }))}>
+                  <option>Confirmed</option><option>Pending</option><option>Cancelled</option>
+                </select>
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setApptModal(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={saveAppointment}>Save <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {payModal && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setPayModal(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Add Payment" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div><h2>Add Payment</h2><p>For {clientName}</p></div>
+              <button className="icon-btn" type="button" onClick={() => setPayModal(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              <label className="field-block">
+                <span>Invoice</span>
+                <input className="lead-input" value={payForm.invoice} onChange={(e) => setPayForm((f) => ({ ...f, invoice: e.target.value }))} placeholder="INV-001" />
+              </label>
+              <label className="field-block">
+                <span>Amount</span>
+                <input className="lead-input" value={payForm.amount} onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value }))} placeholder="₹1500" />
+              </label>
+              <label className="field-block">
+                <span>Status</span>
+                <select className="lead-input" value={payForm.status} onChange={(e) => setPayForm((f) => ({ ...f, status: e.target.value }))}>
+                  <option>Paid</option><option>Pending</option><option>Partial</option>
+                </select>
+              </label>
+              <label className="field-block">
+                <span>Paid On</span>
+                <input className="lead-input" type="date" value={payForm.paidOn} onChange={(e) => setPayForm((f) => ({ ...f, paidOn: e.target.value }))} />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setPayModal(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={savePayment}>Save <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function ClientsPage() {
+  const [selectedClient, setSelectedClient] = useState(null);
+
+  if (selectedClient) {
+    return <ClientProfile client={selectedClient} onBack={() => setSelectedClient(null)} />;
+  }
+
   return (
     <ImportExportModule
       title="Clients"
@@ -853,6 +1152,9 @@ export function ClientsPage() {
         progress: entry.Progress ?? entry.progress ?? '',
         nextVisit: entry['Next Visit'] ?? entry.nextVisit ?? '',
       })}
+      rowActions={(row) => (
+        <button className="row-link" type="button" onClick={() => setSelectedClient(row)}>View Profile</button>
+      )}
     />
   );
 }

@@ -243,6 +243,7 @@ button { cursor: pointer; }
 .chart-svg text { fill: var(--muted); font-size: 12px; font-family: inherit; }
 .module-page { display: grid; gap: 10px; }
 .module-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.client-avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 700; flex-shrink: 0; }
 .module-hero h1 { font-size: 1.7rem; letter-spacing: -0.04em; }
 .module-hero p { margin: 8px 0 0; color: var(--muted); max-width: 60ch; }
 .module-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
