@@ -12,6 +12,7 @@ export const navItems = [
   { path: '/inventory', label: 'Inventory' },
   { path: '/communication', label: 'Communication' },
   { path: '/operations', label: 'Operations' },
+  { path: '/medicines', label: 'Medicines' },
   { path: '/finance', label: 'Finance' },
   { path: '/payments', label: 'Payments' },
   { path: '/accounts', label: 'Accounts' },
@@ -19,6 +20,7 @@ export const navItems = [
   { path: '/users', label: 'Users' },
   { path: '/client-portal', label: 'Client Portal' },
   { path: '/integrations', label: 'Integrations' },
+  { path: '/branches', label: 'Branches' },
   { path: '/settings', label: 'Settings' },
 ];
 
@@ -54,10 +56,10 @@ export const sheetTabs = ['Leads', 'Clients', 'Appointments', 'Payments', 'Repor
 export const syncPreviewRows = [];
 
 export const kpis = [
-  { label: "Today's Appointments", value: '0', delta: 'No live data', accent: 'green' },
-  { label: 'Open Leads', value: '0', delta: 'No live data', accent: 'gold' },
-  { label: 'Pending Payments', value: '₹ 0', delta: 'No live data', accent: 'teal' },
-  { label: 'Follow-ups Due', value: '0', delta: 'No live data', accent: 'gold' },
+  { label: "Today's Appointments", value: '0', delta: 'Awaiting records', accent: 'green' },
+  { label: 'Open Leads', value: '0', delta: 'Awaiting records', accent: 'gold' },
+  { label: 'Pending Payments', value: '₹ 0', delta: 'Awaiting records', accent: 'teal' },
+  { label: 'Follow-ups Due', value: '0', delta: 'Awaiting records', accent: 'gold' },
 ];
 
 export const funnelStages = [];

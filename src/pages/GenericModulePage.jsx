@@ -1,5 +1,7 @@
 import { Card } from '../components/ui.jsx';
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useBranch } from '../context/BranchContext.jsx';
 
 function downloadText(filename, content, mimeType = 'text/plain;charset=utf-8') {
   const blob = new Blob([content], { type: mimeType });
@@ -30,15 +32,24 @@ function parseCsv(text) {
 function loadSavedRows(key, fallbackRows) {
   try {
     const saved = window.localStorage.getItem(key);
-    return saved ? JSON.parse(saved) : fallbackRows;
+    const parsed = saved ? JSON.parse(saved) : fallbackRows;
+    return Array.isArray(parsed) ? parsed : fallbackRows;
   } catch {
     return fallbackRows;
   }
 }
 
+function asImportRows(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return [value];
+  return [];
+}
+
 export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, rowActions = null, filterPresets = [], viewPresets = [] }) {
+  const { branchKey, currentBranch } = useBranch();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRow, setSelectedRow] = useState(null);
-  const storageKey = `ayurflow:${title}:rows:v2`;
+  const storageKey = branchKey(`${title}:rows:v3`);
   const [tableRows, setTableRows] = useState(() => loadSavedRows(storageKey, rows));
   const [actionMessage, setActionMessage] = useState('Ready.');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -74,18 +85,23 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
 
   const rowToMap = (row) => Object.fromEntries(columns.map((column, index) => [column, row[index] ?? '']));
 
+  const openAddModal = () => {
+    setDraftRow(columns.map(() => ''));
+    setAddOpen(true);
+    setActionMessage(`Create new ${title.toLowerCase()} record.`);
+  };
+
+  useEffect(() => {
+    if (searchParams.get('action') !== 'add') return;
+    openAddModal();
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('action');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const runAction = (action) => {
     if (action === 'Add') {
-      setDraftRow(columns.map((column, index) => {
-        if (title === 'Appointments') return '';
-        if (index === 0) return `${title} ${tableRows.length + 1}`;
-        if (column === 'Status') return 'Pending';
-        if (column === 'Time') return '10:00 AM';
-        if (column === 'Type') return 'Consultation';
-        return '';
-      }));
-      setAddOpen(true);
-      setActionMessage(`Create new ${title.toLowerCase()} record.`);
+      openAddModal();
       return;
     }
     if (action === 'Import') {
@@ -113,6 +129,10 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   };
 
   const saveDraft = () => {
+    if (!draftRow.some((cell) => String(cell ?? '').trim())) {
+      setActionMessage('Please fill at least one field before saving.');
+      return;
+    }
     setTableRows((current) => [draftRow, ...current]);
     setActionMessage(`${draftRow[0] || title} added.`);
     setSelectedRow(draftRow[0] || title);
@@ -130,9 +150,9 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
       setActionMessage('Import failed.');
       return;
     }
-    const normalized = parsed
-      .map((row) => (Array.isArray(row) ? Object.fromEntries(columns.map((column, index) => [column, row[index] ?? ''])) : rowToMap(row)))
-      .map((row) => columns.map((column) => row[column] ?? ''))
+    const normalized = asImportRows(parsed)
+      .map((row) => (Array.isArray(row) ? Object.fromEntries(columns.map((column, index) => [column, row[index] ?? ''])) : row))
+      .map((row) => columns.map((column) => row[column] ?? row[column.toLowerCase()] ?? ''))
       .filter((row) => row.some(Boolean));
     setPreviewRows(normalized);
     setImportOpen(true);
@@ -153,6 +173,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
         <div>
           <h1>{title}</h1>
           <p>{description}</p>
+          <p className="subtle">Current branch: {currentBranch}</p>
         </div>
         <div className="module-stats">
           {stats.map((stat) => (
@@ -244,7 +265,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
           {filteredRows.length ? (
             filteredRows.map((row, index) => (
               <div className="data-row" key={index}>
-                {row.map((cell, colIndex) => <div key={`${colIndex}-${cell}`}>{cell}</div>)}
+                {row.map((cell, cellIndex) => <div key={`${columns[cellIndex]}-${index}`}>{cell}</div>)}
                 <div>
                   {rowActions ? rowActions(row, setSelectedRow, setActionMessage) : (
                     <button className="row-link" type="button" onClick={() => setSelectedRow(row[0])}>View</button>
@@ -282,7 +303,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
                       onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
                     >
                       <option value="">{`Select ${column.toLowerCase()}`}</option>
-                      {fieldOptions[column].map((option) => <option value={option} key={option}>{option}</option>)}
+                      {fieldOptions[column].map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
                     </select>
                   ) : column === 'Status' ? (
                     <select
@@ -334,7 +355,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
               </div>
               {previewRows.map((row, index) => (
                 <div className="data-row" key={index}>
-                  {row.map((cell) => <div key={`${cell}-${index}`}>{cell}</div>)}
+                  {row.map((cell, cellIndex) => <div key={`${columns[cellIndex]}-${index}`}>{cell}</div>)}
                   <div>
                     {rowActions ? rowActions(row, setSelectedRow, setActionMessage) : null}
                   </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from '../components/icons.jsx';
 import { Card, StatusPill, Tag } from '../components/ui.jsx';
+import { useBranch } from '../context/BranchContext.jsx';
 import { GenericModulePage } from './GenericModulePage.jsx';
 import {
   accounts,
@@ -60,6 +61,33 @@ function loadSavedState(key, fallback) {
   }
 }
 
+function loadSavedArray(key, fallback = []) {
+  const saved = loadSavedState(key, fallback);
+  return Array.isArray(saved) ? saved : fallback;
+}
+
+function loadSavedObject(key, fallback = {}) {
+  const saved = loadSavedState(key, fallback);
+  return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : fallback;
+}
+
+function asImportRows(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return [value];
+  return [];
+}
+
+function getSavedOperationRows(tabId) {
+  const rowsByTab = loadSavedObject('ayurflow:Operations:tabs:v3', {});
+  return Array.isArray(rowsByTab[tabId]) ? rowsByTab[tabId] : [];
+}
+
+function getSavedPackageNames() {
+  const savedPackageNames = getSavedOperationRows('packages').map((row) => row[0]).filter(Boolean);
+  const seedPackageNames = packages.map((item) => item.name).filter(Boolean);
+  return Array.from(new Set([...savedPackageNames, ...seedPackageNames]));
+}
+
 function ImportExportModule({
   title,
   description,
@@ -73,14 +101,18 @@ function ImportExportModule({
   extraTopCard = null,
   customRows = null,
   rowActions = null,
+  fieldOptions = {},
 }) {
   const navigate = useNavigate();
-  const storageKey = `ayurflow:${filenameBase}:rows:v2`;
-  const [rows, setRows] = useState(() => loadSavedState(storageKey, seedRows));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const storageKey = `ayurflow:${filenameBase}:rows:v3`;
+  const [rows, setRows] = useState(() => loadSavedArray(storageKey, seedRows));
   const [preview, setPreview] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
   const [message, setMessage] = useState('Ready to import or export data.');
   const [modalOpen, setModalOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [draftRecord, setDraftRecord] = useState(() => Object.fromEntries(headers.map((header) => [header, ''])));
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
@@ -95,6 +127,20 @@ function ImportExportModule({
     }
   }, [rows, storageKey]);
 
+  const openAddRecord = () => {
+    setDraftRecord(Object.fromEntries(headers.map((header) => [header, ''])));
+    setAddOpen(true);
+    setMessage(`Add ${title.toLowerCase()} record opened.`);
+  };
+
+  useEffect(() => {
+    if (searchParams.get('action') !== 'add') return;
+    openAddRecord();
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('action');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const rowToCsvValues = (row) => {
     const values = rowToValues(row);
     return headers.map((header) => values[header] ?? '');
@@ -105,10 +151,9 @@ function ImportExportModule({
     setMessage('CSV export started.');
   };
 
-  const downloadSample = () => {
-    const sampleRow = rows[0] ? rowToCsvValues(rows[0]) : headers.map(() => '');
-    downloadText(`${filenameBase}-sample.csv`, rowsToCsv(headers, [sampleRow]), 'text/csv;charset=utf-8');
-    setMessage('Sample CSV downloaded.');
+  const downloadTemplate = () => {
+    downloadText(`${filenameBase}-template.csv`, rowsToCsv(headers, [headers.map(() => '')]), 'text/csv;charset=utf-8');
+    setMessage('CSV template downloaded.');
   };
 
   const normalize = (entry) => parseRow(entry);
@@ -129,7 +174,7 @@ function ImportExportModule({
       setMessage('Import failed. Please upload a valid CSV or JSON file.');
       return;
     }
-    const normalized = parsed
+    const normalized = asImportRows(parsed)
       .map((row) => (Array.isArray(row) ? normalize(Object.fromEntries(headers.map((header, index) => [header, row[index] ?? '']))) : normalize(row)))
       .filter((row) => Object.values(row).some(Boolean));
     setPreview(normalized);
@@ -150,6 +195,17 @@ function ImportExportModule({
   };
 
   const visibleRows = customRows ?? rows.map((row) => row);
+  const saveDraftRecord = () => {
+    const normalized = normalize(draftRecord);
+    if (!Object.values(normalized).some(Boolean)) {
+      setMessage('Please fill at least one field before saving.');
+      return;
+    }
+    setRows((current) => [normalized, ...current]);
+    setAddOpen(false);
+    setMessage(`${rowToCsvValues(normalized)[0] || title} added.`);
+  };
+
   const filteredRows = visibleRows.filter((row) => {
     if (!filterText) return true;
     const mapped = rowToValues(row);
@@ -195,7 +251,8 @@ function ImportExportModule({
       <Card title="Import / Export" className="compact-action-card single-row-actions">
         <div className="import-banner compact-import-banner">
           <input ref={bannerFileInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
-          <button className="pill" type="button" onClick={downloadSample}>Sample <ChevronRight /></button>
+          <button className="pill" type="button" onClick={openAddRecord}>Add <ChevronRight /></button>
+          <button className="pill" type="button" onClick={downloadTemplate}>Template <ChevronRight /></button>
           <button className="pill" type="button" onClick={() => bannerFileInputRef.current?.click()}>Import <ChevronRight /></button>
           <button className="pill" type="button" onClick={exportCsv}>Export <ChevronRight /></button>
         </div>
@@ -247,20 +304,64 @@ function ImportExportModule({
               {headers.map((header) => <div key={header}>{header}</div>)}
               <div />
             </div>
-            {filteredRows.length ? filteredRows.map((row, index) => (
-              <div className="data-row" key={index}>
-                {headers.map((header) => <div key={header}>{rowToValues(row)[header]}</div>)}
-                <div>{rowActions ? rowActions(row) : defaultRowAction(row)}</div>
-              </div>
-            )) : (
+            {filteredRows.length ? (
+              filteredRows.map((row, index) => (
+                <div className="data-row" key={index}>
+                  {headers.map((header) => <div key={header}>{rowToValues(row)[header]}</div>)}
+                  <div>{rowActions ? rowActions(row) : defaultRowAction(row)}</div>
+                </div>
+              ))
+            ) : (
               <div className="empty-state compact-empty table-empty">
                 <strong>No records yet.</strong>
-                <p>Import a file or add records to populate this table.</p>
+                <p>Add a record or import a file to start using this module.</p>
               </div>
             )}
           </div>
         </Card>
       </div>
+
+      {addOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setAddOpen(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Add ${title}`} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>Add {title}</h2>
+                <p>Fill the fields and save this record.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setAddOpen(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              {headers.map((header) => (
+                <label className="field-block" key={header}>
+                  <span>{header}</span>
+                  {Object.prototype.hasOwnProperty.call(fieldOptions, header) ? (
+                    <select
+                      className="lead-input"
+                      value={draftRecord[header] ?? ''}
+                      onChange={(event) => setDraftRecord((current) => ({ ...current, [header]: event.target.value }))}
+                    >
+                      <option value="">{fieldOptions[header].length ? `Select ${header.toLowerCase()}` : `Add ${header.toLowerCase()} first`}</option>
+                      {fieldOptions[header].map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      className="lead-input"
+                      value={draftRecord[header] ?? ''}
+                      onChange={(event) => setDraftRecord((current) => ({ ...current, [header]: event.target.value }))}
+                      placeholder={`Enter ${header.toLowerCase()}`}
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setAddOpen(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={saveDraftRecord}>Save <ChevronRight /></button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalOpen(false)}>
@@ -296,7 +397,34 @@ function ImportExportModule({
             </div>
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setModalOpen(false)}>Cancel <ChevronRight /></button>
-              <button className="pill" type="button" onClick={commitImport} disabled={!preview.length}>Import Now <ChevronRight /></button>
+              <button className="pill" type="button" onClick={commitImport}>Import Now <ChevronRight /></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedRecord && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedRecord(null)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`${title} options`} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>{title === 'Clients' ? 'Client Options' : `${title} Options`}</h2>
+                <p>{rowToCsvValues(selectedRecord)[0]} selected.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setSelectedRecord(null)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              {headers.map((header) => (
+                <div className="mini-stat" key={header}>
+                  <span>{header}</span>
+                  <strong>{rowToValues(selectedRecord)[header]}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => openClientAction('/appointments', 'Book Appointment')}>Book Appointment <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => openClientAction('/payments', 'Add Payment')}>Add Payment <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => openClientAction('/treatments', 'Treatment Plan')}>Treatment Plan <ChevronRight /></button>
             </div>
           </div>
         </div>
@@ -307,8 +435,10 @@ function ImportExportModule({
 
 export function CRMPage() {
   const navigate = useNavigate();
+  const { branchKey, currentBranch } = useBranch();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('leads');
-  const [manualLeads, setManualLeads] = useState([]);
+  const [manualLeads, setManualLeads] = useState(() => loadSavedArray(branchKey('crm:leads:v4')));
   const [editingIndex, setEditingIndex] = useState(null);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [showLeads, setShowLeads] = useState(true);
@@ -360,8 +490,27 @@ export function CRMPage() {
     setLeadModalOpen(true);
   };
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(branchKey('crm:leads:v4'), JSON.stringify(manualLeads));
+    } catch {
+      setMessage('Local browser storage is full or blocked.');
+    }
+  }, [branchKey, manualLeads]);
+
+  useEffect(() => {
+    if (searchParams.get('action') !== 'add') return;
+    openCreateLead();
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('action');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const addManualLead = () => {
-    if (!leadForm.name.trim()) return;
+    if (!leadForm.name.trim()) {
+      setMessage('Please enter a lead name before saving.');
+      return;
+    }
     const nextLead = {
       name: leadForm.name.trim(),
       source: leadForm.source.trim() || 'Website',
@@ -439,7 +588,7 @@ export function CRMPage() {
       setMessage('Import failed. Please upload a valid leads CSV or JSON file.');
       return;
     }
-    const normalized = parsed.map(normalizeLead).filter((lead) => lead.name);
+    const normalized = asImportRows(parsed).map(normalizeLead).filter((lead) => lead.name);
     setPreview(normalized);
     setMessage(`${normalized.length} leads ready to import.`);
     setModalOpen(true);
@@ -465,6 +614,7 @@ export function CRMPage() {
         <div>
           <h1>CRM</h1>
           <p>Track leads, follow-ups, and conversion activity without showing upload tools until you need them.</p>
+          <p className="subtle">Current branch: {currentBranch}</p>
         </div>
         <div className="module-stats">
           <div className="mini-stat"><span>Total leads</span><strong>{leadRows.length}</strong></div>
@@ -488,7 +638,7 @@ export function CRMPage() {
             </div>
           </Card>
 
-        <Card title="Current Leads" subtitle="Manual leads are editable. Seeded leads stay read-only.">
+        <Card title="Current Leads" subtitle="Lead records you create or import stay editable in this CRM.">
             {showLeads ? (
               <div className="table">
                 <div className="table-head">
@@ -511,6 +661,7 @@ export function CRMPage() {
                           </div>
                         ) : (
                           <button type="button" className="row-link" onClick={() => setSelectedRecord(lead)}>View</button>
+                          <Tag tone={leadPriorityTone(lead.status)}>System</Tag>
                         )}
                       </div>
                     </div>
@@ -562,7 +713,13 @@ export function CRMPage() {
                 <span>{uploadName}</span>
               </label>
               <div className="sheet-actions">
-                <button className="pill" type="button" onClick={() => setModalOpen(true)} disabled={!preview.length}>Open Preview <ChevronRight /></button>
+                <button className="pill" type="button" onClick={() => {
+                  if (!preview.length) {
+                    setMessage('Upload a leads file first to open preview.');
+                    return;
+                  }
+                  setModalOpen(true);
+                }}>Open Preview <ChevronRight /></button>
                 <button className="pill" type="button" onClick={() => { setPreview([]); setMessage('Lead import preview cleared.'); }}>Clear Preview <ChevronRight /></button>
               </div>
             </div>
@@ -598,7 +755,7 @@ export function CRMPage() {
             </div>
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setModalOpen(false)}>Cancel <ChevronRight /></button>
-              <button className="pill" type="button" onClick={commitImport} disabled={!preview.length}>Import Now <ChevronRight /></button>
+              <button className="pill" type="button" onClick={commitImport}>Import Now <ChevronRight /></button>
             </div>
           </div>
         </div>
@@ -648,36 +805,9 @@ export function CRMPage() {
             </div>
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setLeadModalOpen(false)}>Cancel <ChevronRight /></button>
-              <button className="pill" type="button" onClick={addManualLead} disabled={!leadForm.name.trim()}>
+              <button className="pill" type="button" onClick={addManualLead}>
                 {editingIndex === null ? 'Add Lead' : 'Save Lead'} <ChevronRight />
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedRecord && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedRecord(null)}>
-          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`${title} options`} onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head">
-              <div>
-                <h2>{title === 'Clients' ? 'Client Options' : `${title} Options`}</h2>
-                <p>{rowToCsvValues(selectedRecord)[0]} selected.</p>
-              </div>
-              <button className="icon-btn" type="button" onClick={() => setSelectedRecord(null)} aria-label="Close modal">x</button>
-            </div>
-            <div className="modal-body detail-grid">
-              {headers.map((header) => (
-                <div className="mini-stat" key={header}>
-                  <span>{header}</span>
-                  <strong>{rowToValues(selectedRecord)[header]}</strong>
-                </div>
-              ))}
-            </div>
-            <div className="modal-actions">
-              <button className="pill" type="button" onClick={() => openClientAction('/appointments', 'Book Appointment')}>Book Appointment <ChevronRight /></button>
-              <button className="pill" type="button" onClick={() => openClientAction('/payments', 'Add Payment')}>Add Payment <ChevronRight /></button>
-              <button className="pill" type="button" onClick={() => openClientAction('/treatments', 'Treatment Plan')}>Treatment Plan <ChevronRight /></button>
             </div>
           </div>
         </div>
@@ -699,6 +829,7 @@ export function ClientsPage() {
       headers={['Client', 'Age', 'Program', 'Progress', 'Next Visit']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
+      fieldOptions={{ Program: getSavedPackageNames() }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
         { label: 'Age wise', column: 'Age' },
@@ -756,7 +887,8 @@ export function PaymentsPage() {
 }
 
 export function UsersPage() {
-  const [people, setPeople] = useState(() => loadSavedState('ayurflow:users:rows:v2', users));
+  const { branchKey, currentBranch } = useBranch();
+  const [people, setPeople] = useState(() => loadSavedArray(branchKey('users:rows:v3'), users));
   const [uploadName, setUploadName] = useState('No file selected');
   const [importPreview, setImportPreview] = useState([]);
   const [statusMessage, setStatusMessage] = useState('Ready to import or export users.');
@@ -765,11 +897,11 @@ export function UsersPage() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem('ayurflow:users:rows:v2', JSON.stringify(people));
+      window.localStorage.setItem(branchKey('users:rows:v3'), JSON.stringify(people));
     } catch {
       setStatusMessage('Local browser storage is full or blocked.');
     }
-  }, [people]);
+  }, [branchKey, people]);
 
   const exportCsv = () => {
     downloadText('ayurflow-users.csv', rowsToCsv(['Name', 'Role', 'Email', 'Status'], people.map((user) => [user.name, user.role, user.email, user.status])), 'text/csv;charset=utf-8');
@@ -793,10 +925,11 @@ export function UsersPage() {
         parsed = parseCsv(text);
       }
     } catch {
+      setImportPreview([]);
       setStatusMessage('Import failed. Please upload a valid CSV or JSON file.');
       return;
     }
-    const normalized = parsed.map((entry) => ({
+    const normalized = asImportRows(parsed).map((entry) => ({
       name: entry.name ?? entry.Name ?? '',
       role: entry.role ?? entry.Role ?? '',
       email: entry.email ?? entry.Email ?? '',
@@ -832,6 +965,7 @@ export function UsersPage() {
         <div>
           <h1>Users</h1>
           <p>Bulk upload staff members, export the team list, and import user data from CSV or JSON.</p>
+          <p className="subtle">Current branch: {currentBranch}</p>
         </div>
         <div className="module-stats">
           <div className="mini-stat">
@@ -881,7 +1015,13 @@ export function UsersPage() {
             </label>
 
             <div className="sheet-actions">
-              <button className="pill" type="button" onClick={() => setModalOpen(true)} disabled={!importPreview.length}>Open Preview <ChevronRight /></button>
+              <button className="pill" type="button" onClick={() => {
+                if (!importPreview.length) {
+                  setStatusMessage('Upload a users file first to open preview.');
+                  return;
+                }
+                setModalOpen(true);
+              }}>Open Preview <ChevronRight /></button>
               <button className="pill" type="button" onClick={() => { setImportPreview([]); setStatusMessage('Preview cleared.'); }}>Clear Preview <ChevronRight /></button>
             </div>
 
@@ -972,7 +1112,7 @@ export function UsersPage() {
             </div>
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setModalOpen(false)}>Cancel <ChevronRight /></button>
-              <button className="pill" type="button" onClick={importUsers} disabled={!importPreview.length}>Import Now <ChevronRight /></button>
+              <button className="pill" type="button" onClick={importUsers}>Import Now <ChevronRight /></button>
             </div>
           </div>
         </div>
@@ -984,6 +1124,7 @@ export function UsersPage() {
 function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
+  const queryAction = searchParams.get('action');
   const firstTab = tabs.some((tab) => tab.id === queryTab) ? queryTab : defaultTab;
   const [activeTab, setActiveTab] = useState(firstTab);
   const [message, setMessage] = useState('Ready.');
@@ -998,12 +1139,43 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const [uploadName, setUploadName] = useState('No file selected');
   const [draftRow, setDraftRow] = useState(tabs[0]?.columns?.map(() => '') ?? []);
   const [editRow, setEditRow] = useState([]);
-  const storageKey = `ayurflow:${title}:tabs:v2`;
-  const [rowsByTab, setRowsByTab] = useState(() => loadSavedState(storageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows]))));
+  const [fixedMedicineByService, setFixedMedicineByService] = useState(() => loadSavedObject(`ayurflow:${title}:treatment-medicines:v2`, {}));
+  const [rxDraft, setRxDraft] = useState([{ medicine: '', dose: '', timing: 'Morning', schedule: 'Daily' }]);
+  const storageKey = `ayurflow:${title}:tabs:v3`;
+  const [rowsByTab, setRowsByTab] = useState(() => loadSavedObject(storageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows]))));
   const importInputRef = useRef(null);
 
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
-  const activeRows = rowsByTab[active.id] ?? active.rows;
+  const rawActiveRows = Array.isArray(rowsByTab[active.id]) ? rowsByTab[active.id] : active.rows;
+  const activeRows = rawActiveRows.map((row) => active.columns.map((column, index) => (
+    Array.isArray(row) ? (row[index] ?? '') : (row?.[column] ?? row?.[column.toLowerCase()] ?? '')
+  )));
+  const medicineOptions = (Array.isArray(rowsByTab.medicines) ? rowsByTab.medicines : [])
+    .map((row) => (Array.isArray(row) ? row[0] : row?.Medicine ?? row?.medicine ?? ''))
+    .filter(Boolean);
+  const medicineCatalog = (Array.isArray(rowsByTab.medicines) ? rowsByTab.medicines : []).map((row) => (
+    Array.isArray(row)
+      ? { Medicine: row[0] ?? '', Category: row[1] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '', Status: row[4] ?? '' }
+      : row
+  ));
+  const serviceOptions = (Array.isArray(rowsByTab.services) ? rowsByTab.services : [])
+    .map((row) => row[0])
+    .filter(Boolean);
+  const treatmentServiceIndex = active.columns.indexOf('Service');
+  const treatmentMedicineIndex = active.columns.indexOf('Medicine');
+
+  const optionsForColumn = (column) => {
+    if (active.id === 'treatments' && column === 'Medicine') return medicineOptions;
+    if (active.id === 'treatments' && column === 'Service') return serviceOptions;
+    if (active.fieldOptions?.[column]) return active.fieldOptions[column];
+    return [];
+  };
+
+  const shouldUseSelect = (column) => active.id === 'treatments' && ['Service', 'Medicine'].includes(column);
+  const isMedicineColumn = active.id === 'treatments' && active.columns[treatmentMedicineIndex] === 'Medicine';
+  const selectedMedicines = (value) => String(value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+  const scheduleOptions = ['Morning', 'Afternoon', 'Evening', 'Night'];
+  const frequencyOptions = ['Daily', 'Alternate Day', 'Weekly', 'SOS'];
 
   useEffect(() => {
     try {
@@ -1013,6 +1185,14 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     }
   }, [rowsByTab, storageKey]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(`ayurflow:${title}:treatment-medicines:v2`, JSON.stringify(fixedMedicineByService));
+    } catch {
+      setMessage('Local browser storage is full or blocked.');
+    }
+  }, [fixedMedicineByService, title]);
+
   const filteredRows = activeRows.filter((row) => {
     if (!filterText) return true;
     if (!activeFilter) return row.join(' ').toLowerCase().includes(filterText.toLowerCase());
@@ -1020,6 +1200,114 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     if (index === -1) return row.join(' ').toLowerCase().includes(filterText.toLowerCase());
     return String(row[index] ?? '').toLowerCase().includes(filterText.toLowerCase());
   });
+
+  const createDraftRow = () => active.columns.map(() => '');
+
+  const getSuggestedMedicine = (service) => {
+    const fromService = fixedMedicineByService[service];
+    if (fromService && Array.isArray(fromService.medicines) && fromService.medicines.length) return fromService.medicines.join(', ');
+    return '';
+  };
+
+  const getSuggestedTreatmentDefaults = (service) => {
+    const fromService = fixedMedicineByService[service];
+    return {
+      medicine: Array.isArray(fromService?.medicines) ? fromService.medicines.join(', ') : '',
+      dose: fromService?.dose ?? '',
+      timing: fromService?.timing ?? '',
+      schedule: fromService?.schedule ?? 'Daily',
+    };
+  };
+
+  const getMedicineDefaults = (medicineName) => {
+    const entry = medicineCatalog.find((item) => String(item?.Medicine ?? '').toLowerCase() === String(medicineName ?? '').toLowerCase());
+    return {
+      dose: entry?.['Default Dose'] ?? '',
+      timing: entry?.Timing ?? '',
+    };
+  };
+
+  const rxSummary = (items) => items
+    .filter((item) => item.medicine.trim())
+    .map((item) => `${item.medicine.trim()} | ${item.dose.trim() || '-'} | ${item.timing.trim() || '-'} | ${item.schedule.trim() || '-'}`)
+    .join('; ');
+
+  const parseRxSummary = (value) => String(value ?? '')
+    .split(';')
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => {
+      const [medicine = '', dose = '', timing = '', schedule = ''] = chunk.split('|').map((part) => part.trim());
+      return { medicine, dose, timing, schedule };
+    });
+
+  const updateRxDraft = (index, field, value) => {
+    setRxDraft((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
+  };
+
+  const updateRxTiming = (index, value) => {
+    updateRxDraft(index, 'timing', value);
+  };
+
+  const updateRxMedicine = (index, value) => {
+    setRxDraft((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const defaults = getMedicineDefaults(value);
+      return {
+        ...item,
+        medicine: value,
+        dose: item.dose || defaults.dose,
+        timing: item.timing || defaults.timing,
+      };
+    }));
+  };
+
+  const addRxRow = () => {
+    setRxDraft((current) => [...current, { medicine: '', dose: '', timing: 'Morning', schedule: 'Daily' }]);
+  };
+
+  const removeRxRow = (index) => {
+    setRxDraft((current) => (current.length > 1 ? current.filter((_, itemIndex) => itemIndex !== index) : current));
+  };
+
+  const applyPreset = (service) => {
+    const preset = getSuggestedTreatmentDefaults(service);
+    setRxDraft([{ medicine: preset.medicine, dose: preset.dose, timing: preset.timing, schedule: preset.schedule }]);
+    if (treatmentServiceIndex !== -1) {
+      setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === treatmentServiceIndex ? service : cell)));
+    }
+  };
+
+  const handleServiceChange = (index, value, setter) => {
+    setter((current) => {
+      const next = current.map((cell, cellIndex) => (cellIndex === index ? value : cell));
+      if (active.id === 'treatments' && active.columns[index] === 'Service' && treatmentMedicineIndex !== -1) {
+        const suggestion = getSuggestedTreatmentDefaults(value);
+        if (suggestion.medicine) next[treatmentMedicineIndex] = suggestion.medicine;
+        if (active.columns.includes('Dose')) next[active.columns.indexOf('Dose')] = suggestion.dose;
+        if (active.columns.includes('Timing')) next[active.columns.indexOf('Timing')] = suggestion.timing;
+        setRxDraft([{ medicine: suggestion.medicine, dose: suggestion.dose, timing: suggestion.timing, schedule: suggestion.schedule }]);
+      }
+      return next;
+    });
+  };
+
+  const openAddForActive = () => {
+    const nextDraft = createDraftRow();
+    if (active.id === 'treatments' && treatmentServiceIndex !== -1 && treatmentMedicineIndex !== -1) {
+      const service = String(nextDraft[treatmentServiceIndex] ?? '');
+      const defaults = getSuggestedTreatmentDefaults(service);
+      nextDraft[treatmentMedicineIndex] = defaults.medicine;
+      const doseIndex = active.columns.indexOf('Dose');
+      const timingIndex = active.columns.indexOf('Timing');
+      if (doseIndex !== -1) nextDraft[doseIndex] = defaults.dose;
+      if (timingIndex !== -1) nextDraft[timingIndex] = defaults.timing;
+      setRxDraft([{ medicine: defaults.medicine, dose: defaults.dose, timing: defaults.timing, schedule: defaults.schedule }]);
+    }
+    setDraftRow(nextDraft);
+    setAddOpen(true);
+    setMessage(`New ${active.singular ?? active.label} form opened.`);
+  };
 
   const selectTab = (tabId) => {
     setActiveTab(tabId);
@@ -1030,15 +1318,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
 
   const runAction = (action) => {
     if (action === 'Add') {
-      setDraftRow(active.columns.map((column, index) => {
-        if (index === 0) return `${active.label} ${activeRows.length + 1}`;
-        if (column === 'Status') return 'Pending';
-        if (column === 'Duration') return '30 min';
-        if (column === 'Type') return 'Consultation';
-        return '';
-      }));
-      setAddOpen(true);
-      setMessage(`New ${active.singular ?? active.label} form opened.`);
+      openAddForActive();
       return;
     }
     if (action === 'Import') {
@@ -1062,22 +1342,91 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     }
   };
 
+  useEffect(() => {
+    const nextTab = tabs.some((tab) => tab.id === queryTab) ? queryTab : defaultTab;
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+      setFilterText('');
+      setActiveFilter('');
+      setMessage(`${tabs.find((tab) => tab.id === nextTab)?.label ?? title} opened.`);
+      return;
+    }
+    if (queryAction !== 'add') return;
+    openAddForActive();
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('action');
+    if (!nextParams.get('tab')) nextParams.set('tab', active.id);
+    setSearchParams(nextParams, { replace: true });
+  }, [queryTab, queryAction, activeTab, active.id, activeRows.length, searchParams, setSearchParams]);
+
   const saveDraft = () => {
-    setRowsByTab((current) => ({
-      ...current,
-      [active.id]: [draftRow, ...(current[active.id] ?? activeRows)],
-    }));
+    if (!draftRow.some((cell) => String(cell ?? '').trim())) {
+      setMessage('Please fill at least one field before saving.');
+      return;
+    }
+    if (active.id === 'treatments' && treatmentServiceIndex !== -1 && treatmentMedicineIndex !== -1) {
+      const service = String(draftRow[treatmentServiceIndex] ?? '').trim();
+      const medicines = rxDraft.filter((item) => item.medicine.trim());
+      const first = medicines[0];
+      const nextRow = service && medicines.length
+        ? [draftRow[0], draftRow[1], rxSummary(medicines), first.dose, first.timing, draftRow[5], draftRow[6], draftRow[7]]
+        : draftRow;
+      setRowsByTab((current) => ({
+        ...current,
+        [active.id]: [nextRow, ...(current[active.id] ?? activeRows)],
+      }));
+      if (service && medicines.length) {
+        setFixedMedicineByService((current) => ({ ...current, [service]: { medicines: medicines.map((item) => item.medicine), dose: first.dose, timing: first.timing, schedule: first.schedule } }));
+      }
+      setRxDraft([{ medicine: '', dose: '', timing: 'Morning', schedule: 'Daily' }]);
+    } else {
+      setRowsByTab((current) => ({
+        ...current,
+        [active.id]: [draftRow, ...(current[active.id] ?? activeRows)],
+      }));
+    }
     setMessage(`${draftRow[0] || active.label} added.`);
     setAddOpen(false);
   };
 
   const saveEdit = () => {
     if (editIndex === null) return;
-    setRowsByTab((current) => {
-      const next = [...(current[active.id] ?? activeRows)];
-      next[editIndex] = editRow;
-      return { ...current, [active.id]: next };
-    });
+    if (active.id === 'treatments' && treatmentServiceIndex !== -1 && treatmentMedicineIndex !== -1) {
+      const service = String(editRow[treatmentServiceIndex] ?? '').trim();
+      const medicines = rxDraft.filter((item) => item.medicine.trim());
+      if (service && medicines.length) {
+        const first = medicines[0];
+        const nextRow = [
+          editRow[0],
+          editRow[1],
+          rxSummary(medicines),
+          first.dose,
+          first.timing,
+          editRow[5],
+          editRow[6],
+          editRow[7],
+        ];
+        setRowsByTab((current) => {
+          const next = [...(current[active.id] ?? activeRows)];
+          next[editIndex] = nextRow;
+          return { ...current, [active.id]: next };
+        });
+        setFixedMedicineByService((current) => ({ ...current, [service]: { medicines: medicines.map((item) => item.medicine), dose: first.dose, timing: first.timing, schedule: first.schedule } }));
+      } else {
+        setRowsByTab((current) => {
+          const next = [...(current[active.id] ?? activeRows)];
+          next[editIndex] = editRow;
+          return { ...current, [active.id]: next };
+        });
+      }
+      setRxDraft([{ medicine: '', dose: '', timing: 'Morning', schedule: 'Daily' }]);
+    } else {
+      setRowsByTab((current) => {
+        const next = [...(current[active.id] ?? activeRows)];
+        next[editIndex] = editRow;
+        return { ...current, [active.id]: next };
+      });
+    }
     setMessage(`${editRow[0] || active.label} updated.`);
     setEditOpen(false);
     setEditIndex(null);
@@ -1090,7 +1439,26 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       return;
     }
     setEditIndex(sourceIndex);
-    setEditRow([...row]);
+    const nextRow = [...row];
+    if (active.id === 'treatments' && treatmentServiceIndex !== -1 && treatmentMedicineIndex !== -1) {
+      const service = String(nextRow[treatmentServiceIndex] ?? '').trim();
+      const parsed = parseRxSummary(nextRow[treatmentMedicineIndex]);
+      if (!nextRow[treatmentMedicineIndex]) {
+        const defaults = getSuggestedTreatmentDefaults(service);
+        nextRow[treatmentMedicineIndex] = defaults.medicine;
+        const doseIndex = active.columns.indexOf('Dose');
+        const timingIndex = active.columns.indexOf('Timing');
+        if (doseIndex !== -1 && !nextRow[doseIndex]) nextRow[doseIndex] = defaults.dose;
+        if (timingIndex !== -1 && !nextRow[timingIndex]) nextRow[timingIndex] = defaults.timing;
+      }
+      setRxDraft(parsed.length ? parsed : [{
+        medicine: nextRow[treatmentMedicineIndex] || '',
+        dose: nextRow[active.columns.indexOf('Dose')] || '',
+        timing: nextRow[active.columns.indexOf('Timing')] || '',
+        schedule: getSuggestedTreatmentDefaults(service).schedule,
+      }]);
+    }
+    setEditRow(nextRow);
     setEditOpen(true);
     setMessage(`${row[0]} edit opened.`);
   };
@@ -1106,7 +1474,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       setMessage('Import failed.');
       return;
     }
-    const normalized = parsed
+    const normalized = asImportRows(parsed)
       .map((row) => (Array.isArray(row) ? row : active.columns.map((column) => row[column] ?? row[column.toLowerCase()] ?? '')))
       .map((row) => active.columns.map((_, index) => row[index] ?? ''))
       .filter((row) => row.some(Boolean));
@@ -1178,6 +1546,23 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
         )}
       </Card>
 
+      {active.id === 'treatments' && (
+        <Card title="Saved Treatment Presets" subtitle="Tap a service to reuse its saved medicine, dose, and timing defaults.">
+          <div className="filter-pills">
+            {Object.keys(fixedMedicineByService).length ? Object.keys(fixedMedicineByService).map((service) => (
+              <button key={service} type="button" className="sheet-tab filter-pill" onClick={() => applyPreset(service)}>
+                {service}
+              </button>
+            )) : (
+              <div className="empty-state compact-empty">
+                <strong>No presets yet.</strong>
+                <p>Save one treatment and its service preset will show up here automatically.</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
       <Card title={active.title ?? active.label} subtitle={active.description}>
         <div className="data-table">
           <div className="table-head">
@@ -1187,7 +1572,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
           {filteredRows.length ? (
             filteredRows.map((row, index) => (
               <div className="data-row" key={`${active.id}-${index}`}>
-                {row.map((cell) => <div key={`${cell}-${index}`}>{cell}</div>)}
+                {row.map((cell, cellIndex) => <div key={`${active.columns[cellIndex]}-${index}`}>{cell}</div>)}
                 <div><button className="row-link" type="button" onClick={() => openEdit(row)}>Open</button></div>
               </div>
             ))
@@ -1199,6 +1584,19 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
           )}
         </div>
       </Card>
+
+      {active.id === 'treatments' && (
+        <Card title="Printable Summary" subtitle="Copy or print the current treatment prescription in a clean format.">
+          <div className="sheet-actions">
+            <button className="pill" type="button" onClick={() => window.print()}>Print Summary <ChevronRight /></button>
+            <button className="pill" type="button" onClick={() => navigator.clipboard?.writeText(rxSummary(rxDraft)).catch(() => {})}>Copy Rx Text <ChevronRight /></button>
+          </div>
+          <div className="empty-state compact-empty" style={{ marginTop: '1rem' }}>
+            <strong>{rxSummary(rxDraft) || 'No prescription rows yet.'}</strong>
+            <p>Use the builder above to create a printable treatment summary.</p>
+          </div>
+        </Card>
+      )}
 
       {addOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setAddOpen(false)}>
@@ -1214,12 +1612,30 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
               {active.columns.map((column, index) => (
                 <label className="field-block" key={column}>
                   <span>{column}</span>
-                  <input
-                    className="lead-input"
-                    value={draftRow[index] ?? ''}
-                    onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
-                    placeholder={`Enter ${column.toLowerCase()}`}
-                  />
+                  {shouldUseSelect(column) || optionsForColumn(column).length ? (
+                    <select
+                      className="lead-input"
+                      multiple={isMedicineColumn}
+                      value={isMedicineColumn ? selectedMedicines(draftRow[index]) : (draftRow[index] ?? '')}
+                      onChange={(event) => {
+                        const value = isMedicineColumn
+                          ? Array.from(event.target.selectedOptions).map((option) => option.value).join(', ')
+                          : event.target.value;
+                        if (column === 'Service') handleServiceChange(index, value, setDraftRow);
+                        else setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? value : cell)));
+                      }}
+                    >
+                      {!isMedicineColumn && <option value="">{optionsForColumn(column).length ? `Select ${column.toLowerCase()}` : `Add ${column.toLowerCase()} first`}</option>}
+                      {optionsForColumn(column).map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      className="lead-input"
+                      value={draftRow[index] ?? ''}
+                      onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
+                      placeholder={`Enter ${column.toLowerCase()}`}
+                    />
+                  )}
                 </label>
               ))}
             </div>
@@ -1241,16 +1657,91 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
               </div>
               <button className="icon-btn" type="button" onClick={() => setEditOpen(false)} aria-label="Close modal">x</button>
             </div>
+            {active.id === 'treatments' && (
+              <div className="modal-body" style={{ paddingTop: 0 }}>
+                <div className="mini-stat">
+                  <span>Tip</span>
+                  <strong>Select a service first. Medicine rows, dose, timing, and schedule can all be reused from presets.</strong>
+                </div>
+              </div>
+            )}
+            {active.id === 'treatments' && (
+              <div className="modal-body">
+                <div className="card" style={{ marginBottom: '1rem' }}>
+                  <div className="card-header">
+                    <div>
+                      <h2>Prescription Builder</h2>
+                      <p className="subtle">Add one or more medicines for this treatment.</p>
+                    </div>
+                    <button className="pill" type="button" onClick={addRxRow}>Add Medicine Row <ChevronRight /></button>
+                  </div>
+                  <div className="stack">
+                    {rxDraft.map((item, index) => (
+                      <div className="card" key={`rx-${index}`} style={{ padding: '0.9rem', background: 'rgba(255,255,255,0.55)' }}>
+                        <div className="card-header" style={{ marginBottom: '0.75rem' }}>
+                          <div>
+                            <h2>Medicine {index + 1}</h2>
+                            <p className="subtle">Prescription row {index + 1}</p>
+                          </div>
+                          <button className="row-link danger" type="button" onClick={() => removeRxRow(index)}>Remove</button>
+                        </div>
+                        <div className="grid" style={{ gridTemplateColumns: '1.2fr 0.75fr 1fr 0.75fr', gap: '0.75rem' }}>
+                          <select className="lead-input" value={item.medicine} onChange={(event) => updateRxMedicine(index, event.target.value)}>
+                            <option value="">Select medicine</option>
+                            {medicineOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                          <input className="lead-input" value={item.dose} onChange={(event) => updateRxDraft(index, 'dose', event.target.value)} placeholder="Dose" />
+                          <div className="stack" style={{ gap: '0.5rem' }}>
+                            <input className="lead-input" value={item.timing} onChange={(event) => updateRxTiming(index, event.target.value)} placeholder="Timing" list={`timing-${index}`} />
+                            <datalist id={`timing-${index}`}>
+                              {scheduleOptions.map((option) => <option value={option} key={option} />)}
+                            </datalist>
+                            <div className="filter-pills">
+                              {scheduleOptions.map((option) => (
+                                <button type="button" key={option} className={`sheet-tab filter-pill ${item.timing === option ? 'active' : ''}`} onClick={() => updateRxTiming(index, option)}>
+                                  {option}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <select className="lead-input" value={item.schedule} onChange={(event) => updateRxDraft(index, 'schedule', event.target.value)}>
+                            {frequencyOptions.map((option) => <option value={option} key={option}>{option}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="modal-body detail-grid">
               {active.columns.map((column, index) => (
                 <label className="field-block" key={column}>
                   <span>{column}</span>
-                  <input
-                    className="lead-input"
-                    value={editRow[index] ?? ''}
-                    onChange={(event) => setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
-                    placeholder={`Enter ${column.toLowerCase()}`}
-                  />
+                  {shouldUseSelect(column) || optionsForColumn(column).length ? (
+                    <select
+                      className="lead-input"
+                      multiple={isMedicineColumn}
+                      value={isMedicineColumn ? selectedMedicines(editRow[index]) : (editRow[index] ?? '')}
+                      onChange={(event) => {
+                        const value = isMedicineColumn
+                          ? Array.from(event.target.selectedOptions).map((option) => option.value).join(', ')
+                          : event.target.value;
+                        if (column === 'Service') handleServiceChange(index, value, setEditRow);
+                        else setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? value : cell)));
+                      }}
+                    >
+                      {!isMedicineColumn && <option value="">{optionsForColumn(column).length ? `Select ${column.toLowerCase()}` : `Add ${column.toLowerCase()} first`}</option>}
+                      {optionsForColumn(column).map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      className="lead-input"
+                      value={editRow[index] ?? ''}
+                      onChange={(event) => setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
+                      placeholder={`Enter ${column.toLowerCase()}`}
+                    />
+                  )}
                 </label>
               ))}
             </div>
@@ -1280,7 +1771,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
               {previewRows.length ? (
                 previewRows.map((row, index) => (
                   <div className="data-row" key={index}>
-                    {row.map((cell) => <div key={`${cell}-${index}`}>{cell}</div>)}
+                    {row.map((cell, cellIndex) => <div key={`${active.columns[cellIndex]}-${index}`}>{cell}</div>)}
                     <div />
                   </div>
                 ))
@@ -1298,6 +1789,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
           </div>
         </div>
       )}
+
     </section>
   );
 }
@@ -1316,9 +1808,9 @@ const operationsTabs = [
     id: 'treatments',
     label: 'Treatment',
     singular: 'plan',
-    description: 'Client journeys, goals, services, and therapy progress.',
-    columns: ['Client', 'Service', 'Goal', 'Duration', 'Status'],
-    rows: treatmentPlans.map((plan) => [plan.client, plan.service, plan.goal, plan.duration, plan.status]),
+    description: 'Client journeys, goals, services, medicine, dosage, timing, and therapy progress.',
+    columns: ['Client', 'Service', 'Medicine', 'Dose', 'Timing', 'Goal', 'Duration', 'Status'],
+    rows: treatmentPlans.map((plan) => [plan.client, plan.service, '', '', '', plan.goal, plan.duration, plan.status]),
   },
   {
     id: 'packages',
@@ -1343,6 +1835,14 @@ const operationsTabs = [
     description: 'Team roles and operational permissions.',
     columns: ['Name', 'Role', 'Permissions', 'Status'],
     rows: staffRoles.map((member) => [member.name, member.role, member.permissions, member.status]),
+  },
+  {
+    id: 'medicines',
+    label: 'Medicines',
+    singular: 'medicine',
+    description: 'Manual medicine catalog used by treatment plans. Add medicine names here, then select them inside Treatment.',
+    columns: ['Medicine', 'Category', 'Default Dose', 'Timing', 'Status'],
+    rows: [],
   },
   {
     id: 'inventory',
@@ -1836,6 +2336,119 @@ export function TreatmentPlansPage() {
   );
 }
 
+export function MedicinesPage() {
+  const [catalog, setCatalog] = useState(() => {
+    const saved = loadSavedObject('ayurflow:Operations:tabs:v3', {});
+    return Array.isArray(saved.medicines) ? saved.medicines : [];
+  });
+  const [draft, setDraft] = useState({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
+  const [selectedIndex, setSelectedIndex] = useState(null);
+  const [message, setMessage] = useState('Shared medicine catalog ready.');
+
+  useEffect(() => {
+    try {
+      const saved = loadSavedObject('ayurflow:Operations:tabs:v3', {});
+      window.localStorage.setItem('ayurflow:Operations:tabs:v3', JSON.stringify({ ...saved, medicines: catalog }));
+    } catch {
+      setMessage('Local browser storage is full or blocked.');
+    }
+  }, [catalog]);
+
+  const save = () => {
+    if (!draft.Medicine.trim()) {
+      setMessage('Please enter a medicine name.');
+      return;
+    }
+    setCatalog((current) => (
+      selectedIndex === null
+        ? [{ ...draft }, ...current]
+        : current.map((item, index) => (index === selectedIndex ? { ...draft } : item))
+    ));
+    setMessage(selectedIndex === null ? 'Medicine added.' : 'Medicine updated.');
+    setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
+    setSelectedIndex(null);
+  };
+
+  const openEdit = (row, index) => {
+    setSelectedIndex(index);
+    setDraft(row);
+  };
+
+  const remove = (index) => {
+    setCatalog((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setMessage('Medicine removed.');
+    if (selectedIndex === index) {
+      setSelectedIndex(null);
+      setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
+    }
+  };
+
+  return (
+    <section className="module-page">
+      <div className="module-hero">
+        <div>
+          <h1>Medicines</h1>
+          <p>Manage the shared medicine catalog used by Treatment. Default dose and timing are reused automatically.</p>
+        </div>
+        <div className="module-stats">
+          <div className="mini-stat"><span>Medicines</span><strong>{catalog.length}</strong></div>
+          <div className="mini-stat"><span>Status</span><strong>{message}</strong></div>
+          <div className="mini-stat"><span>Scope</span><strong>Shared</strong></div>
+        </div>
+      </div>
+      <Card title={selectedIndex === null ? 'Add Medicine' : 'Edit Medicine'} subtitle="This catalog feeds the treatment preset builder.">
+        <div className="modal-body detail-grid">
+          {['Medicine', 'Category', 'Default Dose', 'Timing', 'Status'].map((field) => (
+            <label className="field-block" key={field}>
+              <span>{field}</span>
+              <input
+                className="lead-input"
+                value={draft[field] ?? ''}
+                onChange={(event) => setDraft((current) => ({ ...current, [field]: event.target.value }))}
+                placeholder={`Enter ${field.toLowerCase()}`}
+              />
+            </label>
+          ))}
+        </div>
+        <div className="sheet-actions">
+          <button className="pill" type="button" onClick={save}>Save Medicine <ChevronRight /></button>
+          <button className="pill" type="button" onClick={() => { setSelectedIndex(null); setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' }); }}>Reset <ChevronRight /></button>
+        </div>
+      </Card>
+      <Card title="Medicine Catalog" subtitle="Edit or remove shared medicines used in treatment presets.">
+        <div className="table">
+          <div className="table-head">
+            <div>Medicine</div>
+            <div>Category</div>
+            <div>Dose</div>
+            <div>Timing</div>
+            <div>Status</div>
+            <div />
+          </div>
+          {catalog.length ? catalog.map((row, index) => (
+            <div className="data-row" key={`${row.Medicine}-${index}`}>
+              <div>{row.Medicine}</div>
+              <div>{row.Category}</div>
+              <div>{row['Default Dose']}</div>
+              <div>{row.Timing}</div>
+              <div>{row.Status}</div>
+              <div className="row-actions">
+                <button className="row-link" type="button" onClick={() => openEdit(row, index)}>Edit</button>
+                <button className="row-link danger" type="button" onClick={() => remove(index)}>Delete</button>
+              </div>
+            </div>
+          )) : (
+            <div className="empty-state compact-empty">
+              <strong>No medicines saved yet.</strong>
+              <p>Add one here and it will be available in Treatment presets.</p>
+            </div>
+          )}
+        </div>
+      </Card>
+    </section>
+  );
+}
+
 export function PackagesPage() {
   return (
     <GenericModulePage
@@ -2270,7 +2883,7 @@ export function IntegrationsPage() {
 
   const handleIntegrationAction = async (integration) => {
     if (integration.name === 'Google Sheets') {
-      setSyncMessage('Sample Google Sheet opened in a new tab.');
+      setSyncMessage('Google Sheets opened in a new tab.');
       window.open('https://docs.google.com/spreadsheets/', '_blank', 'noopener,noreferrer');
       return;
     }
@@ -2296,7 +2909,7 @@ export function IntegrationsPage() {
       <div className="module-hero">
         <div>
           <h1>Integrations</h1>
-          <p>Connect AyurFlow CRM to Google Sheets or other tools so your team can keep using the apps they already rely on.</p>
+          <p>Connect Mom's Pathshala CRM to Google Sheets or other tools so your team can keep using the apps they already rely on.</p>
         </div>
         <div className="module-stats">
           <div className="mini-stat">
@@ -2359,7 +2972,7 @@ export function IntegrationsPage() {
                 <p>Every change in the CRM can be pushed into a Google Sheet so your staff can continue reporting in spreadsheets without duplicate entry.</p>
                 <div className="sheet-actions">
                   <button className="pill" type="button" onClick={() => { setConnectedApps((current) => Array.from(new Set([...current, 'Google Sheets']))); setSyncMessage(`Google account connected for ${activeTab}.`); }}>Connect Google Account <ChevronRight /></button>
-                  <button className="pill" type="button" onClick={() => { setSyncMessage(`Sample sheet opened for ${activeTab}.`); window.open('https://docs.google.com/spreadsheets/', '_blank', 'noopener,noreferrer'); }}>Open Sample Sheet <ChevronRight /></button>
+                  <button className="pill" type="button" onClick={() => { setSyncMessage(`Google Sheets opened for ${activeTab}.`); window.open('https://docs.google.com/spreadsheets/', '_blank', 'noopener,noreferrer'); }}>Open Google Sheets <ChevronRight /></button>
                 </div>
               </div>
               <div className="sheet-form">
@@ -2408,6 +3021,97 @@ export function IntegrationsPage() {
           </div>
         </Card>
       </div>
+    </section>
+  );
+}
+
+export function BranchesPage() {
+  const { branches, currentBranch, setCurrentBranch, addBranch, renameBranch, deleteBranch } = useBranch();
+  const [branchName, setBranchName] = useState('');
+  const [selectedBranch, setSelectedBranch] = useState(currentBranch);
+  const [message, setMessage] = useState('Create a branch to keep data separate.');
+
+  useEffect(() => {
+    setSelectedBranch(currentBranch);
+  }, [currentBranch]);
+
+  const createBranch = () => {
+    const ok = addBranch(branchName);
+    if (!ok) {
+      setMessage('Please enter a branch name.');
+      return;
+    }
+    setMessage(`Branch "${branchName.trim()}" created and activated.`);
+    setBranchName('');
+  };
+
+  return (
+    <section className="module-page">
+      <div className="module-hero">
+        <div>
+          <h1>Branches</h1>
+          <p>Create and switch branches so each location keeps its own data, leads, users, and uploads separate.</p>
+          <p className="subtle">Current branch: {currentBranch}</p>
+        </div>
+        <div className="module-stats">
+          <div className="mini-stat"><span>Branches</span><strong>{branches.length}</strong></div>
+          <div className="mini-stat"><span>Active</span><strong>{currentBranch}</strong></div>
+          <div className="mini-stat"><span>Status</span><strong>{message}</strong></div>
+        </div>
+      </div>
+
+      <Card title="Create Branch" subtitle="Each branch gets its own stored data.">
+        <div className="sheet-actions">
+          <input className="lead-input" value={branchName} onChange={(event) => setBranchName(event.target.value)} placeholder="Enter branch name" />
+          <button className="pill" type="button" onClick={createBranch}>Create Branch <ChevronRight /></button>
+        </div>
+      </Card>
+
+      <Card title="Branch List" subtitle="Switching branches updates the whole app data scope.">
+        <div className="table">
+          <div className="table-head">
+            <div>Branch</div>
+            <div>Status</div>
+            <div>Action</div>
+            <div />
+          </div>
+          {branches.map((branch) => {
+            const active = branch === currentBranch;
+            return (
+              <div className="data-row" key={branch}>
+                <div>{branch}</div>
+                <div><StatusPill tone={active ? 'st-ok' : 'st-warning'}>{active ? 'Active' : 'Saved'}</StatusPill></div>
+                <div>
+                  <button className="row-link" type="button" onClick={() => { setCurrentBranch(branch); setSelectedBranch(branch); setMessage(`${branch} activated.`); }}>
+                    Open
+                  </button>
+                </div>
+                <div className="row-actions">
+                  <button className="row-link" type="button" onClick={() => {
+                    const next = window.prompt('Rename branch', branch);
+                    if (!next) return;
+                    const ok = renameBranch(branch, next);
+                    setMessage(ok ? `Renamed to ${next.trim()}.` : 'Rename failed.');
+                  }}>
+                    Rename
+                  </button>
+                  <button className="row-link danger" type="button" onClick={() => {
+                    if (branches.length === 1) {
+                      setMessage('At least one branch must remain.');
+                      return;
+                    }
+                    if (!window.confirm(`Delete branch "${branch}"? Its branch data stays in storage but will no longer be selected.`)) return;
+                    deleteBranch(branch);
+                    setMessage(`${branch} removed from branch list.`);
+                  }}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
     </section>
   );
 }

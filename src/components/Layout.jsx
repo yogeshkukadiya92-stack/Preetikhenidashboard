@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { BellIcon, CalendarIcon, ChartIcon, ChevronRight, FileIcon, HomeIcon, MoneyIcon, SearchIcon, SettingsIcon, UsersIcon } from './icons.jsx';
 import { navItems } from '../data/mockData.js';
+import { useBranch } from '../context/BranchContext.jsx';
 
 const iconByPath = {
   '/': HomeIcon,
@@ -35,6 +36,7 @@ function getCurrentDateRange() {
 }
 
 export function Layout() {
+  const { currentBranch } = useBranch();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchText, setSearchText] = useState('');
@@ -74,8 +76,9 @@ export function Layout() {
             </svg>
           </div>
           <div>
-            <h1>AyurFlow <span>CRM</span></h1>
-            <p>Flowing care. Naturally.</p>
+            <h1>Mom's Pathshala</h1>
+            <p>Learning, care, and growth.</p>
+            <p className="subtle">Branch: {currentBranch}</p>
           </div>
         </div>
         <nav className="nav" aria-label="Primary">
@@ -92,8 +95,8 @@ export function Layout() {
         <div className="sidebar-art" aria-hidden="true" />
         <div className="clinic-card" role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => navigate('/settings')} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/settings'); }}>
           <div>
-            <strong>Vaidhya Wellness Clinic</strong>
-            <span>Thrissur, Kerala</span>
+            <strong>Mom's Pathshala</strong>
+            <span>{currentBranch}</span>
           </div>
           <ChevronRight />
         </div>
@@ -125,8 +128,8 @@ export function Layout() {
           <button className="profile" type="button" onClick={() => navigate('/users')}>
             <div className="avatar" aria-hidden="true" />
             <div className="meta">
-              <strong>Dr. Arjun Nair</strong>
-              <span>{location.pathname === '/' ? 'Administrator' : 'Clinic Operator'}</span>
+              <strong>Mom's Pathshala</strong>
+              <span>{location.pathname === '/' ? 'Administrator' : 'Team Operator'}</span>
             </div>
             <ChevronRight />
           </button>

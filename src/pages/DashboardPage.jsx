@@ -48,14 +48,14 @@ export function DashboardPage() {
 
       <section className="quick-actions" aria-label="Quick actions">
         {[
-          ['Add Lead', '/crm'],
-          ['Add Client', '/clients'],
-          ['Book Appointment', '/appointments'],
+          ['Add Lead', '/crm?action=add'],
+          ['Add Client', '/clients?action=add'],
+          ['Book Appointment', '/appointments?action=add'],
           ['Send Form', '/operations?tab=forms'],
-          ['Create Invoice', '/finance?tab=payments'],
-          ['Add Payment', '/finance?tab=payments'],
-          ['Create Treatment Plan', '/operations?tab=treatments'],
-          ['Add Coaching Student', '/operations?tab=coaching'],
+          ['Create Invoice', '/finance?tab=payments&action=add'],
+          ['Add Payment', '/finance?tab=payments&action=add'],
+          ['Create Treatment Plan', '/operations?tab=treatments&action=add'],
+          ['Add Coaching Student', '/operations?tab=coaching&action=add'],
         ].map(([label, path]) => (
           <button className="quick-action" type="button" key={label} onClick={() => navigate(path)}>
             <span>{label}</span>
@@ -69,8 +69,8 @@ export function DashboardPage() {
           <Card title="Lead Conversion Funnel">
             <FunnelChart stages={funnelStages} />
             <div className="footer-action" style={{ marginTop: 18 }}>
-              <span>Conversion Rate: <strong style={{ color: 'var(--green)' }}>0%</strong> <span className="subtle">No live data</span></span>
-              <span className="delta">No live data</span>
+              <span>Conversion Rate: <strong style={{ color: 'var(--green)' }}>0%</strong></span>
+              <span className="delta">Awaiting records</span>
             </div>
           </Card>
         </div>
@@ -80,11 +80,11 @@ export function DashboardPage() {
           <div className="chart-stats">
             <div className="mini-stat">
               <span>Total Revenue ({revenuePeriod})</span>
-              <strong>0 <span className="delta">No live data</span></strong>
+              <strong>0 <span className="delta">Awaiting records</span></strong>
             </div>
             <div className="mini-stat">
               <span>Total Collections ({revenuePeriod})</span>
-              <strong>0 <span className="delta">No live data</span></strong>
+              <strong>0 <span className="delta">Awaiting records</span></strong>
             </div>
           </div>
         </Card>
