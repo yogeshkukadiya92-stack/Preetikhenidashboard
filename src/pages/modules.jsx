@@ -840,13 +840,13 @@ function ClientProfile({ client, onBack }) {
   }, [clientName, refreshKey]);
 
   const allPayments = useMemo(() => {
-    const saved = loadSavedState('ayurflow:ayurflow-payments:rows:v2', []);
+    const saved = loadSavedState('ayurflow:ayurflow-payments:rows:v3', []);
     return saved.filter((row) => String(row.client ?? '').toLowerCase().includes(clientName.toLowerCase()));
   }, [clientName, refreshKey]);
 
   const saveTreatment = () => {
     const key = 'ayurflow:Treatment Plans:rows:v2';
-    const current = loadSavedState(key, []);
+    const current = loadSavedArray(key, []);
     window.localStorage.setItem(key, JSON.stringify([[clientName, treatForm.service, treatForm.goal, treatForm.duration, treatForm.status], ...current]));
     setRefreshKey((k) => k + 1);
     setTreatModal(false);
@@ -855,7 +855,7 @@ function ClientProfile({ client, onBack }) {
 
   const saveAppointment = () => {
     const key = 'ayurflow:Appointments:rows:v2';
-    const current = loadSavedState(key, []);
+    const current = loadSavedArray(key, []);
     window.localStorage.setItem(key, JSON.stringify([[clientName, apptForm.mobile, apptForm.date, apptForm.time, apptForm.type, apptForm.status], ...current]));
     setRefreshKey((k) => k + 1);
     setApptModal(false);
@@ -863,8 +863,8 @@ function ClientProfile({ client, onBack }) {
   };
 
   const savePayment = () => {
-    const key = 'ayurflow:ayurflow-payments:rows:v2';
-    const current = loadSavedState(key, []);
+    const key = 'ayurflow:ayurflow-payments:rows:v3';
+    const current = loadSavedArray(key, []);
     window.localStorage.setItem(key, JSON.stringify([{ client: clientName, invoice: payForm.invoice, amount: payForm.amount, status: payForm.status, paidOn: payForm.paidOn }, ...current]));
     setRefreshKey((k) => k + 1);
     setPayModal(false);
@@ -1160,6 +1160,9 @@ export function ClientsPage() {
 }
 
 export function PaymentsPage() {
+  const [clientNames] = useState(() =>
+    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
+  );
   return (
     <ImportExportModule
       title="Payments"
@@ -1172,6 +1175,7 @@ export function PaymentsPage() {
       headers={['Client', 'Invoice', 'Amount', 'Status', 'Paid On']}
       seedRows={payments}
       filenameBase="ayurflow-payments"
+      fieldOptions={{ Client: clientNames }}
       rowToValues={(row) => ({
         Client: row.client,
         Invoice: row.invoice,
@@ -2548,6 +2552,9 @@ export function FormsPage() {
 }
 
 export function AppointmentsPage() {
+  const [clientNames] = useState(() =>
+    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
+  );
   return (
     <GenericModulePage
       title="Appointments"
@@ -2559,7 +2566,7 @@ export function AppointmentsPage() {
       ]}
       columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status']}
       rows={[]}
-      fieldOptions={{ Type: services }}
+      fieldOptions={{ Client: clientNames, Type: services }}
       filterPresets={[
         { label: 'Date wise', column: 'Date' },
         { label: 'Type wise', column: 'Type' },
@@ -2625,6 +2632,9 @@ export function ServicesPage() {
 }
 
 export function TreatmentPlansPage() {
+  const [clientNames] = useState(() =>
+    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
+  );
   return (
     <GenericModulePage
       title="Treatment Plans"
@@ -2636,6 +2646,7 @@ export function TreatmentPlansPage() {
       ]}
       columns={['Client', 'Service', 'Goal', 'Duration', 'Status']}
       rows={treatmentPlans.map((plan) => [plan.client, plan.service, plan.goal, plan.duration, plan.status])}
+      fieldOptions={{ Client: clientNames, Service: services }}
     />
   );
 }
