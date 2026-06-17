@@ -825,7 +825,8 @@ function ClientProfile({ client, onBack }) {
   const [treatModal, setTreatModal] = useState(false);
   const [apptModal, setApptModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
-  const [treatForm, setTreatForm] = useState({ service: services[0] ?? '', goal: '', duration: '30 days', status: 'Active' });
+  const [treatTemplates] = useState(() => loadSavedArray('ayurflow:treatment-templates:v1', []));
+  const [treatForm, setTreatForm] = useState({ service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
   const [apptForm, setApptForm] = useState({ mobile: '', date: '', time: '', type: services[0] ?? '', status: 'Confirmed' });
   const [payForm, setPayForm] = useState({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
 
@@ -847,10 +848,10 @@ function ClientProfile({ client, onBack }) {
   const saveTreatment = () => {
     const key = 'ayurflow:Treatment Plans:rows:v2';
     const current = loadSavedArray(key, []);
-    window.localStorage.setItem(key, JSON.stringify([[clientName, treatForm.service, treatForm.goal, treatForm.duration, treatForm.status], ...current]));
+    window.localStorage.setItem(key, JSON.stringify([[clientName, treatForm.service, treatForm.goal, treatForm.duration, treatForm.medicine, treatForm.dose, treatForm.timing, treatForm.status], ...current]));
     setRefreshKey((k) => k + 1);
     setTreatModal(false);
-    setTreatForm({ service: services[0] ?? '', goal: '', duration: '30 days', status: 'Active' });
+    setTreatForm({ service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
   };
 
   const saveAppointment = () => {
@@ -923,7 +924,7 @@ function ClientProfile({ client, onBack }) {
         <Card title="Treatment Plans" subtitle={`Plans linked to ${clientName}`}>
           <div className="table">
             <div className="table-head">
-              {['Service', 'Goal', 'Duration', 'Status'].map((h) => <div key={h}>{h}</div>)}
+              {['Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing', 'Status'].map((h) => <div key={h}>{h}</div>)}
               <div />
             </div>
             {allTreatments.length ? allTreatments.map((row, i) => (
@@ -932,6 +933,9 @@ function ClientProfile({ client, onBack }) {
                 <div>{row[2]}</div>
                 <div>{row[3]}</div>
                 <div>{row[4]}</div>
+                <div>{row[5]}</div>
+                <div>{row[6]}</div>
+                <div>{row[7] ?? row[4]}</div>
                 <div />
               </div>
             )) : (
@@ -1003,6 +1007,18 @@ function ClientProfile({ client, onBack }) {
               <button className="icon-btn" type="button" onClick={() => setTreatModal(false)} aria-label="Close modal">x</button>
             </div>
             <div className="modal-body detail-grid">
+              {treatTemplates.length > 0 && (
+                <label className="field-block" style={{ gridColumn: '1 / -1' }}>
+                  <span>Use Template</span>
+                  <select className="lead-input" defaultValue="" onChange={(e) => {
+                    const t = treatTemplates[Number(e.target.value)];
+                    if (t) setTreatForm((f) => ({ ...f, service: t.service, goal: t.goal, duration: t.duration, medicine: t.medicine, dose: t.dose, timing: t.timing }));
+                  }}>
+                    <option value="">Select template to auto-fill...</option>
+                    {treatTemplates.map((t, i) => <option key={i} value={i}>{t.name}</option>)}
+                  </select>
+                </label>
+              )}
               <label className="field-block">
                 <span>Service</span>
                 <select className="lead-input" value={treatForm.service} onChange={(e) => setTreatForm((f) => ({ ...f, service: e.target.value }))}>
@@ -1016,6 +1032,18 @@ function ClientProfile({ client, onBack }) {
               <label className="field-block">
                 <span>Duration</span>
                 <input className="lead-input" value={treatForm.duration} onChange={(e) => setTreatForm((f) => ({ ...f, duration: e.target.value }))} placeholder="30 days" />
+              </label>
+              <label className="field-block">
+                <span>Medicine</span>
+                <input className="lead-input" value={treatForm.medicine} onChange={(e) => setTreatForm((f) => ({ ...f, medicine: e.target.value }))} placeholder="Medicine name" />
+              </label>
+              <label className="field-block">
+                <span>Dose</span>
+                <input className="lead-input" value={treatForm.dose} onChange={(e) => setTreatForm((f) => ({ ...f, dose: e.target.value }))} placeholder="e.g. 10ml twice" />
+              </label>
+              <label className="field-block">
+                <span>Timing</span>
+                <input className="lead-input" value={treatForm.timing} onChange={(e) => setTreatForm((f) => ({ ...f, timing: e.target.value }))} placeholder="e.g. After meals" />
               </label>
               <label className="field-block">
                 <span>Status</span>
@@ -2632,22 +2660,262 @@ export function ServicesPage() {
 }
 
 export function TreatmentPlansPage() {
+  const PLANS_KEY = 'ayurflow:Treatment Plans:rows:v2';
+  const TEMPLATES_KEY = 'ayurflow:treatment-templates:v1';
+
   const [clientNames] = useState(() =>
     loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
   );
+  const [plans, setPlans] = useState(() => loadSavedArray(PLANS_KEY, []));
+  const [templates, setTemplates] = useState(() => loadSavedArray(TEMPLATES_KEY, []));
+  const [activeTab, setActiveTab] = useState('plans');
+
+  const blankPlan = { client: '', service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' };
+  const blankTemplate = { name: '', service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '' };
+
+  const [planModal, setPlanModal] = useState(false);
+  const [planForm, setPlanForm] = useState(blankPlan);
+  const [editingPlanIndex, setEditingPlanIndex] = useState(null);
+
+  const [templateModal, setTemplateModal] = useState(false);
+  const [templateForm, setTemplateForm] = useState(blankTemplate);
+  const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(PLANS_KEY, JSON.stringify(plans)); } catch {}
+  }, [plans]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates)); } catch {}
+  }, [templates]);
+
+  const applyTemplate = (template) => {
+    setPlanForm((f) => ({ ...f, service: template.service, goal: template.goal, duration: template.duration, medicine: template.medicine, dose: template.dose, timing: template.timing }));
+  };
+
+  const savePlan = () => {
+    const row = [planForm.client, planForm.service, planForm.goal, planForm.duration, planForm.medicine, planForm.dose, planForm.timing, planForm.status];
+    setPlans((current) => editingPlanIndex === null ? [row, ...current] : current.map((r, i) => i === editingPlanIndex ? row : r));
+    setPlanModal(false);
+    setEditingPlanIndex(null);
+    setPlanForm(blankPlan);
+  };
+
+  const openEditPlan = (row, index) => {
+    setPlanForm({ client: row[0] ?? '', service: row[1] ?? '', goal: row[2] ?? '', duration: row[3] ?? '', medicine: row[4] ?? '', dose: row[5] ?? '', timing: row[6] ?? '', status: row[7] ?? row[4] ?? 'Active' });
+    setEditingPlanIndex(index);
+    setPlanModal(true);
+  };
+
+  const saveTemplate = () => {
+    if (!templateForm.name.trim()) return;
+    setTemplates((current) => editingTemplateIndex === null ? [{ ...templateForm }, ...current] : current.map((t, i) => i === editingTemplateIndex ? { ...templateForm } : t));
+    setTemplateModal(false);
+    setEditingTemplateIndex(null);
+    setTemplateForm(blankTemplate);
+  };
+
+  const PLAN_COLS = ['Client', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing', 'Status'];
+  const TMPL_COLS = ['Template Name', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing'];
+
   return (
-    <GenericModulePage
-      title="Treatment Plans"
-      description="Track client treatment journeys, goals, therapy schedules, progress, and consultant notes."
-      stats={[
-        { label: 'Active Plans', value: treatmentPlans.filter((plan) => plan.status === 'Active').length },
-        { label: 'Paused', value: treatmentPlans.filter((plan) => plan.status === 'Paused').length },
-        { label: 'Renewals', value: treatmentPlans.filter((plan) => plan.status === 'Renewed').length },
-      ]}
-      columns={['Client', 'Service', 'Goal', 'Duration', 'Status']}
-      rows={treatmentPlans.map((plan) => [plan.client, plan.service, plan.goal, plan.duration, plan.status])}
-      fieldOptions={{ Client: clientNames, Service: services }}
-    />
+    <section className="module-page">
+      <div className="module-hero">
+        <div>
+          <h1>Treatment Plans</h1>
+          <p>Track client treatment journeys, goals, therapy schedules, and consultant notes.</p>
+        </div>
+        <div className="module-stats">
+          <div className="mini-stat"><span>Active</span><strong>{plans.filter((r) => (r[7] ?? r[4]) === 'Active').length}</strong></div>
+          <div className="mini-stat"><span>Templates</span><strong>{templates.length}</strong></div>
+          <div className="mini-stat"><span>Total Plans</span><strong>{plans.length}</strong></div>
+        </div>
+      </div>
+
+      <div className="sheet-tabs">
+        <button className={`sheet-tab ${activeTab === 'plans' ? 'active' : ''}`} type="button" onClick={() => setActiveTab('plans')}>Treatment Plans</button>
+        <button className={`sheet-tab ${activeTab === 'templates' ? 'active' : ''}`} type="button" onClick={() => setActiveTab('templates')}>Templates</button>
+      </div>
+
+      {activeTab === 'plans' && (
+        <>
+          <Card title="Actions" className="compact-action-card single-row-actions">
+            <div className="import-banner compact-import-banner">
+              <button className="pill" type="button" onClick={() => { setPlanForm(blankPlan); setEditingPlanIndex(null); setPlanModal(true); }}>Add Treatment Plan <ChevronRight /></button>
+            </div>
+          </Card>
+          <Card title="Treatment Plans" subtitle="All client treatment records. Click Edit to update any plan.">
+            <div className="table">
+              <div className="table-head">
+                {PLAN_COLS.map((h) => <div key={h}>{h}</div>)}
+                <div />
+              </div>
+              {plans.length ? plans.map((row, i) => (
+                <div className="data-row" key={i}>
+                  {[row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7] ?? row[4]].map((cell, ci) => <div key={ci}>{cell}</div>)}
+                  <div>
+                    <button className="row-link" type="button" onClick={() => openEditPlan(row, i)}>Edit</button>
+                  </div>
+                </div>
+              )) : (
+                <div className="empty-state compact-empty table-empty">
+                  <strong>No treatment plans yet.</strong>
+                  <p>Click Add Treatment Plan, or create a template first for quick entry.</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </>
+      )}
+
+      {activeTab === 'templates' && (
+        <>
+          <Card title="Actions" className="compact-action-card single-row-actions">
+            <div className="import-banner compact-import-banner">
+              <button className="pill" type="button" onClick={() => { setTemplateForm(blankTemplate); setEditingTemplateIndex(null); setTemplateModal(true); }}>Add Template <ChevronRight /></button>
+            </div>
+          </Card>
+          <Card title="Treatment Templates" subtitle="Reusable presets. Select a template when adding a plan to auto-fill all fields.">
+            <div className="table">
+              <div className="table-head">
+                {TMPL_COLS.map((h) => <div key={h}>{h}</div>)}
+                <div />
+              </div>
+              {templates.length ? templates.map((t, i) => (
+                <div className="data-row" key={i}>
+                  {[t.name, t.service, t.goal, t.duration, t.medicine, t.dose, t.timing].map((cell, ci) => <div key={ci}>{cell}</div>)}
+                  <div className="row-actions">
+                    <button className="row-link" type="button" onClick={() => { setTemplateForm({ ...t }); setEditingTemplateIndex(i); setTemplateModal(true); }}>Edit</button>
+                    <button className="row-link danger" type="button" onClick={() => setTemplates((current) => current.filter((_, idx) => idx !== i))}>Delete</button>
+                  </div>
+                </div>
+              )) : (
+                <div className="empty-state compact-empty table-empty">
+                  <strong>No templates yet.</strong>
+                  <p>Create a template to quickly fill in treatment details — service, medicine, dose, timing — in one tap.</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </>
+      )}
+
+      {planModal && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setPlanModal(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Treatment Plan" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div><h2>{editingPlanIndex === null ? 'Add Treatment Plan' : 'Edit Treatment Plan'}</h2><p>Select a template to auto-fill, then adjust as needed.</p></div>
+              <button className="icon-btn" type="button" onClick={() => setPlanModal(false)} aria-label="Close">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              {templates.length > 0 && (
+                <label className="field-block" style={{ gridColumn: '1 / -1' }}>
+                  <span>Use Template</span>
+                  <select className="lead-input" defaultValue="" onChange={(e) => { const t = templates[Number(e.target.value)]; if (t) applyTemplate(t); }}>
+                    <option value="">Select template to auto-fill...</option>
+                    {templates.map((t, i) => <option key={i} value={i}>{t.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <label className="field-block">
+                <span>Client</span>
+                {clientNames.length ? (
+                  <select className="lead-input" value={planForm.client} onChange={(e) => setPlanForm((f) => ({ ...f, client: e.target.value }))}>
+                    <option value="">Select client</option>
+                    {clientNames.map((n) => <option key={n}>{n}</option>)}
+                  </select>
+                ) : (
+                  <input className="lead-input" value={planForm.client} onChange={(e) => setPlanForm((f) => ({ ...f, client: e.target.value }))} placeholder="Client name" />
+                )}
+              </label>
+              <label className="field-block">
+                <span>Service</span>
+                <select className="lead-input" value={planForm.service} onChange={(e) => setPlanForm((f) => ({ ...f, service: e.target.value }))}>
+                  {services.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="field-block">
+                <span>Goal</span>
+                <input className="lead-input" value={planForm.goal} onChange={(e) => setPlanForm((f) => ({ ...f, goal: e.target.value }))} placeholder="Treatment goal" />
+              </label>
+              <label className="field-block">
+                <span>Duration</span>
+                <input className="lead-input" value={planForm.duration} onChange={(e) => setPlanForm((f) => ({ ...f, duration: e.target.value }))} placeholder="30 days" />
+              </label>
+              <label className="field-block">
+                <span>Medicine</span>
+                <input className="lead-input" value={planForm.medicine} onChange={(e) => setPlanForm((f) => ({ ...f, medicine: e.target.value }))} placeholder="Medicine name" />
+              </label>
+              <label className="field-block">
+                <span>Dose</span>
+                <input className="lead-input" value={planForm.dose} onChange={(e) => setPlanForm((f) => ({ ...f, dose: e.target.value }))} placeholder="e.g. 10ml twice daily" />
+              </label>
+              <label className="field-block">
+                <span>Timing</span>
+                <input className="lead-input" value={planForm.timing} onChange={(e) => setPlanForm((f) => ({ ...f, timing: e.target.value }))} placeholder="e.g. After meals" />
+              </label>
+              <label className="field-block">
+                <span>Status</span>
+                <select className="lead-input" value={planForm.status} onChange={(e) => setPlanForm((f) => ({ ...f, status: e.target.value }))}>
+                  <option>Active</option><option>Pending</option><option>Paused</option><option>Completed</option>
+                </select>
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setPlanModal(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={savePlan}>Save <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {templateModal && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setTemplateModal(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Treatment Template" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div><h2>{editingTemplateIndex === null ? 'Add Template' : 'Edit Template'}</h2><p>Save a reusable treatment preset.</p></div>
+              <button className="icon-btn" type="button" onClick={() => setTemplateModal(false)} aria-label="Close">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              <label className="field-block" style={{ gridColumn: '1 / -1' }}>
+                <span>Template Name</span>
+                <input className="lead-input" value={templateForm.name} onChange={(e) => setTemplateForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Panchakarma Standard" />
+              </label>
+              <label className="field-block">
+                <span>Service</span>
+                <select className="lead-input" value={templateForm.service} onChange={(e) => setTemplateForm((f) => ({ ...f, service: e.target.value }))}>
+                  {services.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="field-block">
+                <span>Goal</span>
+                <input className="lead-input" value={templateForm.goal} onChange={(e) => setTemplateForm((f) => ({ ...f, goal: e.target.value }))} placeholder="Treatment goal" />
+              </label>
+              <label className="field-block">
+                <span>Duration</span>
+                <input className="lead-input" value={templateForm.duration} onChange={(e) => setTemplateForm((f) => ({ ...f, duration: e.target.value }))} placeholder="30 days" />
+              </label>
+              <label className="field-block">
+                <span>Medicine</span>
+                <input className="lead-input" value={templateForm.medicine} onChange={(e) => setTemplateForm((f) => ({ ...f, medicine: e.target.value }))} placeholder="Medicine name" />
+              </label>
+              <label className="field-block">
+                <span>Dose</span>
+                <input className="lead-input" value={templateForm.dose} onChange={(e) => setTemplateForm((f) => ({ ...f, dose: e.target.value }))} placeholder="e.g. 10ml twice daily" />
+              </label>
+              <label className="field-block">
+                <span>Timing</span>
+                <input className="lead-input" value={templateForm.timing} onChange={(e) => setTemplateForm((f) => ({ ...f, timing: e.target.value }))} placeholder="e.g. After meals" />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setTemplateModal(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={saveTemplate} disabled={!templateForm.name.trim()}>Save <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
