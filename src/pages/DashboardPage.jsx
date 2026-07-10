@@ -29,9 +29,10 @@ export function DashboardPage() {
   const [revenuePeriod, setRevenuePeriod] = useState('Week');
   const [datePreset, setDatePreset] = useState('7 Days');
   const liveData = loadLiveDashboardData(currentBranch);
-  const { funnelStages, kpis, leads, payments, todaySchedule, urgentTasks, revenueSeries } = liveData;
+  const { funnelStages, kpis, leads, payments, todaySchedule, urgentTasks, revenueSeries, appointments, clients, inventory, packages, staff, treatments } = liveData;
   const filteredLeads = filterRowsByPreset(leads, datePreset, (lead) => lead.addedOn);
   const filteredPayments = filterRowsByPreset(payments, datePreset, (payment) => payment.paidOn);
+  const filteredAppointments = filterRowsByPreset(appointments, datePreset, (appointment) => appointment[2] ?? appointment.date);
   const totalRevenue = filteredPayments.reduce((sum, payment) => sum + parseLiveAmount(payment.amount), 0);
   const totalCollections = filteredPayments
     .filter((payment) => String(payment.status ?? '').toLowerCase() === 'paid')
@@ -39,7 +40,13 @@ export function DashboardPage() {
   const paymentAging = buildPaymentAging(payments);
   const leadSources = buildLeadSourcePerformance(filteredLeads.length ? filteredLeads : leads);
   const branchComparison = buildBranchComparison(branches, currentBranch);
-  const actionQueue = buildActionQueue(urgentTasks, leads, payments);
+  const staffWorkload = buildStaffWorkload(filteredAppointments.length ? filteredAppointments : appointments, staff);
+  const lowStockAlerts = buildLowStockAlerts(inventory);
+  const salesSummary = buildSalesSummary(filteredPayments.length ? filteredPayments : payments, packages, treatments);
+  const treatmentProgress = buildTreatmentProgress(treatments, clients);
+  const renewalAlerts = buildRenewalAlerts(clients, packages);
+  const reminders = buildClientReminders(clients);
+  const actionQueue = buildActionQueue(urgentTasks, leads, payments, lowStockAlerts, renewalAlerts, reminders);
 
   const kpiRoute = (label) => {
     if (label.includes('Appointment')) return '/appointments';
@@ -165,6 +172,62 @@ export function DashboardPage() {
               <p>Follow-ups and unpaid invoices will appear here automatically.</p>
             </div>
           )}
+        </Card>
+      </section>
+
+      <section className="insights-grid dashboard-operations">
+        <Card title="Staff Workload" subtitle={`Appointments per team member (${datePreset.toLowerCase()}).`}>
+          <InsightBars
+            rows={staffWorkload}
+            emptyTitle="No staff workload yet."
+            emptyCopy="Add staff names to appointments to compare booking load."
+            valueFormatter={(row) => `${row.count} appointment${row.count === 1 ? '' : 's'}`}
+          />
+        </Card>
+
+        <Card title="Inventory Alerts" subtitle="Low-stock and near-expiry items.">
+          <AlertList
+            rows={lowStockAlerts}
+            emptyTitle="Inventory looks healthy."
+            emptyCopy="Low stock and expiry alerts will appear here."
+            route="/inventory"
+          />
+        </Card>
+
+        <Card title="Medicine & Package Sales" subtitle="Paid collections grouped by sale type.">
+          <InsightBars
+            rows={salesSummary}
+            emptyTitle="No sales summary yet."
+            emptyCopy="Paid invoices will be grouped into medicine, package, and treatment sales."
+            valueFormatter={(row) => `₹ ${row.amount.toLocaleString('en-IN')}`}
+          />
+        </Card>
+
+        <Card title="Treatment Progress" subtitle="Active, completed, and paused plans.">
+          <InsightBars
+            rows={treatmentProgress}
+            emptyTitle="No treatment progress yet."
+            emptyCopy="Create treatment plans or update client progress to track outcomes."
+            valueFormatter={(row) => `${row.count} record${row.count === 1 ? '' : 's'}`}
+          />
+        </Card>
+
+        <Card title="Renewals & Expiring Packages" subtitle="Upcoming client package renewals.">
+          <AlertList
+            rows={renewalAlerts}
+            emptyTitle="No renewals due."
+            emptyCopy="Package renewal reminders will appear before expiry."
+            route="/packages"
+          />
+        </Card>
+
+        <Card title="Birthdays & Anniversaries" subtitle="Client dates coming up soon.">
+          <AlertList
+            rows={reminders}
+            emptyTitle="No reminders due."
+            emptyCopy="Add birthdays and anniversaries in client profiles."
+            route="/clients"
+          />
         </Card>
       </section>
 
@@ -331,7 +394,167 @@ function buildBranchComparison(branches, currentBranch) {
   });
 }
 
-function buildActionQueue(tasks, leads, payments) {
+function pickRowValue(row, index, keys = []) {
+  if (Array.isArray(row)) return row[index] ?? '';
+  return keys.map((key) => row?.[key]).find((value) => value !== undefined && value !== null && value !== '') ?? '';
+}
+
+function normalizeStatus(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function buildStaffWorkload(appointments, staffRows) {
+  const staffNames = new Set(staffRows.map((row) => pickRowValue(row, 0, ['name', 'Name'])).filter(Boolean));
+  const totals = new Map();
+  appointments.forEach((appointment) => {
+    const staffName = pickRowValue(appointment, 5, ['staff', 'Staff', 'consultant', 'doctor']) || 'Unassigned';
+    totals.set(staffName, (totals.get(staffName) ?? 0) + 1);
+  });
+  staffNames.forEach((name) => {
+    if (!totals.has(name)) totals.set(name, 0);
+  });
+  const maxCount = Math.max(...totals.values(), 1);
+  return Array.from(totals.entries())
+    .map(([label, count]) => ({ label, count, percent: Math.round((count / maxCount) * 100) }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+}
+
+function daysUntil(value) {
+  const date = parseLooseDate(value);
+  if (!date) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
+  return Math.ceil((date - today) / 86400000);
+}
+
+function buildLowStockAlerts(inventory) {
+  return inventory
+    .map((row) => {
+      const item = pickRowValue(row, 0, ['item', 'Item', 'name']);
+      const category = pickRowValue(row, 1, ['category', 'Category']);
+      const quantity = Number(String(pickRowValue(row, 2, ['quantity', 'Quantity', 'stock'])).replace(/[^\d.-]/g, ''));
+      const expiry = pickRowValue(row, 3, ['expiry', 'Expiry']);
+      const status = normalizeStatus(pickRowValue(row, 4, ['status', 'Status']));
+      const expiryDays = daysUntil(expiry);
+      const lowStock = status.includes('low') || (Number.isFinite(quantity) && quantity <= 10);
+      const expiring = expiryDays !== null && expiryDays >= 0 && expiryDays <= 30;
+      if (!lowStock && !expiring) return null;
+      return {
+        title: item || 'Unnamed item',
+        note: `${category || 'Inventory'} · ${Number.isFinite(quantity) ? `${quantity} left` : 'stock pending'}${expiring ? ` · expires in ${expiryDays} day${expiryDays === 1 ? '' : 's'}` : ''}`,
+        tone: lowStock ? 'hot' : 'warm',
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function buildSalesSummary(payments, packageRows, treatmentRows) {
+  const packageNames = packageRows.map((row) => String(pickRowValue(row, 0, ['package', 'Package', 'name'])).toLowerCase()).filter(Boolean);
+  const treatmentNames = treatmentRows.map((row) => String(pickRowValue(row, 1, ['service', 'Service'])).toLowerCase()).filter(Boolean);
+  const buckets = [
+    { label: 'Packages', count: 0, amount: 0 },
+    { label: 'Treatments', count: 0, amount: 0 },
+    { label: 'Medicines', count: 0, amount: 0 },
+    { label: 'Other Sales', count: 0, amount: 0 },
+  ];
+  payments
+    .filter((payment) => normalizeStatus(payment.status) === 'paid')
+    .forEach((payment) => {
+      const text = `${payment.invoice ?? ''} ${payment.client ?? ''} ${payment.item ?? ''} ${payment.category ?? ''}`.toLowerCase();
+      const amount = parseLiveAmount(payment.amount);
+      const bucket = text.includes('medicine') || text.includes('medicin')
+        ? buckets[2]
+        : packageNames.some((name) => text.includes(name)) || text.includes('package')
+          ? buckets[0]
+          : treatmentNames.some((name) => text.includes(name)) || text.includes('treatment') || text.includes('therapy')
+            ? buckets[1]
+            : buckets[3];
+      bucket.count += 1;
+      bucket.amount += amount;
+    });
+  const maxAmount = Math.max(...buckets.map((bucket) => bucket.amount), 1);
+  return buckets.map((bucket) => ({ ...bucket, percent: Math.round((bucket.amount / maxAmount) * 100) }));
+}
+
+function buildTreatmentProgress(treatments, clients) {
+  const buckets = [
+    { label: 'Active', count: 0 },
+    { label: 'Completed', count: 0 },
+    { label: 'Paused', count: 0 },
+    { label: 'Review Needed', count: 0 },
+  ];
+  treatments.forEach((row) => {
+    const status = normalizeStatus(pickRowValue(row, 7, ['status', 'Status']));
+    if (status.includes('complete') || status.includes('done')) buckets[1].count += 1;
+    else if (status.includes('pause') || status.includes('hold')) buckets[2].count += 1;
+    else if (status.includes('review') || status.includes('follow')) buckets[3].count += 1;
+    else buckets[0].count += 1;
+  });
+  clients.forEach((client) => {
+    const progress = normalizeStatus(client.progress ?? pickRowValue(client, 3, ['Progress']));
+    if (progress.includes('complete') || progress === '100%' || progress === '100') buckets[1].count += 1;
+    else if (progress.includes('pause') || progress.includes('hold')) buckets[2].count += 1;
+    else if (progress) buckets[0].count += 1;
+  });
+  const maxCount = Math.max(...buckets.map((bucket) => bucket.count), 1);
+  return buckets.map((bucket) => ({ ...bucket, percent: Math.round((bucket.count / maxCount) * 100) }));
+}
+
+function buildRenewalAlerts(clients, packageRows) {
+  const packageNames = new Set(packageRows.map((row) => pickRowValue(row, 0, ['package', 'Package', 'name'])).filter(Boolean));
+  return clients
+    .map((client) => {
+      const name = client.name ?? pickRowValue(client, 0, ['Client']);
+      const program = client.program ?? pickRowValue(client, 2, ['Program']);
+      const nextVisit = client.nextVisit ?? pickRowValue(client, 4, ['Next Visit']);
+      const dueIn = daysUntil(nextVisit);
+      if (dueIn === null || dueIn < 0 || dueIn > 30) return null;
+      return {
+        title: name || 'Unnamed client',
+        note: `${program || 'Package'}${packageNames.has(program) ? '' : ' renewal'} · due in ${dueIn} day${dueIn === 1 ? '' : 's'}`,
+        tone: dueIn <= 7 ? 'hot' : 'warm',
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function nextAnnualDate(value) {
+  const date = parseLooseDate(value);
+  if (!date) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const next = new Date(today.getFullYear(), date.getMonth(), date.getDate());
+  if (next < today) next.setFullYear(today.getFullYear() + 1);
+  return next;
+}
+
+function buildClientReminders(clients) {
+  const rows = [];
+  clients.forEach((client) => {
+    const name = client.name ?? pickRowValue(client, 0, ['Client']);
+    [
+      ['Birthday', client.birthday ?? pickRowValue(client, 5, ['Birthday'])],
+      ['Anniversary', client.anniversary ?? pickRowValue(client, 6, ['Anniversary'])],
+    ].forEach(([label, value]) => {
+      const next = nextAnnualDate(value);
+      if (!next) return;
+      const dueIn = Math.ceil((next - new Date().setHours(0, 0, 0, 0)) / 86400000);
+      if (dueIn < 0 || dueIn > 30) return;
+      rows.push({
+        title: `${label}: ${name || 'Unnamed client'}`,
+        note: dueIn === 0 ? 'Today' : `In ${dueIn} day${dueIn === 1 ? '' : 's'}`,
+        tone: dueIn <= 7 ? 'warm' : 'cool',
+      });
+    });
+  });
+  return rows.sort((a, b) => Number(a.note.match(/\d+/)?.[0] ?? 0) - Number(b.note.match(/\d+/)?.[0] ?? 0)).slice(0, 6);
+}
+
+function buildActionQueue(tasks, leads, payments, lowStockAlerts = [], renewalAlerts = [], reminders = []) {
   const followUps = leads
     .filter((lead) => String(lead.status ?? '').toLowerCase().includes('follow'))
     .slice(0, 3)
@@ -350,13 +573,59 @@ function buildActionQueue(tasks, leads, payments) {
       route: '/payments',
       tone: 'hot',
     }));
+  const stockTasks = lowStockAlerts.slice(0, 1).map((item) => ({
+    title: `Inventory: ${item.title}`,
+    note: item.note,
+    route: '/inventory',
+    tone: item.tone,
+  }));
+  const renewalTasks = renewalAlerts.slice(0, 1).map((item) => ({
+    title: `Renewal: ${item.title}`,
+    note: item.note,
+    route: '/packages',
+    tone: item.tone,
+  }));
+  const reminderTasks = reminders.slice(0, 1).map((item) => ({
+    title: item.title,
+    note: item.note,
+    route: '/clients',
+    tone: item.tone,
+  }));
   const fallback = tasks.slice(0, 3).map((task) => ({
     title: task.title,
     note: task.note,
     route: '/crm',
     tone: 'cool',
   }));
-  return [...collections, ...followUps, ...fallback].slice(0, 5);
+  return [...collections, ...stockTasks, ...renewalTasks, ...reminderTasks, ...followUps, ...fallback].slice(0, 5);
+}
+
+function AlertList({ rows, emptyTitle, emptyCopy, route }) {
+  const navigate = useNavigate();
+
+  if (!rows.length) {
+    return (
+      <div className="empty-state compact-empty">
+        <strong>{emptyTitle}</strong>
+        <p>{emptyCopy}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="action-queue compact-alerts">
+      {rows.map((row) => (
+        <button className="queue-item" type="button" key={`${row.title}-${row.note}`} onClick={() => navigate(route)}>
+          <span className={`queue-priority ${row.tone}`} />
+          <span>
+            <strong>{row.title}</strong>
+            <small>{row.note}</small>
+          </span>
+          <ChevronRight />
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function InsightBars({ rows, emptyTitle, emptyCopy, valueFormatter }) {
@@ -441,4 +710,3 @@ function ModuleTable({ type, rows = [] }) {
     </div>
   );
 }
-

@@ -1162,7 +1162,7 @@ export function ClientsPage() {
         { label: 'Treatment Plans', value: '0' },
         { label: 'Next Visits', value: '0' },
       ]}
-      headers={['Client', 'Age', 'Program', 'Progress', 'Next Visit']}
+      headers={['Client', 'Age', 'Program', 'Progress', 'Next Visit', 'Birthday', 'Anniversary']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
       fieldOptions={{ Program: getSavedPackageNames() }}
@@ -1172,6 +1172,7 @@ export function ClientsPage() {
         { label: 'Program wise', column: 'Program' },
         { label: 'Progress wise', column: 'Progress' },
         { label: 'Next visit wise', column: 'Next Visit' },
+        { label: 'Birthday wise', column: 'Birthday' },
       ]}
       rowToValues={(row) => ({
         Client: row.name,
@@ -1179,6 +1180,8 @@ export function ClientsPage() {
         Program: row.program,
         Progress: row.progress,
         'Next Visit': row.nextVisit,
+        Birthday: row.birthday,
+        Anniversary: row.anniversary,
       })}
       parseRow={(entry) => ({
         name: entry.Client ?? entry.client ?? entry.name ?? '',
@@ -1186,6 +1189,8 @@ export function ClientsPage() {
         program: entry.Program ?? entry.program ?? '',
         progress: entry.Progress ?? entry.progress ?? '',
         nextVisit: entry['Next Visit'] ?? entry.nextVisit ?? '',
+        birthday: entry.Birthday ?? entry.birthday ?? '',
+        anniversary: entry.Anniversary ?? entry.anniversary ?? '',
       })}
       rowActions={(row) => (
         <button className="row-link" type="button" onClick={() => setSelectedClient(row)}>View Profile</button>
@@ -2590,6 +2595,9 @@ export function AppointmentsPage() {
   const [clientNames] = useState(() =>
     loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
   );
+  const [staffNames] = useState(() =>
+    loadSavedArray('ayurflow:Staff:rows:v2', staffRoles.map((member) => [member.name])).map((row) => row?.[0] ?? row?.name ?? '').filter(Boolean)
+  );
   return (
     <GenericModulePage
       title="Appointments"
@@ -2599,12 +2607,13 @@ export function AppointmentsPage() {
         { label: 'Confirmed', value: '0' },
         { label: 'Pending', value: '0' },
       ]}
-      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status']}
+      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Staff', 'Status']}
       rows={[]}
-      fieldOptions={{ Client: clientNames, Type: services }}
+      fieldOptions={{ Client: clientNames, Type: services, Staff: staffNames }}
       filterPresets={[
         { label: 'Date wise', column: 'Date' },
         { label: 'Type wise', column: 'Type' },
+        { label: 'Staff wise', column: 'Staff' },
         { label: 'Mobile wise', column: 'Mobile' },
         { label: 'Client wise', column: 'Client' },
       ]}
@@ -3710,6 +3719,4 @@ export function BranchesPage() {
     </section>
   );
 }
-
-
 

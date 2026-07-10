@@ -27,10 +27,21 @@ function branchKey(branch, key) {
   return `moms-pathshala:${branch}:${key}`;
 }
 
+function readBranchArray(branch, key, legacyKey, fallback = []) {
+  const branchRows = asArray(readStorage(branchKey(branch, key), []));
+  if (branchRows.length) return branchRows;
+  return asArray(readStorage(legacyKey, fallback));
+}
+
 export function loadLiveDashboardData(branch) {
   const leads = asArray(readStorage(branchKey(branch, 'crm:leads:v4'), []));
-  const appointments = asArray(readStorage(branchKey(branch, 'Appointments:rows:v3'), []));
-  const payments = asArray(readStorage('ayurflow:ayurflow-payments:rows:v3', []));
+  const appointments = readBranchArray(branch, 'Appointments:rows:v3', 'ayurflow:Appointments:rows:v2');
+  const payments = readBranchArray(branch, 'ayurflow-payments:rows:v3', 'ayurflow:ayurflow-payments:rows:v3');
+  const clients = readBranchArray(branch, 'ayurflow-clients:rows:v3', 'ayurflow:ayurflow-clients:rows:v3');
+  const inventory = readBranchArray(branch, 'Inventory:rows:v3', 'ayurflow:Inventory:rows:v2');
+  const packages = readBranchArray(branch, 'Packages:rows:v3', 'ayurflow:Packages:rows:v2');
+  const staff = readBranchArray(branch, 'Staff:rows:v3', 'ayurflow:Staff:rows:v2');
+  const treatments = readBranchArray(branch, 'Treatment Plans:rows:v2', 'ayurflow:Treatment Plans:rows:v2');
 
   const openLeads = leads.filter((lead) => !['Won', 'Lost', 'Closed'].includes(String(lead.status ?? '')));
   const followUps = leads.filter((lead) => String(lead.status ?? '').toLowerCase().includes('follow'));
@@ -41,6 +52,11 @@ export function loadLiveDashboardData(branch) {
     leads,
     appointments,
     payments,
+    clients,
+    inventory,
+    packages,
+    staff,
+    treatments,
     kpis: [
       { label: "Today's Appointments", value: String(todaysAppointments.length), delta: todaysAppointments.length ? 'Scheduled today' : 'Awaiting records', accent: 'green' },
       { label: 'Open Leads', value: String(openLeads.length), delta: openLeads.length ? `${followUps.length} follow-up due` : 'Awaiting records', accent: 'gold' },
@@ -53,8 +69,8 @@ export function loadLiveDashboardData(branch) {
       time: row[3] || 'Time pending',
       name: row[0] || 'Unnamed client',
       note: row[4] || 'Appointment',
-      status: row[5] || 'Pending',
-      tone: String(row[5] ?? '').toLowerCase().includes('confirm') ? 'good' : 'warn',
+      status: row[6] || row[5] || 'Pending',
+      tone: String(row[6] ?? row[5] ?? '').toLowerCase().includes('confirm') ? 'good' : 'warn',
     })),
     urgentTasks: [
       ...followUps.slice(0, 3).map((lead) => ({
