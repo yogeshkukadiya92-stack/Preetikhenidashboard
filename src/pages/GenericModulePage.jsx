@@ -1,4 +1,4 @@
-import { Card } from '../components/ui.jsx';
+import { ActionMenu, Card } from '../components/ui.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useBranch } from '../context/BranchContext.jsx';
@@ -56,7 +56,6 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const [filterText, setFilterText] = useState('');
   const [activeFilter, setActiveFilter] = useState(filterPresets[0]?.column ?? '');
   const [activeView, setActiveView] = useState(viewPresets[0]?.id ?? 'all');
-  const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [draftRow, setDraftRow] = useState(columns.map(() => ''));
   const [importOpen, setImportOpen] = useState(false);
@@ -65,6 +64,17 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const importInputRef = useRef(null);
   const activeViewPredicate = viewPresets.find((preset) => preset.id === activeView)?.match ?? null;
   const activeViewLabel = viewPresets.find((preset) => preset.id === activeView)?.label ?? 'All';
+
+  useEffect(() => {
+    const closeTransientUi = (event) => {
+      if (event.key !== 'Escape') return;
+      setAddOpen(false);
+      setImportOpen(false);
+      setFilterOpen(false);
+    };
+    document.addEventListener('keydown', closeTransientUi);
+    return () => document.removeEventListener('keydown', closeTransientUi);
+  }, []);
 
   useEffect(() => {
     try {
@@ -128,6 +138,23 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
     setActionMessage(`${action} action ready for ${title}.`);
   };
 
+  const actionItems = [
+    { label: `Add ${title}`, description: 'Create a new record', onClick: () => runAction('Add') },
+    { label: 'Import CSV/JSON', description: 'Upload records', onClick: () => runAction('Import') },
+    { label: 'Export CSV', description: 'Download records', onClick: () => runAction('Export') },
+    { label: filterOpen ? 'Hide filters' : 'Show filters', description: 'Search and narrow results', onClick: () => runAction('Filter') },
+    { label: 'Share summary', description: 'Copy record count', onClick: () => runAction('Share') },
+  ];
+
+  const viewItems = viewPresets.map((preset) => ({
+    label: preset.label,
+    description: preset.id === activeView ? 'Current view' : 'Switch view',
+    onClick: () => {
+      setActiveView(preset.id);
+      setActionMessage(`${preset.label} view opened.`);
+    },
+  }));
+
   const saveDraft = () => {
     if (!draftRow.some((cell) => String(cell ?? '').trim())) {
       setActionMessage('Please fill at least one field before saving.');
@@ -186,44 +213,20 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
       </div>
 
       {viewPresets.length > 0 && (
-        <Card title={`${title} Views`} className="compact-action-card">
-          <div className="module-toolbar compact-view-toolbar">
-            <div className="mini-stat compact-status"><span>Selected view</span><strong>{activeViewLabel}</strong></div>
-            <button className="pill" type="button" onClick={() => setViewMenuOpen((current) => !current)}>
-              {viewMenuOpen ? 'Hide Views' : 'Open Views'}
-            </button>
-          </div>
-          {viewMenuOpen && (
-            <div className="filter-pills">
-              {viewPresets.map((preset) => (
-                <button
-                  className={`sheet-tab filter-pill ${activeView === preset.id ? 'active' : ''}`}
-                  type="button"
-                  key={preset.id}
-                  onClick={() => {
-                    setActiveView(preset.id);
-                    setViewMenuOpen(false);
-                    setActionMessage(`${preset.label} view opened.`);
-                  }}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </Card>
+        <Card
+          title={`${title} Views`}
+          subtitle={`Selected view: ${activeViewLabel}`}
+          className="compact-action-card module-command-card"
+          action={<ActionMenu label="Views" items={viewItems} />}
+        />
       )}
 
-      <Card title={`${title} List`}>
+      <Card
+        title={`${title} List`}
+        subtitle={actionMessage}
+        action={<ActionMenu label="Actions" items={actionItems} />}
+      >
         <input ref={importInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
-        <div className="module-toolbar">
-          <div className="sheet-actions toolbar-actions">
-            {['Add', 'Import', 'Export', 'Filter', 'Share'].map((action) => (
-              <button className="pill" type="button" key={action} onClick={() => runAction(action)}>{action}</button>
-            ))}
-          </div>
-          <div className="mini-stat compact-status"><span>Status</span><strong>{actionMessage}</strong></div>
-        </div>
         {filterOpen && (
           <div className="filter-panel">
             {filterPresets.length > 0 && (
