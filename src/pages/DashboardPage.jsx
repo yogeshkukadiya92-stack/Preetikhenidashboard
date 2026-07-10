@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, StatusPill, Tag } from '../components/ui.jsx';
+import { ActionMenu, Card, StatusPill, Tag } from '../components/ui.jsx';
 import { FunnelChart, RevenueChart } from '../components/Charts.jsx';
 import { ChevronRight } from '../components/icons.jsx';
 import { loadLiveDashboardData, parseLiveAmount } from '../data/liveData.js';
@@ -28,6 +28,7 @@ export function DashboardPage() {
   const { branches, currentBranch, setCurrentBranch } = useBranch();
   const [revenuePeriod, setRevenuePeriod] = useState('Week');
   const [datePreset, setDatePreset] = useState('7 Days');
+  const [moreInsightsOpen, setMoreInsightsOpen] = useState(false);
   const liveData = loadLiveDashboardData(currentBranch);
   const { funnelStages, kpis, leads, payments, todaySchedule, urgentTasks, revenueSeries, appointments, clients, inventory, packages, staff, treatments } = liveData;
   const filteredLeads = filterRowsByPreset(leads, datePreset, (lead) => lead.addedOn);
@@ -53,6 +54,16 @@ export function DashboardPage() {
     if (label.includes('Payment')) return '/payments';
     return '/crm';
   };
+  const quickActions = [
+    ['Add Lead', '/crm?action=add', 'Create new enquiry'],
+    ['Add Client', '/clients?action=add', 'Create client profile'],
+    ['Book Appointment', '/appointments?action=add', 'Schedule visit'],
+    ['Send Form', '/operations?tab=forms', 'Open forms'],
+    ['Create Invoice', '/finance?tab=payments&action=add', 'Prepare bill'],
+    ['Add Payment', '/finance?tab=payments&action=add', 'Record collection'],
+    ['Create Treatment Plan', '/operations?tab=treatments&action=add', 'Start plan'],
+    ['Add Coaching Student', '/operations?tab=coaching&action=add', 'Add student'],
+  ].map(([label, path, description]) => ({ label, description, onClick: () => navigate(path) }));
 
   return (
     <>
@@ -101,22 +112,12 @@ export function DashboardPage() {
         ))}
       </section>
 
-      <section className="quick-actions" aria-label="Quick actions">
-        {[
-          ['Add Lead', '/crm?action=add'],
-          ['Add Client', '/clients?action=add'],
-          ['Book Appointment', '/appointments?action=add'],
-          ['Send Form', '/operations?tab=forms'],
-          ['Create Invoice', '/finance?tab=payments&action=add'],
-          ['Add Payment', '/finance?tab=payments&action=add'],
-          ['Create Treatment Plan', '/operations?tab=treatments&action=add'],
-          ['Add Coaching Student', '/operations?tab=coaching&action=add'],
-        ].map(([label, path]) => (
-          <button className="quick-action" type="button" key={label} onClick={() => navigate(path)}>
-            <span>{label}</span>
-            <ChevronRight />
-          </button>
-        ))}
+      <section className="dashboard-action-strip" aria-label="Dashboard actions">
+        <p className="command-message">Use Actions for entry work; open More insights for detailed operational panels.</p>
+        <div className="sheet-actions toolbar-actions">
+          <ActionMenu label="Actions" items={quickActions} />
+          <button className="pill" type="button" onClick={() => setMoreInsightsOpen(true)}>More insights <ChevronRight /></button>
+        </div>
       </section>
 
       <section className="insights-grid">
@@ -175,61 +176,74 @@ export function DashboardPage() {
         </Card>
       </section>
 
-      <section className="insights-grid dashboard-operations">
-        <Card title="Staff Workload" subtitle={`Appointments per team member (${datePreset.toLowerCase()}).`}>
-          <InsightBars
-            rows={staffWorkload}
-            emptyTitle="No staff workload yet."
-            emptyCopy="Add staff names to appointments to compare booking load."
-            valueFormatter={(row) => `${row.count} appointment${row.count === 1 ? '' : 's'}`}
-          />
-        </Card>
+      {moreInsightsOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setMoreInsightsOpen(false)}>
+          <div className="modal-shell wide-modal" role="dialog" aria-modal="true" aria-label="More dashboard insights" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>More Insights</h2>
+                <p>Operational details are grouped here to keep the main dashboard clean.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setMoreInsightsOpen(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="more-insights-grid">
+              <Card title="Staff Workload" subtitle={`Appointments per team member (${datePreset.toLowerCase()}).`}>
+                <InsightBars
+                  rows={staffWorkload}
+                  emptyTitle="No staff workload yet."
+                  emptyCopy="Add staff names to appointments to compare booking load."
+                  valueFormatter={(row) => `${row.count} appointment${row.count === 1 ? '' : 's'}`}
+                />
+              </Card>
 
-        <Card title="Inventory Alerts" subtitle="Low-stock and near-expiry items.">
-          <AlertList
-            rows={lowStockAlerts}
-            emptyTitle="Inventory looks healthy."
-            emptyCopy="Low stock and expiry alerts will appear here."
-            route="/inventory"
-          />
-        </Card>
+              <Card title="Inventory Alerts" subtitle="Low-stock and near-expiry items.">
+                <AlertList
+                  rows={lowStockAlerts}
+                  emptyTitle="Inventory looks healthy."
+                  emptyCopy="Low stock and expiry alerts will appear here."
+                  route="/inventory"
+                />
+              </Card>
 
-        <Card title="Medicine & Package Sales" subtitle="Paid collections grouped by sale type.">
-          <InsightBars
-            rows={salesSummary}
-            emptyTitle="No sales summary yet."
-            emptyCopy="Paid invoices will be grouped into medicine, package, and treatment sales."
-            valueFormatter={(row) => `₹ ${row.amount.toLocaleString('en-IN')}`}
-          />
-        </Card>
+              <Card title="Medicine & Package Sales" subtitle="Paid collections grouped by sale type.">
+                <InsightBars
+                  rows={salesSummary}
+                  emptyTitle="No sales summary yet."
+                  emptyCopy="Paid invoices will be grouped into medicine, package, and treatment sales."
+                  valueFormatter={(row) => `₹ ${row.amount.toLocaleString('en-IN')}`}
+                />
+              </Card>
 
-        <Card title="Treatment Progress" subtitle="Active, completed, and paused plans.">
-          <InsightBars
-            rows={treatmentProgress}
-            emptyTitle="No treatment progress yet."
-            emptyCopy="Create treatment plans or update client progress to track outcomes."
-            valueFormatter={(row) => `${row.count} record${row.count === 1 ? '' : 's'}`}
-          />
-        </Card>
+              <Card title="Treatment Progress" subtitle="Active, completed, and paused plans.">
+                <InsightBars
+                  rows={treatmentProgress}
+                  emptyTitle="No treatment progress yet."
+                  emptyCopy="Create treatment plans or update client progress to track outcomes."
+                  valueFormatter={(row) => `${row.count} record${row.count === 1 ? '' : 's'}`}
+                />
+              </Card>
 
-        <Card title="Renewals & Expiring Packages" subtitle="Upcoming client package renewals.">
-          <AlertList
-            rows={renewalAlerts}
-            emptyTitle="No renewals due."
-            emptyCopy="Package renewal reminders will appear before expiry."
-            route="/packages"
-          />
-        </Card>
+              <Card title="Renewals & Expiring Packages" subtitle="Upcoming client package renewals.">
+                <AlertList
+                  rows={renewalAlerts}
+                  emptyTitle="No renewals due."
+                  emptyCopy="Package renewal reminders will appear before expiry."
+                  route="/packages"
+                />
+              </Card>
 
-        <Card title="Birthdays & Anniversaries" subtitle="Client dates coming up soon.">
-          <AlertList
-            rows={reminders}
-            emptyTitle="No reminders due."
-            emptyCopy="Add birthdays and anniversaries in client profiles."
-            route="/clients"
-          />
-        </Card>
-      </section>
+              <Card title="Birthdays & Anniversaries" subtitle="Client dates coming up soon.">
+                <AlertList
+                  rows={reminders}
+                  emptyTitle="No reminders due."
+                  emptyCopy="Add birthdays and anniversaries in client profiles."
+                  route="/clients"
+                />
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="grid">
         <div className="stack">

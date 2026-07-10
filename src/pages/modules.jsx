@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from '../components/icons.jsx';
-import { Card, StatusPill, Tag } from '../components/ui.jsx';
+import { ActionMenu, Card, StatusPill, Tag } from '../components/ui.jsx';
 import { useBranch } from '../context/BranchContext.jsx';
 import { GenericModulePage } from './GenericModulePage.jsx';
 import {
@@ -232,6 +232,16 @@ function ImportExportModule({
       View
     </button>
   );
+  const moduleActions = [
+    { label: `Add ${title}`, description: 'Create a new record', onClick: openAddRecord },
+    { label: 'Download template', description: 'Blank CSV format', onClick: downloadTemplate },
+    { label: 'Import CSV/JSON', description: 'Upload records', onClick: () => bannerFileInputRef.current?.click() },
+    { label: 'Export CSV', description: 'Download current records', onClick: exportCsv },
+    ...(filterPresets.length > 0 ? [
+      { label: filterOpen ? 'Hide filters' : 'Show filters', description: 'Search this module', onClick: () => setFilterOpen((current) => !current) },
+      { label: 'Reset filters', description: 'Clear active search', onClick: () => { setActiveFilter(filterPresets[0]?.column ?? ''); setFilterText(''); setMessage('Filters reset.'); } },
+    ] : []),
+  ];
 
   return (
     <section className="module-page">
@@ -250,52 +260,43 @@ function ImportExportModule({
         </div>
       </div>
 
-      <Card title="Import / Export" className="compact-action-card single-row-actions">
-        <div className="import-banner compact-import-banner">
-          <input ref={bannerFileInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
-          <button className="pill" type="button" onClick={openAddRecord}>Add <ChevronRight /></button>
-          <button className="pill" type="button" onClick={downloadTemplate}>Template <ChevronRight /></button>
-          <button className="pill" type="button" onClick={() => bannerFileInputRef.current?.click()}>Import <ChevronRight /></button>
-          <button className="pill" type="button" onClick={exportCsv}>Export <ChevronRight /></button>
-        </div>
+      <Card
+        title={`${title} Controls`}
+        subtitle={message}
+        className="compact-action-card module-command-card"
+        action={<ActionMenu label="Actions" items={moduleActions} />}
+      >
+        <input ref={bannerFileInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
       </Card>
 
       {extraTopCard}
 
-      {filterPresets.length > 0 && (
+      {filterPresets.length > 0 && filterOpen && (
         <Card title="Filters" className="compact-action-card">
-          <div className="module-toolbar">
-            <div className="sheet-actions toolbar-actions">
-              <button className="pill" type="button" onClick={() => setFilterOpen((current) => !current)}>Filter <ChevronRight /></button>
-              <button className="pill" type="button" onClick={() => { setActiveFilter(filterPresets[0]?.column ?? ''); setFilterText(''); setMessage('Filters reset.'); }}>Reset <ChevronRight /></button>
+          <div className="filter-panel">
+            <div className="filter-pills">
+              {filterPresets.map((preset) => (
+                <button
+                  className={`sheet-tab filter-pill ${activeFilter === preset.column ? 'active' : ''}`}
+                  type="button"
+                  key={preset.column}
+                  onClick={() => {
+                    setActiveFilter(preset.column);
+                    setFilterText('');
+                    setMessage(`${preset.label} selected.`);
+                  }}
+                >
+                  {preset.label}
+                </button>
+              ))}
             </div>
+            <input
+              className="lead-input compact-filter"
+              value={filterText}
+              onChange={(event) => setFilterText(event.target.value)}
+              placeholder={activeFilter ? `Search by ${activeFilter.toLowerCase()}...` : `Filter ${title.toLowerCase()}...`}
+            />
           </div>
-          {filterOpen && (
-            <div className="filter-panel">
-              <div className="filter-pills">
-                {filterPresets.map((preset) => (
-                  <button
-                    className={`sheet-tab filter-pill ${activeFilter === preset.column ? 'active' : ''}`}
-                    type="button"
-                    key={preset.column}
-                    onClick={() => {
-                      setActiveFilter(preset.column);
-                      setFilterText('');
-                      setMessage(`${preset.label} selected.`);
-                    }}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              <input
-                className="lead-input compact-filter"
-                value={filterText}
-                onChange={(event) => setFilterText(event.target.value)}
-                placeholder={activeFilter ? `Search by ${activeFilter.toLowerCase()}...` : `Filter ${title.toLowerCase()}...`}
-              />
-            </div>
-          )}
         </Card>
       )}
 
@@ -3719,4 +3720,3 @@ export function BranchesPage() {
     </section>
   );
 }
-
