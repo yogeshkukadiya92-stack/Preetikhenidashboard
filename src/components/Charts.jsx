@@ -1,5 +1,3 @@
-import { revenueSeries } from '../data/mockData.js';
-
 export function FunnelChart({ stages }) {
   if (!stages.length) {
     return (
@@ -34,8 +32,8 @@ export function FunnelChart({ stages }) {
   );
 }
 
-export function RevenueChart() {
-  if (!revenueSeries.length) {
+export function RevenueChart({ series = [] }) {
+  if (!series.length) {
     return (
       <div className="empty-state chart-empty">
         <strong>No revenue trend yet.</strong>
@@ -44,13 +42,13 @@ export function RevenueChart() {
     );
   }
 
-  const maxRevenue = Math.max(...revenueSeries.map((item) => item.revenue));
-  const maxCollections = Math.max(...revenueSeries.map((item) => item.collections));
+  const maxRevenue = Math.max(...series.map((item) => item.revenue), 1);
+  const maxCollections = Math.max(...series.map((item) => item.collections), 1);
   const width = 700;
   const height = 230;
-  const scaleX = 620 / (revenueSeries.length - 1);
-  const pointsRevenue = revenueSeries.map((item, index) => `${40 + index * scaleX},${190 - (item.revenue / maxRevenue) * 120}`);
-  const pointsCollections = revenueSeries.map((item, index) => `${40 + index * scaleX},${190 - (item.collections / maxCollections) * 110}`);
+  const scaleX = series.length > 1 ? 620 / (series.length - 1) : 0;
+  const pointsRevenue = series.map((item, index) => `${40 + index * scaleX},${190 - (item.revenue / maxRevenue) * 120}`);
+  const pointsCollections = series.map((item, index) => `${40 + index * scaleX},${190 - (item.collections / maxCollections) * 110}`);
   const areaPath = `M${pointsRevenue.join(' L ')} L 660 210 L 40 210 Z`;
 
   return (
@@ -77,12 +75,12 @@ export function RevenueChart() {
           <path d={`M${pointsRevenue.join(' L ')}`} fill="none" stroke="#0d5649" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
           <path d={`M${pointsCollections.join(' L ')}`} fill="none" stroke="#e19a22" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="7 8" />
           <g fill="#0d5649">
-            {revenueSeries.map((item, index) => (
+            {series.map((item, index) => (
               <circle key={item.label} cx={40 + index * scaleX} cy={190 - (item.revenue / maxRevenue) * 120} r="5" />
             ))}
           </g>
           <g fill="#e19a22">
-            {revenueSeries.map((item, index) => (
+            {series.map((item, index) => (
               <circle key={item.label} cx={40 + index * scaleX} cy={190 - (item.collections / maxCollections) * 110} r="5" />
             ))}
           </g>
@@ -90,13 +88,13 @@ export function RevenueChart() {
           <text x="14" y="146">50K</text>
           <text x="14" y="98">75K</text>
           <text x="8" y="50">100K</text>
-          {revenueSeries.map((item, index) => (
+          {series.map((item, index) => (
             <text key={item.label} x={15 + index * scaleX} y="225">{item.label}</text>
           ))}
           <rect x="622" y="58" width="64" height="28" rx="10" fill="#0d5649" />
-          <text x="631" y="77" fill="#fff">₹ 96,420</text>
+          <text x="631" y="77" fill="#fff">₹ {maxRevenue.toLocaleString('en-IN')}</text>
           <rect x="622" y="104" width="64" height="28" rx="10" fill="#e19a22" />
-          <text x="631" y="123" fill="#fff">₹ 72,380</text>
+          <text x="631" y="123" fill="#fff">₹ {maxCollections.toLocaleString('en-IN')}</text>
         </svg>
       </div>
     </div>
