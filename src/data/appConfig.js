@@ -29,10 +29,10 @@ export const integrations = [
   {
     name: 'Google Sheets',
     type: 'Spreadsheet sync',
-    status: 'Connected',
-    description: 'Automatically export leads, payments, and appointment updates into a live sheet.',
-    lastSync: 'Ready',
-    primaryAction: 'Open Sheet Link',
+    status: 'Available',
+    description: 'Export leads, payments, and appointment updates into a live sheet after API setup.',
+    lastSync: 'Credentials required',
+    primaryAction: 'Open Google Sheets',
   },
   {
     name: 'WhatsApp Business',

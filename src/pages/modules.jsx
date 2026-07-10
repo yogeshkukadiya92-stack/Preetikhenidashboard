@@ -24,7 +24,7 @@ import {
   services,
   treatmentPlans,
   users,
-} from '../data/mockData.js';
+} from '../data/appConfig.js';
 
 function downloadText(filename, content, mimeType = 'text/plain;charset=utf-8') {
   const blob = new Blob([content], { type: mimeType });
@@ -105,8 +105,10 @@ function ImportExportModule({
 }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const storageKey = `ayurflow:${filenameBase}:rows:v3`;
-  const [rows, setRows] = useState(() => loadSavedArray(storageKey, seedRows));
+  const { branchKey } = useBranch();
+  const legacyStorageKey = `ayurflow:${filenameBase}:rows:v3`;
+  const storageKey = branchKey(`${filenameBase}:rows:v3`);
+  const [rows, setRows] = useState(() => loadSavedArray(storageKey, loadSavedArray(legacyStorageKey, seedRows)));
   const [preview, setPreview] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
   const [message, setMessage] = useState('Ready to import or export data.');
@@ -3471,12 +3473,12 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
 export function IntegrationsPage() {
   const [activeTab, setActiveTab] = useState(sheetTabs[0]);
   const [connectedApps, setConnectedApps] = useState(() => integrations.filter((integration) => integration.status === 'Connected').map((integration) => integration.name));
-  const [syncMessage, setSyncMessage] = useState('Google Sheets sync is healthy.');
+  const [syncMessage, setSyncMessage] = useState('Connect provider credentials before enabling live sync.');
   const preview = useMemo(() => syncPreviewRows, []);
 
   const handleIntegrationAction = async (integration) => {
     if (integration.name === 'Google Sheets') {
-      setSyncMessage('Google Sheets opened in a new tab.');
+      setSyncMessage('Google Sheets opened. Add API credentials before enabling automatic sync.');
       window.open('https://docs.google.com/spreadsheets/', '_blank', 'noopener,noreferrer');
       return;
     }
@@ -3561,10 +3563,10 @@ export function IntegrationsPage() {
             </div>
             <div className="sheet-panel">
               <div className="sheet-copy">
-                <strong>Auto-sync enabled for {activeTab.toLowerCase()}.</strong>
-                <p>Every change in the CRM can be pushed into a Google Sheet so your staff can continue reporting in spreadsheets without duplicate entry.</p>
+                <strong>Google Sheets setup for {activeTab.toLowerCase()}.</strong>
+                <p>Every change in the CRM can be pushed into a Google Sheet after provider credentials and webhook delivery are configured.</p>
                 <div className="sheet-actions">
-                  <button className="pill" type="button" onClick={() => { setConnectedApps((current) => Array.from(new Set([...current, 'Google Sheets']))); setSyncMessage(`Google account connected for ${activeTab}.`); }}>Connect Google Account <ChevronRight /></button>
+                  <button className="pill" type="button" onClick={() => { setSyncMessage(`Google credentials are required before ${activeTab} can sync automatically.`); }}>Check Setup <ChevronRight /></button>
                   <button className="pill" type="button" onClick={() => { setSyncMessage(`Google Sheets opened for ${activeTab}.`); window.open('https://docs.google.com/spreadsheets/', '_blank', 'noopener,noreferrer'); }}>Open Google Sheets <ChevronRight /></button>
                 </div>
               </div>
@@ -3579,7 +3581,7 @@ export function IntegrationsPage() {
                 </div>
                 <div className="mini-stat">
                   <span>Update frequency</span>
-                  <strong>Every 2 min</strong>
+                  <strong>After setup</strong>
                 </div>
               </div>
             </div>
@@ -3708,7 +3710,6 @@ export function BranchesPage() {
     </section>
   );
 }
-
 
 
 

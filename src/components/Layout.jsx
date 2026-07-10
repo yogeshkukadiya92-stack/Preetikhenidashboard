@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { BellIcon, CalendarIcon, ChartIcon, ChevronRight, FileIcon, HomeIcon, MoneyIcon, SearchIcon, SettingsIcon, UsersIcon } from './icons.jsx';
-import { navItems } from '../data/mockData.js';
+import { navItems } from '../data/appConfig.js';
 import { useBranch } from '../context/BranchContext.jsx';
 
 const iconByPath = {
