@@ -260,14 +260,7 @@ function ImportExportModule({
         </div>
       </div>
 
-      <Card
-        title={`${title} Controls`}
-        subtitle={message}
-        className="compact-action-card module-command-card"
-        action={<ActionMenu label="Actions" items={moduleActions} />}
-      >
-        <input ref={bannerFileInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
-      </Card>
+      <input ref={bannerFileInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
 
       {extraTopCard}
 
@@ -301,8 +294,8 @@ function ImportExportModule({
       )}
 
       <div className="grid single-module-grid">
-        <Card title={`Current ${title}`} subtitle={`Live records currently stored in ${title.toLowerCase()}.`}>
-          <div className="table">
+        <Card title={`Current ${title}`} subtitle={message} action={<ActionMenu label="Actions" items={moduleActions} />}>
+          <div className="table adaptive-table" style={{ '--table-columns': headers.length }}>
             <div className="table-head">
               {headers.map((header) => <div key={header}>{header}</div>)}
               <div />
@@ -386,7 +379,7 @@ function ImportExportModule({
                 <strong>{preview.length}</strong>
               </div>
             </div>
-            <div className="modal-table">
+            <div className="modal-table adaptive-table" style={{ '--table-columns': headers.length }}>
               <div className="table-head">
                 {headers.map((header) => <div key={header}>{header}</div>)}
                 <div />
@@ -541,6 +534,7 @@ export function CRMPage() {
   };
 
   const deleteManualLead = (index) => {
+    if (!window.confirm('Delete this lead? This action cannot be undone.')) return;
     setManualLeads((current) => current.filter((_, idx) => idx !== index));
     setMessage('Lead deleted successfully.');
     if (editingIndex === index) {
@@ -610,6 +604,10 @@ export function CRMPage() {
     setActiveTab('leads');
     setShowLeads(true);
   };
+  const leadActions = [
+    { label: 'Add lead', description: 'Create a CRM lead', onClick: openCreateLead },
+    { label: showLeads ? 'Hide lead list' : 'Show lead list', description: 'Change list visibility', onClick: () => setShowLeads((current) => !current) },
+  ];
 
   return (
     <section className="module-page">
@@ -632,18 +630,9 @@ export function CRMPage() {
       </div>
 
       {activeTab === 'leads' ? (
-        <>
-          <Card title="Lead Actions" subtitle="Only the daily CRM actions stay visible here.">
-            <div className="sheet-actions">
-              <button className="pill" type="button" onClick={openCreateLead}>Add Lead <ChevronRight /></button>
-              <button className="pill" type="button" onClick={() => setShowLeads((current) => !current)}>{showLeads ? 'Hide Leads' : 'Show Leads'} <ChevronRight /></button>
-              <div className="mini-stat"><span>Manual leads</span><strong>{manualLeads.length}</strong></div>
-            </div>
-          </Card>
-
-        <Card title="Current Leads" subtitle="Lead records you create or import stay editable in this CRM.">
+        <Card title="Current Leads" subtitle={`${manualLeads.length} manual lead(s). ${message}`} action={<ActionMenu label="Actions" items={leadActions} />}>
             {showLeads ? (
-              <div className="table">
+              <div className="table adaptive-table" style={{ '--table-columns': headers.length }}>
                 <div className="table-head">
                   {headers.map((header) => <div key={header}>{header}</div>)}
                   <div />
@@ -658,15 +647,16 @@ export function CRMPage() {
                       <div>{lead.addedOn}</div>
                       <div>
                         {lead.__manual ? (
-                          <div className="row-actions">
-                            <button type="button" className="row-link" onClick={() => startEditLead(manualLeads[lead.__manualIndex], lead.__manualIndex)}>Edit</button>
-                            <button type="button" className="row-link danger" onClick={() => deleteManualLead(lead.__manualIndex)}>Delete</button>
-                          </div>
+                          <ActionMenu
+                            compact
+                            label={`Actions for ${lead.name}`}
+                            items={[
+                              { label: 'Edit lead', onClick: () => startEditLead(manualLeads[lead.__manualIndex], lead.__manualIndex) },
+                              { label: 'Delete lead', description: 'Permanently remove this lead', danger: true, onClick: () => deleteManualLead(lead.__manualIndex) },
+                            ]}
+                          />
                         ) : (
-                          <>
-                            <button type="button" className="row-link" onClick={() => setSelectedRecord(lead)}>View</button>
-                            <Tag tone={leadPriorityTone(lead.status)}>System</Tag>
-                          </>
+                          <ActionMenu compact label={`Actions for ${lead.name}`} items={[{ label: 'View lead', onClick: () => setSelectedRecord(lead) }]} />
                         )}
                       </div>
                     </div>
@@ -681,23 +671,22 @@ export function CRMPage() {
             ) : (
               <div className="empty-state">
                 <strong>Leads are hidden.</strong>
-                <p>Use Show Leads when you want the full CRM list back on screen.</p>
+                <p>Use Actions, then Show lead list, when you want the full CRM list back on screen.</p>
               </div>
             )}
           </Card>
-        </>
       ) : (
-        <div className="grid" style={{ gridTemplateColumns: '1fr 0.9fr', alignItems: 'start' }}>
+        <div className="grid two-column-module-grid">
           <Card title="Import / Export Leads" subtitle="Hidden from the main CRM view to keep daily work clean.">
             <div className="import-banner">
               <div>
                 <strong>Spreadsheet tools are ready.</strong>
                 <p>Export the current leads or import a CSV/JSON file when the team needs bulk updates.</p>
               </div>
-              <div className="sheet-actions">
-                <button className="pill" type="button" onClick={exportCsv}>Export CSV <ChevronRight /></button>
-                <button className="pill" type="button" onClick={exportJson}>Export JSON <ChevronRight /></button>
-              </div>
+              <ActionMenu label="Export" items={[
+                { label: 'Export CSV', description: 'Spreadsheet-compatible file', onClick: exportCsv },
+                { label: 'Export JSON', description: 'Structured backup file', onClick: exportJson },
+              ]} />
             </div>
           </Card>
 
@@ -742,7 +731,7 @@ export function CRMPage() {
               </div>
               <button className="icon-btn" type="button" onClick={() => setModalOpen(false)} aria-label="Close modal">x</button>
             </div>
-            <div className="modal-table">
+            <div className="modal-table adaptive-table" style={{ '--table-columns': headers.length }}>
               <div className="table-head">
                 {headers.map((header) => <div key={header}>{header}</div>)}
                 <div />
@@ -883,13 +872,18 @@ function ClientProfile({ client, onBack }) {
   return (
     <section className="module-page">
       <div className="module-hero">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <button className="pill" type="button" onClick={onBack}>← Back</button>
           <div className="client-avatar">{clientName.charAt(0).toUpperCase()}</div>
           <div>
             <h1>{clientName}</h1>
             <p>{client.program || 'No program'} · Age: {client.age || '—'} · Next Visit: {client.nextVisit || '—'}</p>
           </div>
+          <ActionMenu label="Actions" items={[
+            { label: 'Add treatment plan', description: `Create a plan for ${clientName}`, onClick: () => setTreatModal(true) },
+            { label: 'Book appointment', description: `Schedule a visit for ${clientName}`, onClick: () => setApptModal(true) },
+            { label: 'Add payment', description: `Record a payment for ${clientName}`, onClick: () => setPayModal(true) },
+          ]} />
         </div>
         <div className="module-stats">
           <div className="mini-stat"><span>Treatments</span><strong>{allTreatments.length}</strong></div>
@@ -897,14 +891,6 @@ function ClientProfile({ client, onBack }) {
           <div className="mini-stat"><span>Payments</span><strong>{allPayments.length}</strong></div>
         </div>
       </div>
-
-      <Card title="Quick Actions" className="compact-action-card single-row-actions">
-        <div className="import-banner compact-import-banner">
-          <button className="pill" type="button" onClick={() => setTreatModal(true)}>Add Treatment Plan <ChevronRight /></button>
-          <button className="pill" type="button" onClick={() => setApptModal(true)}>Book Appointment <ChevronRight /></button>
-          <button className="pill" type="button" onClick={() => setPayModal(true)}>Add Payment <ChevronRight /></button>
-        </div>
-      </Card>
 
       <div className="sheet-tabs">
         {[['overview', 'Overview'], ['treatments', 'Treatments'], ['appointments', 'Appointments'], ['payments', 'Payments']].map(([id, label]) => (
@@ -930,7 +916,7 @@ function ClientProfile({ client, onBack }) {
 
       {activeTab === 'treatments' && (
         <Card title="Treatment Plans" subtitle={`Plans linked to ${clientName}`}>
-          <div className="table">
+          <div className="table adaptive-table" style={{ '--table-columns': 7 }}>
             <div className="table-head">
               {['Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing', 'Status'].map((h) => <div key={h}>{h}</div>)}
               <div />
@@ -949,7 +935,7 @@ function ClientProfile({ client, onBack }) {
             )) : (
               <div className="empty-state compact-empty table-empty">
                 <strong>No treatment plans yet.</strong>
-                <p>Click Add Treatment Plan above to create one.</p>
+                <p>Use Actions, then Add treatment plan, to create one.</p>
               </div>
             )}
           </div>
@@ -958,7 +944,7 @@ function ClientProfile({ client, onBack }) {
 
       {activeTab === 'appointments' && (
         <Card title="Appointments" subtitle={`Appointments linked to ${clientName}`}>
-          <div className="table">
+          <div className="table adaptive-table" style={{ '--table-columns': 5 }}>
             <div className="table-head">
               {['Date', 'Time', 'Type', 'Mobile', 'Status'].map((h) => <div key={h}>{h}</div>)}
               <div />
@@ -975,7 +961,7 @@ function ClientProfile({ client, onBack }) {
             )) : (
               <div className="empty-state compact-empty table-empty">
                 <strong>No appointments yet.</strong>
-                <p>Click Book Appointment above to schedule one.</p>
+                <p>Use Actions, then Book appointment, to schedule one.</p>
               </div>
             )}
           </div>
@@ -984,7 +970,7 @@ function ClientProfile({ client, onBack }) {
 
       {activeTab === 'payments' && (
         <Card title="Payments" subtitle={`Payments linked to ${clientName}`}>
-          <div className="table">
+          <div className="table adaptive-table" style={{ '--table-columns': 4 }}>
             <div className="table-head">
               {['Invoice', 'Amount', 'Status', 'Paid On'].map((h) => <div key={h}>{h}</div>)}
               <div />
@@ -1000,7 +986,7 @@ function ClientProfile({ client, onBack }) {
             )) : (
               <div className="empty-state compact-empty table-empty">
                 <strong>No payments yet.</strong>
-                <p>Click Add Payment above to record one.</p>
+                <p>Use Actions, then Add payment, to record one.</p>
               </div>
             )}
           </div>
@@ -1243,6 +1229,7 @@ export function UsersPage() {
   const [statusMessage, setStatusMessage] = useState('Ready to import or export users.');
   const [dropActive, setDropActive] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('team');
 
   useEffect(() => {
     try {
@@ -1332,20 +1319,12 @@ export function UsersPage() {
         </div>
       </div>
 
-      <Card title="Import / Export Banner" subtitle="Bring users in from a spreadsheet or download the roster for backup.">
-        <div className="import-banner">
-          <div>
-            <strong>Multi-user upload is ready.</strong>
-            <p>Upload a CSV/JSON file containing multiple staff records, review the preview, then import them into the app.</p>
-          </div>
-          <div className="sheet-actions">
-            <button className="pill" onClick={exportCsv} type="button">Export CSV <ChevronRight /></button>
-            <button className="pill" onClick={exportJson} type="button">Export JSON <ChevronRight /></button>
-          </div>
-        </div>
-      </Card>
+      <div className="sheet-tabs">
+        <button className={`sheet-tab ${activeTab === 'team' ? 'active' : ''}`} type="button" onClick={() => setActiveTab('team')}>Current Team</button>
+        <button className={`sheet-tab ${activeTab === 'import' ? 'active' : ''}`} type="button" onClick={() => setActiveTab('import')}>Import Users</button>
+      </div>
 
-      <div className="grid" style={{ gridTemplateColumns: '1fr 0.9fr', alignItems: 'start' }}>
+      {activeTab === 'import' ? (
         <Card title="Bulk Upload Users" subtitle="Choose a .csv or .json file with Name, Role, Email, Status columns.">
           <div className="upload-box">
             <label
@@ -1384,9 +1363,16 @@ export function UsersPage() {
             </div>
           </div>
         </Card>
-
-        <Card title="Current Team" subtitle="Live roster in the app right now.">
-          <div className="table">
+      ) : (
+        <Card
+          title="Current Team"
+          subtitle={statusMessage}
+          action={<ActionMenu label="Export" items={[
+            { label: 'Export CSV', description: 'Spreadsheet-compatible team list', onClick: exportCsv },
+            { label: 'Export JSON', description: 'Structured team backup', onClick: exportJson },
+          ]} />}
+        >
+          <div className="table adaptive-table" style={{ '--table-columns': 4 }}>
             <div className="table-head">
               <div>Name</div>
               <div>Role</div>
@@ -1412,7 +1398,7 @@ export function UsersPage() {
             )}
           </div>
         </Card>
-      </div>
+      )}
 
       {modalOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalOpen(false)}>
@@ -1434,7 +1420,7 @@ export function UsersPage() {
                 <strong>{importPreview.length}</strong>
               </div>
             </div>
-            <div className="modal-table">
+            <div className="modal-table adaptive-table" style={{ '--table-columns': 4 }}>
               <div className="table-head">
                 <div>Name</div>
                 <div>Role</div>
@@ -1471,6 +1457,7 @@ export function UsersPage() {
 }
 
 function ModuleHubPage({ title, description, tabs, defaultTab }) {
+  const { branchKey } = useBranch();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
   const queryAction = searchParams.get('action');
@@ -1488,10 +1475,13 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const [uploadName, setUploadName] = useState('No file selected');
   const [draftRow, setDraftRow] = useState(tabs[0]?.columns?.map(() => '') ?? []);
   const [editRow, setEditRow] = useState([]);
-  const [fixedMedicineByService, setFixedMedicineByService] = useState(() => loadSavedObject(`ayurflow:${title}:treatment-medicines:v2`, {}));
+  const fixedMedicineStorageKey = branchKey(`${title}:treatment-medicines:v2`);
+  const legacyMedicineStorageKey = `ayurflow:${title}:treatment-medicines:v2`;
+  const [fixedMedicineByService, setFixedMedicineByService] = useState(() => loadSavedObject(fixedMedicineStorageKey, loadSavedObject(legacyMedicineStorageKey, {})));
   const [rxDraft, setRxDraft] = useState([{ medicine: '', dose: '', timing: 'Morning', schedule: 'Daily' }]);
-  const storageKey = `ayurflow:${title}:tabs:v3`;
-  const [rowsByTab, setRowsByTab] = useState(() => loadSavedObject(storageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows]))));
+  const storageKey = branchKey(`${title}:tabs:v3`);
+  const legacyStorageKey = `ayurflow:${title}:tabs:v3`;
+  const [rowsByTab, setRowsByTab] = useState(() => loadSavedObject(storageKey, loadSavedObject(legacyStorageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows])))));
   const importInputRef = useRef(null);
 
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
@@ -1536,11 +1526,11 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(`ayurflow:${title}:treatment-medicines:v2`, JSON.stringify(fixedMedicineByService));
+      window.localStorage.setItem(fixedMedicineStorageKey, JSON.stringify(fixedMedicineByService));
     } catch {
       setMessage('Local browser storage is full or blocked.');
     }
-  }, [fixedMedicineByService, title]);
+  }, [fixedMedicineByService, fixedMedicineStorageKey]);
 
   const filteredRows = activeRows.filter((row) => {
     if (!filterText) return true;
@@ -1690,6 +1680,13 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       setMessage(`${active.label} share link copied.`);
     }
   };
+  const hubActions = [
+    { label: `Add ${active.singular ?? active.label}`, description: `Create a new ${active.label.toLowerCase()} record`, onClick: () => runAction('Add') },
+    { label: 'Import CSV/JSON', description: 'Upload records in bulk', onClick: () => runAction('Import') },
+    { label: 'Export CSV', description: 'Download current records', onClick: () => runAction('Export') },
+    { label: filterOpen ? 'Hide filters' : 'Show filters', description: 'Search and narrow this section', onClick: () => runAction('Filter') },
+    { label: 'Share summary', description: 'Copy the current record count', onClick: () => runAction('Share') },
+  ];
 
   useEffect(() => {
     const nextTab = tabs.some((tab) => tab.id === queryTab) ? queryTab : defaultTab;
@@ -1857,21 +1854,14 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
         </div>
       </div>
 
-      <Card title={`${title} Menu`} subtitle="Sub-pages are kept inside tabs so the sidebar stays clean.">
+      <Card title={`${title} Menu`} subtitle={message} action={<ActionMenu label="Actions" items={hubActions} />}>
         <input ref={importInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
-        <div className="module-toolbar">
-          <div className="sheet-tabs compact-tabs">
-            {tabs.map((tab) => (
-              <button className={`sheet-tab ${active.id === tab.id ? 'active' : ''}`} type="button" key={tab.id} onClick={() => selectTab(tab.id)}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div className="sheet-actions toolbar-actions">
-            {['Add', 'Import', 'Export', 'Filter', 'Share'].map((action) => (
-              <button className="pill" type="button" key={action} onClick={() => runAction(action)}>{action} <ChevronRight /></button>
-            ))}
-          </div>
+        <div className="sheet-tabs compact-tabs">
+          {tabs.map((tab) => (
+            <button className={`sheet-tab ${active.id === tab.id ? 'active' : ''}`} type="button" key={tab.id} onClick={() => selectTab(tab.id)}>
+              {tab.label}
+            </button>
+          ))}
         </div>
         {filterOpen && (
           <div className="filter-panel">
@@ -1913,7 +1903,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       )}
 
       <Card title={active.title ?? active.label} subtitle={active.description}>
-        <div className="data-table">
+        <div className="data-table adaptive-table" style={{ '--table-columns': active.columns.length }}>
           <div className="table-head">
             {active.columns.map((column) => <div key={column}>{column}</div>)}
             <div />
@@ -1935,11 +1925,23 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       </Card>
 
       {active.id === 'treatments' && (
-        <Card title="Printable Summary" subtitle="Copy or print the current treatment prescription in a clean format.">
-          <div className="sheet-actions">
-            <button className="pill" type="button" onClick={() => window.print()}>Print Summary <ChevronRight /></button>
-            <button className="pill" type="button" onClick={() => navigator.clipboard?.writeText(rxSummary(rxDraft)).catch(() => {})}>Copy Rx Text <ChevronRight /></button>
-          </div>
+        <Card title="Printable Summary" subtitle="Copy or print the current treatment prescription in a clean format." action={<ActionMenu label="Actions" items={[
+          { label: 'Print summary', onClick: () => window.print() },
+          {
+            label: 'Copy prescription text',
+            disabled: !rxSummary(rxDraft),
+            onClick: () => {
+              const copyRequest = navigator.clipboard?.writeText(rxSummary(rxDraft));
+              if (!copyRequest) {
+                setMessage('Clipboard access is unavailable.');
+                return;
+              }
+              copyRequest
+                .then(() => setMessage('Prescription text copied.'))
+                .catch(() => setMessage('Clipboard permission was blocked.'));
+            },
+          },
+        ]} />}>
           <div className="empty-state compact-empty" style={{ marginTop: '1rem' }}>
             <strong>{rxSummary(rxDraft) || 'No prescription rows yet.'}</strong>
             <p>Use the builder above to create a printable treatment summary.</p>
@@ -2034,7 +2036,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
                           </div>
                           <button className="row-link danger" type="button" onClick={() => removeRxRow(index)}>Remove</button>
                         </div>
-                        <div className="grid" style={{ gridTemplateColumns: '1.2fr 0.75fr 1fr 0.75fr', gap: '0.75rem' }}>
+                        <div className="rx-grid">
                           <select className="lead-input" value={item.medicine} onChange={(event) => updateRxMedicine(index, event.target.value)}>
                             <option value="">Select medicine</option>
                             {medicineOptions.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -2112,7 +2114,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
               </div>
               <button className="icon-btn" type="button" onClick={() => setImportOpen(false)} aria-label="Close modal">x</button>
             </div>
-            <div className="modal-table">
+            <div className="modal-table adaptive-table" style={{ '--table-columns': active.columns.length }}>
               <div className="table-head">
                 {active.columns.map((column) => <div key={column}>{column}</div>)}
                 <div />
@@ -2360,7 +2362,10 @@ export function FormsPage() {
     setView('list');
   };
 
-  const deleteForm = (id) => setForms((prev) => prev.filter((f) => f.id !== id));
+  const deleteForm = (id) => {
+    if (!window.confirm('Delete this form? This action cannot be undone.')) return;
+    setForms((prev) => prev.filter((f) => f.id !== id));
+  };
 
   const toggleStatus = (id) => setForms((prev) =>
     prev.map((f) => (f.id === id ? { ...f, status: f.status === 'Published' ? 'Draft' : 'Published' } : f)));
@@ -2547,15 +2552,9 @@ export function FormsPage() {
         </div>
       </div>
 
-      <Card title="Form Actions" className="compact-action-card">
-        <div className="sheet-actions">
-          <button className="pill" type="button" onClick={startCreate}>Create New Form <ChevronRight /></button>
-        </div>
-      </Card>
-
-      <Card title="All Forms" subtitle="Preview to see how it looks, Edit to change fields.">
+      <Card title="All Forms" subtitle="Preview forms, edit fields, or change publishing status." action={<ActionMenu label="Actions" items={[{ label: 'Create new form', description: 'Open the form builder', onClick: startCreate }]} />}>
         {forms.length ? (
-          <div className="data-table">
+          <div className="data-table adaptive-table" style={{ '--table-columns': 4 }}>
             <div className="table-head">
               <div>Form Name</div><div>Fields</div><div>Status</div><div>Updated</div><div />
             </div>
@@ -2569,14 +2568,16 @@ export function FormsPage() {
                 <div><Tag tone={form.status === 'Published' ? 'tag-contacted' : 'tag-follow'}>{form.status}</Tag></div>
                 <div>{form.updatedAt ?? form.createdAt ?? '—'}</div>
                 <div>
-                  <div className="row-actions">
-                    <button className="row-link" type="button" onClick={() => openPreview(form)}>Preview</button>
-                    <button className="row-link" type="button" onClick={() => startEdit(form)}>Edit</button>
-                    <button className="row-link" type="button" onClick={() => toggleStatus(form.id)}>
-                      {form.status === 'Published' ? 'Unpublish' : 'Publish'}
-                    </button>
-                    <button className="row-link danger" type="button" onClick={() => deleteForm(form.id)}>Delete</button>
-                  </div>
+                  <ActionMenu
+                    compact
+                    label={`Actions for ${form.title}`}
+                    items={[
+                      { label: 'Preview form', onClick: () => openPreview(form) },
+                      { label: 'Edit form', onClick: () => startEdit(form) },
+                      { label: form.status === 'Published' ? 'Unpublish form' : 'Publish form', onClick: () => toggleStatus(form.id) },
+                      { label: 'Delete form', description: 'Permanently remove this form', danger: true, onClick: () => deleteForm(form.id) },
+                    ]}
+                  />
                 </div>
               </div>
             ))}
@@ -2584,7 +2585,7 @@ export function FormsPage() {
         ) : (
           <div className="empty-state compact-empty table-empty">
             <strong>No forms created yet.</strong>
-            <p>Click "Create New Form" to build your first intake form, assessment, or registration template.</p>
+            <p>Use Actions, then Create new form, to build your first intake form or assessment.</p>
           </div>
         )}
       </Card>
@@ -2631,12 +2632,11 @@ export function AppointmentsPage() {
         },
       ]}
       rowActions={(row, setSelectedRow, setActionMessage) => (
-        <div className="row-actions">
-          <button className="row-link" type="button" onClick={() => setSelectedRow(row[0])}>View</button>
-          <button
-            className="row-link"
-            type="button"
-            onClick={() => {
+        <ActionMenu compact label={`Actions for ${row[0] || 'appointment'}`} items={[
+          { label: 'View appointment', onClick: () => setSelectedRow(row[0]) },
+          {
+            label: 'Send WhatsApp reminder',
+            onClick: () => {
               const phone = String(row[1] ?? '').replace(/\D/g, '');
               const text = encodeURIComponent(`Hello ${row[0]}, your appointment for ${row[4]} on ${row[2]} at ${row[3]} is scheduled.`);
               if (!phone) {
@@ -2645,11 +2645,9 @@ export function AppointmentsPage() {
               }
               setActionMessage(`Opening WhatsApp for ${row[0]}.`);
               window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer');
-            }}
-          >
-            WhatsApp
-          </button>
-        </div>
+            },
+          },
+        ]} />
       )}
     />
   );
@@ -2737,6 +2735,23 @@ export function TreatmentPlansPage() {
     setTemplateForm(blankTemplate);
   };
 
+  const openNewPlan = () => {
+    setPlanForm(blankPlan);
+    setEditingPlanIndex(null);
+    setPlanModal(true);
+  };
+
+  const openNewTemplate = () => {
+    setTemplateForm(blankTemplate);
+    setEditingTemplateIndex(null);
+    setTemplateModal(true);
+  };
+
+  const deleteTemplate = (index) => {
+    if (!window.confirm('Delete this treatment template?')) return;
+    setTemplates((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
+
   const PLAN_COLS = ['Client', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing', 'Status'];
   const TMPL_COLS = ['Template Name', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing'];
 
@@ -2760,14 +2775,8 @@ export function TreatmentPlansPage() {
       </div>
 
       {activeTab === 'plans' && (
-        <>
-          <Card title="Actions" className="compact-action-card single-row-actions">
-            <div className="import-banner compact-import-banner">
-              <button className="pill" type="button" onClick={() => { setPlanForm(blankPlan); setEditingPlanIndex(null); setPlanModal(true); }}>Add Treatment Plan <ChevronRight /></button>
-            </div>
-          </Card>
-          <Card title="Treatment Plans" subtitle="All client treatment records. Click Edit to update any plan.">
-            <div className="table">
+        <Card title="Treatment Plans" subtitle="All client treatment records." action={<ActionMenu label="Actions" items={[{ label: 'Add treatment plan', description: 'Create a new client plan', onClick: openNewPlan }]} />}>
+            <div className="table adaptive-table" style={{ '--table-columns': PLAN_COLS.length }}>
               <div className="table-head">
                 {PLAN_COLS.map((h) => <div key={h}>{h}</div>)}
                 <div />
@@ -2776,7 +2785,7 @@ export function TreatmentPlansPage() {
                 <div className="data-row" key={i}>
                   {[row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7] ?? row[4]].map((cell, ci) => <div key={ci}>{cell}</div>)}
                   <div>
-                    <button className="row-link" type="button" onClick={() => openEditPlan(row, i)}>Edit</button>
+                    <ActionMenu compact label={`Actions for ${row[0] || 'treatment plan'}`} items={[{ label: 'Edit treatment plan', onClick: () => openEditPlan(row, i) }]} />
                   </div>
                 </div>
               )) : (
@@ -2787,18 +2796,11 @@ export function TreatmentPlansPage() {
               )}
             </div>
           </Card>
-        </>
       )}
 
       {activeTab === 'templates' && (
-        <>
-          <Card title="Actions" className="compact-action-card single-row-actions">
-            <div className="import-banner compact-import-banner">
-              <button className="pill" type="button" onClick={() => { setTemplateForm(blankTemplate); setEditingTemplateIndex(null); setTemplateModal(true); }}>Add Template <ChevronRight /></button>
-            </div>
-          </Card>
-          <Card title="Treatment Templates" subtitle="Reusable presets. Select a template when adding a plan to auto-fill all fields.">
-            <div className="table">
+        <Card title="Treatment Templates" subtitle="Reusable presets that auto-fill treatment details." action={<ActionMenu label="Actions" items={[{ label: 'Add template', description: 'Create a reusable preset', onClick: openNewTemplate }]} />}>
+            <div className="table adaptive-table" style={{ '--table-columns': TMPL_COLS.length }}>
               <div className="table-head">
                 {TMPL_COLS.map((h) => <div key={h}>{h}</div>)}
                 <div />
@@ -2806,9 +2808,11 @@ export function TreatmentPlansPage() {
               {templates.length ? templates.map((t, i) => (
                 <div className="data-row" key={i}>
                   {[t.name, t.service, t.goal, t.duration, t.medicine, t.dose, t.timing].map((cell, ci) => <div key={ci}>{cell}</div>)}
-                  <div className="row-actions">
-                    <button className="row-link" type="button" onClick={() => { setTemplateForm({ ...t }); setEditingTemplateIndex(i); setTemplateModal(true); }}>Edit</button>
-                    <button className="row-link danger" type="button" onClick={() => setTemplates((current) => current.filter((_, idx) => idx !== i))}>Delete</button>
+                  <div>
+                    <ActionMenu compact label={`Actions for ${t.name || 'template'}`} items={[
+                      { label: 'Edit template', onClick: () => { setTemplateForm({ ...t }); setEditingTemplateIndex(i); setTemplateModal(true); } },
+                      { label: 'Delete template', description: 'Permanently remove this preset', danger: true, onClick: () => deleteTemplate(i) },
+                    ]} />
                   </div>
                 </div>
               )) : (
@@ -2819,7 +2823,6 @@ export function TreatmentPlansPage() {
               )}
             </div>
           </Card>
-        </>
       )}
 
       {planModal && (
@@ -2942,8 +2945,10 @@ export function TreatmentPlansPage() {
 }
 
 export function MedicinesPage() {
+  const { branchKey } = useBranch();
+  const catalogStorageKey = branchKey('Operations:tabs:v3');
   const [catalog, setCatalog] = useState(() => {
-    const saved = loadSavedObject('ayurflow:Operations:tabs:v3', {});
+    const saved = loadSavedObject(catalogStorageKey, loadSavedObject('ayurflow:Operations:tabs:v3', {}));
     return Array.isArray(saved.medicines) ? saved.medicines : [];
   });
   const [draft, setDraft] = useState({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
@@ -2952,12 +2957,12 @@ export function MedicinesPage() {
 
   useEffect(() => {
     try {
-      const saved = loadSavedObject('ayurflow:Operations:tabs:v3', {});
-      window.localStorage.setItem('ayurflow:Operations:tabs:v3', JSON.stringify({ ...saved, medicines: catalog }));
+      const saved = loadSavedObject(catalogStorageKey, loadSavedObject('ayurflow:Operations:tabs:v3', {}));
+      window.localStorage.setItem(catalogStorageKey, JSON.stringify({ ...saved, medicines: catalog }));
     } catch {
       setMessage('Local browser storage is full or blocked.');
     }
-  }, [catalog]);
+  }, [catalog, catalogStorageKey]);
 
   const save = () => {
     if (!draft.Medicine.trim()) {
@@ -2979,7 +2984,14 @@ export function MedicinesPage() {
     setDraft(row);
   };
 
+  const resetDraft = () => {
+    setSelectedIndex(null);
+    setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
+    setMessage('Medicine form reset.');
+  };
+
   const remove = (index) => {
+    if (!window.confirm('Delete this medicine from the shared catalog?')) return;
     setCatalog((current) => current.filter((_, itemIndex) => itemIndex !== index));
     setMessage('Medicine removed.');
     if (selectedIndex === index) {
@@ -3001,7 +3013,11 @@ export function MedicinesPage() {
           <div className="mini-stat"><span>Scope</span><strong>Shared</strong></div>
         </div>
       </div>
-      <Card title={selectedIndex === null ? 'Add Medicine' : 'Edit Medicine'} subtitle="This catalog feeds the treatment preset builder.">
+      <Card
+        title={selectedIndex === null ? 'Add Medicine' : 'Edit Medicine'}
+        subtitle="This catalog feeds the treatment preset builder."
+        action={<ActionMenu label="More" items={[{ label: 'Reset form', description: 'Clear the current medicine draft', onClick: resetDraft }]} />}
+      >
         <div className="modal-body detail-grid">
           {['Medicine', 'Category', 'Default Dose', 'Timing', 'Status'].map((field) => (
             <label className="field-block" key={field}>
@@ -3017,11 +3033,10 @@ export function MedicinesPage() {
         </div>
         <div className="sheet-actions">
           <button className="pill" type="button" onClick={save}>Save Medicine <ChevronRight /></button>
-          <button className="pill" type="button" onClick={() => { setSelectedIndex(null); setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' }); }}>Reset <ChevronRight /></button>
         </div>
       </Card>
       <Card title="Medicine Catalog" subtitle="Edit or remove shared medicines used in treatment presets.">
-        <div className="table">
+        <div className="table adaptive-table" style={{ '--table-columns': 5 }}>
           <div className="table-head">
             <div>Medicine</div>
             <div>Category</div>
@@ -3037,9 +3052,11 @@ export function MedicinesPage() {
               <div>{row['Default Dose']}</div>
               <div>{row.Timing}</div>
               <div>{row.Status}</div>
-              <div className="row-actions">
-                <button className="row-link" type="button" onClick={() => openEdit(row, index)}>Edit</button>
-                <button className="row-link danger" type="button" onClick={() => remove(index)}>Delete</button>
+              <div>
+                <ActionMenu compact label={`Actions for ${row.Medicine || 'medicine'}`} items={[
+                  { label: 'Edit medicine', onClick: () => openEdit(row, index) },
+                  { label: 'Delete medicine', description: 'Remove it from treatment presets', danger: true, onClick: () => remove(index) },
+                ]} />
               </div>
             </div>
           )) : (
@@ -3178,40 +3195,41 @@ export function SettingsPage() {
 }
 
 export function ReportsPage() {
+  const { branchKey, currentBranch } = useBranch();
   const [activeReport, setActiveReport] = useState('appointments');
   const [financeSubTab, setFinanceSubTab] = useState('payments');
 
   const today = new Date().toISOString().slice(0, 10);
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  // Load data from all localStorage sources (standalone + hub)
-  const opsTabs = loadSavedState('ayurflow:Operations:tabs:v2', {});
-  const finTabs = loadSavedState('ayurflow:Finance:tabs:v2', {});
+  // Read current branch data first and keep legacy fallbacks for existing installs.
+  const opsTabs = loadSavedState(branchKey('Operations:tabs:v3'), loadSavedState('ayurflow:Operations:tabs:v3', {}));
+  const finTabs = loadSavedState(branchKey('Finance:tabs:v3'), loadSavedState('ayurflow:Finance:tabs:v3', {}));
 
-  const appointmentRows = loadSavedState('ayurflow:Appointments:rows:v2', []);
+  const appointmentRows = loadSavedState(branchKey('Appointments:rows:v3'), loadSavedState('ayurflow:Appointments:rows:v2', []));
 
   const treatmentRows = [
-    ...loadSavedState('ayurflow:Treatment Plans:rows:v2', []),
-    ...(opsTabs.treatments ?? []),
+    ...loadSavedState('ayurflow:Treatment Plans:rows:v2', []).map((row) => [row[0], row[1], row[2], row[3], row[7] ?? row[4]]),
+    ...(opsTabs.treatments ?? []).map((row) => [row[0], row[1], row[5], row[6], row[7]]),
   ];
 
   const formRows = [
-    ...loadSavedState('ayurflow:Forms:rows:v2', []),
+    ...loadSavedState(branchKey('Forms:rows:v3'), loadSavedState('ayurflow:Forms:rows:v2', [])),
     ...(opsTabs.forms ?? []),
   ];
 
   const inventoryRows = [
-    ...loadSavedState('ayurflow:Inventory:rows:v2', []),
+    ...loadSavedState(branchKey('Inventory:rows:v3'), loadSavedState('ayurflow:Inventory:rows:v2', [])),
     ...(opsTabs.inventory ?? []),
   ];
 
-  const paymentObjRows = loadSavedState('ayurflow:ayurflow-payments:rows:v2', [])
+  const paymentObjRows = loadSavedState(branchKey('ayurflow-payments:rows:v3'), loadSavedState('ayurflow:ayurflow-payments:rows:v2', []))
     .map((p) => [p.client ?? '', p.invoice ?? '', p.amount ?? '', p.status ?? '', p.paidOn ?? '']);
   const paymentRows = [...(finTabs.payments ?? []), ...paymentObjRows];
 
   const accountRows = [
     ...(finTabs.accounts ?? []),
-    ...loadSavedState('ayurflow:Accounts:rows:v2', []),
+    ...loadSavedState(branchKey('Accounts:rows:v3'), loadSavedState('ayurflow:Accounts:rows:v2', [])),
   ];
 
   // Revenue helpers
@@ -3399,6 +3417,7 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
         <div>
           <h1>Reports</h1>
           <p>Generate and export detailed reports — Treatment, Appointments, Finance, Forms, and Inventory.</p>
+          <p className="subtle">Current branch: {currentBranch}</p>
         </div>
         <div className="module-stats">
           {stats.map((s) => (
@@ -3451,13 +3470,16 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
       )}
 
       {currentReport && (
-        <Card title={currentReport.title} subtitle={`${currentReport.rows.length} record${currentReport.rows.length !== 1 ? 's' : ''} found`}>
-          <div className="sheet-actions" style={{ marginBottom: 14 }}>
-            <button className="pill" type="button" onClick={exportExcel}>Export Excel <ChevronRight /></button>
-            <button className="pill" type="button" onClick={exportPdf}>Export PDF <ChevronRight /></button>
-            <button className="pill" type="button" onClick={exportCsv}>Export CSV <ChevronRight /></button>
-          </div>
-          <div className="data-table">
+        <Card
+          title={currentReport.title}
+          subtitle={`${currentReport.rows.length} record${currentReport.rows.length !== 1 ? 's' : ''} found`}
+          action={<ActionMenu label="Export" items={[
+            { label: 'Export Excel', description: 'Download an XLS report', onClick: exportExcel },
+            { label: 'Print / save PDF', description: 'Open the print-ready report', onClick: exportPdf },
+            { label: 'Export CSV', description: 'Download raw report rows', onClick: exportCsv },
+          ]} />}
+        >
+          <div className="data-table adaptive-table" style={{ '--table-columns': currentReport.columns.length }}>
             <div className="table-head">
               {currentReport.columns.map((col) => <div key={col}>{col}</div>)}
               <div />
@@ -3532,7 +3554,7 @@ export function IntegrationsPage() {
         </div>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: '1.15fr 0.85fr', alignItems: 'start' }}>
+      <div className="grid two-column-module-grid">
         <div className="stack">
           <Card title="Connected & Available Apps" subtitle="Pick one to connect or extend the CRM outward.">
             <div className="integration-list">
@@ -3575,10 +3597,10 @@ export function IntegrationsPage() {
               <div className="sheet-copy">
                 <strong>Google Sheets setup for {activeTab.toLowerCase()}.</strong>
                 <p>Every change in the CRM can be pushed into a Google Sheet after provider credentials and webhook delivery are configured.</p>
-                <div className="sheet-actions">
-                  <button className="pill" type="button" onClick={() => { setSyncMessage(`Google credentials are required before ${activeTab} can sync automatically.`); }}>Check Setup <ChevronRight /></button>
-                  <button className="pill" type="button" onClick={() => { setSyncMessage(`Google Sheets opened for ${activeTab}.`); window.open('https://docs.google.com/spreadsheets/', '_blank', 'noopener,noreferrer'); }}>Open Google Sheets <ChevronRight /></button>
-                </div>
+                <ActionMenu label="Sheet Actions" items={[
+                  { label: 'Check setup', description: 'Review credential readiness', onClick: () => setSyncMessage(`Google credentials are required before ${activeTab} can sync automatically.`) },
+                  { label: 'Open Google Sheets', description: `Open a sheet for ${activeTab}`, onClick: () => { setSyncMessage(`Google Sheets opened for ${activeTab}.`); window.open('https://docs.google.com/spreadsheets/', '_blank', 'noopener,noreferrer'); } },
+                ]} />
               </div>
               <div className="sheet-form">
                 <div className="mini-stat">
@@ -3599,7 +3621,7 @@ export function IntegrationsPage() {
         </div>
 
         <Card title="Recent Sync Activity" subtitle="What moved between systems in the last few minutes.">
-          <div className="table">
+          <div className="table adaptive-table" style={{ '--table-columns': 4 }}>
             <div className="table-head">
               <div>Time</div>
               <div>Record</div>
@@ -3633,12 +3655,7 @@ export function IntegrationsPage() {
 export function BranchesPage() {
   const { branches, currentBranch, setCurrentBranch, addBranch, renameBranch, deleteBranch } = useBranch();
   const [branchName, setBranchName] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState(currentBranch);
   const [message, setMessage] = useState('Create a branch to keep data separate.');
-
-  useEffect(() => {
-    setSelectedBranch(currentBranch);
-  }, [currentBranch]);
 
   const createBranch = () => {
     const ok = addBranch(branchName);
@@ -3673,11 +3690,10 @@ export function BranchesPage() {
       </Card>
 
       <Card title="Branch List" subtitle="Switching branches updates the whole app data scope.">
-        <div className="table">
+        <div className="table adaptive-table" style={{ '--table-columns': 2 }}>
           <div className="table-head">
             <div>Branch</div>
             <div>Status</div>
-            <div>Action</div>
             <div />
           </div>
           {branches.map((branch) => {
@@ -3687,30 +3703,37 @@ export function BranchesPage() {
                 <div>{branch}</div>
                 <div><StatusPill tone={active ? 'st-ok' : 'st-warning'}>{active ? 'Active' : 'Saved'}</StatusPill></div>
                 <div>
-                  <button className="row-link" type="button" onClick={() => { setCurrentBranch(branch); setSelectedBranch(branch); setMessage(`${branch} activated.`); }}>
-                    Open
-                  </button>
-                </div>
-                <div className="row-actions">
-                  <button className="row-link" type="button" onClick={() => {
-                    const next = window.prompt('Rename branch', branch);
-                    if (!next) return;
-                    const ok = renameBranch(branch, next);
-                    setMessage(ok ? `Renamed to ${next.trim()}.` : 'Rename failed.');
-                  }}>
-                    Rename
-                  </button>
-                  <button className="row-link danger" type="button" onClick={() => {
-                    if (branches.length === 1) {
-                      setMessage('At least one branch must remain.');
-                      return;
-                    }
-                    if (!window.confirm(`Delete branch "${branch}"? Its branch data stays in storage but will no longer be selected.`)) return;
-                    deleteBranch(branch);
-                    setMessage(`${branch} removed from branch list.`);
-                  }}>
-                    Delete
-                  </button>
+                  <ActionMenu compact label={`Actions for ${branch}`} items={[
+                    {
+                      label: active ? 'Current branch' : 'Activate branch',
+                      description: active ? 'This branch is already active' : 'Switch the entire app to this branch',
+                      disabled: active,
+                      onClick: () => { setCurrentBranch(branch); setMessage(`${branch} activated.`); },
+                    },
+                    {
+                      label: 'Rename branch',
+                      onClick: () => {
+                        const next = window.prompt('Rename branch', branch);
+                        if (!next) return;
+                        const ok = renameBranch(branch, next);
+                        setMessage(ok ? `Renamed to ${next.trim()}.` : 'Rename failed.');
+                      },
+                    },
+                    {
+                      label: 'Delete branch',
+                      description: 'Remove it from the branch list',
+                      danger: true,
+                      onClick: () => {
+                        if (branches.length === 1) {
+                          setMessage('At least one branch must remain.');
+                          return;
+                        }
+                        if (!window.confirm(`Delete branch "${branch}"? Its branch data stays in storage but will no longer be selected.`)) return;
+                        deleteBranch(branch);
+                        setMessage(`${branch} removed from branch list.`);
+                      },
+                    },
+                  ]} />
                 </div>
               </div>
             );

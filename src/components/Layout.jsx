@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { BellIcon, CalendarIcon, ChartIcon, ChevronRight, FileIcon, HomeIcon, MoneyIcon, SearchIcon, SettingsIcon, UsersIcon } from './icons.jsx';
+import { useEffect, useMemo, useState } from 'react';
+import { BellIcon, CalendarIcon, ChartIcon, ChevronDown, ChevronRight, FileIcon, HomeIcon, MenuIcon, MoneyIcon, SearchIcon, SettingsIcon, UsersIcon } from './icons.jsx';
 import { navItems } from '../data/appConfig.js';
+import { loadLiveDashboardData } from '../data/liveData.js';
 import { useBranch } from '../context/BranchContext.jsx';
 
 const iconByPath = {
@@ -11,6 +12,7 @@ const iconByPath = {
   '/users': UsersIcon,
   '/forms': FileIcon,
   '/appointments': CalendarIcon,
+  '/services': FileIcon,
   '/operations': ChartIcon,
   '/treatments': ChartIcon,
   '/packages': MoneyIcon,
@@ -25,7 +27,11 @@ const iconByPath = {
   '/client-portal': UsersIcon,
   '/settings': SettingsIcon,
   '/integrations': SettingsIcon,
+  '/branches': SettingsIcon,
+  '/medicines': FileIcon,
 };
+
+const sectionOrder = ['Overview', 'Clients & CRM', 'Care Programs', 'Operations', 'Finance & Reports', 'Administration'];
 
 function getCurrentDateRange() {
   const today = new Date();
@@ -42,6 +48,34 @@ export function Layout() {
   const [searchText, setSearchText] = useState('');
   const [dateRange, setDateRange] = useState(() => getCurrentDateRange());
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationSummary, setNotificationSummary] = useState({ followUps: 0, pendingPayments: 0 });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const navSections = useMemo(() => sectionOrder.map((label) => ({
+    label,
+    items: navItems.filter((item) => item.section === label),
+  })), []);
+  const activeSection = navItems.find((item) => item.path === location.pathname)?.section ?? 'Overview';
+  const [openSections, setOpenSections] = useState(() => new Set([activeSection]));
+
+  useEffect(() => {
+    setOpenSections(new Set([activeSection]));
+    setMobileNavOpen(false);
+  }, [activeSection]);
+
+  const toggleSection = (section) => {
+    setOpenSections((current) => (current.has(section) ? new Set() : new Set([section])));
+  };
+
+  const toggleNotifications = () => {
+    if (!notificationsOpen) {
+      const liveData = loadLiveDashboardData(currentBranch);
+      setNotificationSummary({
+        followUps: liveData.leads.filter((lead) => String(lead.status ?? '').toLowerCase().includes('follow')).length,
+        pendingPayments: liveData.payments.filter((payment) => String(payment.status ?? '').toLowerCase() !== 'paid').length,
+      });
+    }
+    setNotificationsOpen((current) => !current);
+  };
 
   const handleSearch = (event) => {
     event.preventDefault();
@@ -67,28 +101,74 @@ export function Layout() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-              <path d="M20 6c5.8 0 10.8 4.6 10.8 10.6 0 7.6-7.3 13.4-10.8 17-3.5-3.6-10.8-9.4-10.8-17C9.2 10.6 14.2 6 20 6Z" fill="#E6B94C" />
-              <path d="M20 13.2c2.9 0 5.2 2.2 5.2 5s-2.3 5-5.2 5-5.2-2.2-5.2-5 2.3-5 5.2-5Z" fill="#F9F1CF" />
-              <path d="M20 9v22" stroke="#F9F1CF" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
+        <div className="sidebar-header">
+          <div className="brand">
+            <div className="brand-mark" aria-hidden="true">
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                <path d="M20 6c5.8 0 10.8 4.6 10.8 10.6 0 7.6-7.3 13.4-10.8 17-3.5-3.6-10.8-9.4-10.8-17C9.2 10.6 14.2 6 20 6Z" fill="#E6B94C" />
+                <path d="M20 13.2c2.9 0 5.2 2.2 5.2 5s-2.3 5-5.2 5-5.2-2.2-5.2-5 2.3-5 5.2-5Z" fill="#F9F1CF" />
+                <path d="M20 9v22" stroke="#F9F1CF" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div>
+              <h1>Mom's Pathshala</h1>
+              <p>Learning, care, and growth.</p>
+              <p className="subtle">Branch: {currentBranch}</p>
+            </div>
           </div>
-          <div>
-            <h1>Mom's Pathshala</h1>
-            <p>Learning, care, and growth.</p>
-            <p className="subtle">Branch: {currentBranch}</p>
-          </div>
+          <button
+            className="sidebar-menu-toggle"
+            type="button"
+            aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={mobileNavOpen}
+            aria-controls="primary-navigation"
+            onClick={() => setMobileNavOpen((current) => !current)}
+          >
+            <MenuIcon />
+          </button>
         </div>
-        <nav className="nav" aria-label="Primary">
-          {navItems.map((item) => {
-            const Icon = iconByPath[item.path] ?? HomeIcon;
+        <nav id="primary-navigation" className={`nav ${mobileNavOpen ? 'mobile-open' : ''}`} aria-label="Primary">
+          {navSections.map((section) => {
+            if (section.label === 'Overview') {
+              return section.items.map((item) => {
+                const Icon = iconByPath[item.path] ?? HomeIcon;
+                return (
+                  <NavLink key={item.path} to={item.path} end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <Icon />
+                    <span>{item.label}</span>
+                  </NavLink>
+                );
+              });
+            }
+
+            const expanded = openSections.has(section.label);
+            const sectionId = `nav-section-${section.label.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`;
             return (
-              <NavLink key={item.path} to={item.path} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Icon />
-                <span>{item.label}</span>
-              </NavLink>
+              <div className={`nav-group ${section.label === activeSection ? 'has-active' : ''}`} key={section.label}>
+                <button
+                  className="nav-group-toggle"
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-controls={sectionId}
+                  onClick={() => toggleSection(section.label)}
+                >
+                  <span>{section.label}</span>
+                  <span className={`nav-group-chevron ${expanded ? 'expanded' : ''}`} aria-hidden="true"><ChevronDown /></span>
+                </button>
+                {expanded && (
+                  <div className="nav-group-items" id={sectionId}>
+                    {section.items.map((item) => {
+                      const Icon = iconByPath[item.path] ?? HomeIcon;
+                      return (
+                        <NavLink key={item.path} to={item.path} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                          <Icon />
+                          <span>{item.label}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -114,18 +194,24 @@ export function Layout() {
             <strong>{dateRange}</strong>
             <ChevronRight />
           </button>
-          <button className="icon-btn" aria-label="Notifications" type="button" onClick={() => setNotificationsOpen((current) => !current)}>
+          <button className="icon-btn" aria-label="Notifications" type="button" onClick={toggleNotifications} aria-expanded={notificationsOpen}>
             <BellIcon />
           </button>
           {notificationsOpen && (
             <div className="popover-panel">
               <strong>Notifications</strong>
-              <p>8 lead follow-ups due today.</p>
-              <p>5 payments need collection review.</p>
+              {notificationSummary.followUps || notificationSummary.pendingPayments ? (
+                <>
+                  <p>{notificationSummary.followUps} lead follow-up(s) need attention.</p>
+                  <p>{notificationSummary.pendingPayments} payment(s) need collection review.</p>
+                </>
+              ) : (
+                <p>No pending alerts for {currentBranch}.</p>
+              )}
               <button className="row-link" type="button" onClick={() => { setNotificationsOpen(false); navigate('/crm'); }}>Open CRM</button>
             </div>
           )}
-          <button className="profile" type="button" onClick={() => navigate('/users')}>
+          <button className="profile" type="button" onClick={() => navigate('/users')} aria-label="Open user profile">
             <div className="avatar" aria-hidden="true" />
             <div className="meta">
               <strong>Mom's Pathshala</strong>
@@ -134,7 +220,7 @@ export function Layout() {
             <ChevronRight />
           </button>
         </header>
-        <Outlet />
+        <Outlet key={currentBranch} />
       </main>
     </div>
   );

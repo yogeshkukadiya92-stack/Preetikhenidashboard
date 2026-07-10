@@ -212,19 +212,15 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
         </div>
       </div>
 
-      {viewPresets.length > 0 && (
-        <Card
-          title={`${title} Views`}
-          subtitle={`Selected view: ${activeViewLabel}`}
-          className="compact-action-card module-command-card"
-          action={<ActionMenu label="Views" items={viewItems} />}
-        />
-      )}
-
       <Card
         title={`${title} List`}
-        subtitle={actionMessage}
-        action={<ActionMenu label="Actions" items={actionItems} />}
+        subtitle={`${actionMessage}${viewPresets.length ? ` Selected view: ${activeViewLabel}.` : ''}`}
+        action={(
+          <div className="card-action-group">
+            {viewPresets.length > 0 && <ActionMenu label="Views" items={viewItems} />}
+            <ActionMenu label="Actions" items={actionItems} />
+          </div>
+        )}
       >
         <input ref={importInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
         {filterOpen && (
@@ -260,7 +256,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
             <strong>{selectedRow ?? title}</strong> {selectedRow ? `selected in ${title}.` : actionMessage}
           </div>
         )}
-        <div className="data-table">
+        <div className="data-table adaptive-table" style={{ '--table-columns': columns.length }}>
           <div className="table-head">
             {columns.map((column) => <div key={column}>{column}</div>)}
             <div />
@@ -351,7 +347,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
               </div>
               <button className="icon-btn" type="button" onClick={() => setImportOpen(false)} aria-label="Close modal">x</button>
             </div>
-            <div className="modal-table">
+            <div className="modal-table adaptive-table" style={{ '--table-columns': columns.length }}>
               <div className="table-head">
                 {columns.map((column) => <div key={column}>{column}</div>)}
                 <div />
