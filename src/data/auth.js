@@ -1,9 +1,13 @@
 const SESSION_KEY = 'moms-pathshala:auth-session:v1';
+const SUPABASE_SESSION_KEY = 'moms-pathshala:supabase-session:v1';
 const configuredEmail = String(import.meta.env.VITE_ADMIN_EMAIL ?? '').trim().toLowerCase();
 const configuredPasswordHash = String(import.meta.env.VITE_ADMIN_PASSWORD_SHA256 ?? '').trim().toLowerCase();
+const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim().replace(/\/$/, '');
+const supabaseAnonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 
 export const ADMIN_EMAIL = configuredEmail;
-export const AUTH_CONFIGURED = Boolean(configuredEmail && configuredPasswordHash);
+const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const AUTH_CONFIGURED = Boolean(configuredEmail && (supabaseConfigured || configuredPasswordHash));
 
 async function sha256(value) {
   const bytes = new TextEncoder().encode(value);
@@ -33,6 +37,17 @@ export function getAuthSession() {
 export async function verifyCredentials(email, password) {
   if (!AUTH_CONFIGURED) return false;
   if (String(email).trim().toLowerCase() !== ADMIN_EMAIL) return false;
+  if (supabaseConfigured) {
+    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: String(email).trim(), password: String(password) }),
+    });
+    if (!response.ok) return false;
+    const session = await response.json();
+    window.sessionStorage.setItem(SUPABASE_SESSION_KEY, JSON.stringify(session));
+    return Boolean(session.access_token);
+  }
   const passwordHash = await sha256(String(password));
   return passwordHash === configuredPasswordHash;
 }
@@ -44,10 +59,25 @@ export function createAuthSession(remember = false) {
   const otherStorage = remember ? window.sessionStorage : window.localStorage;
   otherStorage.removeItem(SESSION_KEY);
   storage.setItem(SESSION_KEY, JSON.stringify(session));
+  const supabaseSession = window.sessionStorage.getItem(SUPABASE_SESSION_KEY) ?? window.localStorage.getItem(SUPABASE_SESSION_KEY);
+  if (supabaseSession) {
+    otherStorage.removeItem(SUPABASE_SESSION_KEY);
+    storage.setItem(SUPABASE_SESSION_KEY, supabaseSession);
+  }
   return session;
+}
+
+export function getSupabaseAccessToken() {
+  try {
+    const raw = window.sessionStorage.getItem(SUPABASE_SESSION_KEY) ?? window.localStorage.getItem(SUPABASE_SESSION_KEY);
+    if (!raw) return '';
+    return JSON.parse(raw).access_token ?? '';
+  } catch { return ''; }
 }
 
 export function clearAuthSession() {
   window.sessionStorage.removeItem(SESSION_KEY);
   window.localStorage.removeItem(SESSION_KEY);
+  window.sessionStorage.removeItem(SUPABASE_SESSION_KEY);
+  window.localStorage.removeItem(SUPABASE_SESSION_KEY);
 }
