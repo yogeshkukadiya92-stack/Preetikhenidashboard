@@ -32,6 +32,7 @@ function normalizeForm(form) {
     collectEmail: false,
     responseLimit: '',
     closeAt: '',
+    redirectUrl: '',
     slug: form.id,
     ...form,
     fields: Array.isArray(form.fields) ? form.fields : [],

@@ -97,6 +97,7 @@ function makeForm() {
     collectEmail: false,
     responseLimit: '',
     closeAt: '',
+    redirectUrl: '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -111,6 +112,17 @@ function cloneForm(form) {
       condition: { enabled: false, fieldId: '', operator: 'equals', value: '', ...(field.condition ?? {}) },
     })),
   };
+}
+
+function getValidRedirectUrl(value) {
+  const input = String(value ?? '').trim();
+  if (!input) return '';
+  try {
+    const url = new URL(input, window.location.origin);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
 }
 
 function downloadText(filename, content, mimeType = 'text/plain;charset=utf-8') {
@@ -381,8 +393,13 @@ export function FormRenderer({ form, mode = 'public', onSubmitted }) {
         setResult({ delivery: 'preview' });
       } else {
         const submission = await submitFormResponse(form, answers, respondentEmail);
-        setResult(submission);
         if (!form.allowMultiple) window.localStorage.setItem(`moms-pathshala:submitted:${form.id}`, 'true');
+        const redirectUrl = getValidRedirectUrl(form.redirectUrl);
+        if (redirectUrl) {
+          window.location.assign(redirectUrl);
+          return;
+        }
+        setResult(submission);
       }
       onSubmitted?.();
     } catch (error) {
@@ -681,6 +698,11 @@ export function FormsPage() {
       setMessage('Enter a form title before saving.');
       return;
     }
+    if (draftForm.redirectUrl?.trim() && !getValidRedirectUrl(draftForm.redirectUrl)) {
+      setMessage('Enter a valid redirect URL, for example https://example.com/thank-you.');
+      setBuilderTab('settings');
+      return;
+    }
     const slugBase = slugify(draftForm.slug || draftForm.title) || draftForm.id;
     const duplicateSlug = forms.some((form) => form.id !== draftForm.id && form.slug === slugBase);
     const savedForm = {
@@ -887,6 +909,7 @@ export function FormsPage() {
                 <label className="field-block"><span>Accent color</span><div className="color-input-row"><input type="color" value={draftForm.accentColor} onChange={(event) => setDraftForm((current) => ({ ...current, accentColor: event.target.value }))} /><input className="lead-input" value={draftForm.accentColor} onChange={(event) => setDraftForm((current) => ({ ...current, accentColor: event.target.value }))} /></div></label>
                 <label className="field-block"><span>Submit button label</span><input className="lead-input" value={draftForm.submitLabel} onChange={(event) => setDraftForm((current) => ({ ...current, submitLabel: event.target.value }))} /></label>
                 <label className="field-block"><span>Confirmation message</span><textarea className="lead-input" rows={3} value={draftForm.confirmationMessage} onChange={(event) => setDraftForm((current) => ({ ...current, confirmationMessage: event.target.value }))} /></label>
+                <label className="field-block"><span>Redirect after submission</span><input className="lead-input" type="url" value={draftForm.redirectUrl ?? ''} onChange={(event) => setDraftForm((current) => ({ ...current, redirectUrl: event.target.value }))} placeholder="https://example.com/thank-you" /><small className="field-help">Optional. Opens this link after a successful public submission.</small></label>
                 <label className="toggle-row"><input type="checkbox" checked={draftForm.showProgress} onChange={(event) => setDraftForm((current) => ({ ...current, showProgress: event.target.checked }))} /><span>Show progress for multi-page forms</span></label>
               </div>
             </Card>
