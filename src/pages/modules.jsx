@@ -834,12 +834,22 @@ function ClientProfile({ client, onBack }) {
   const [treatTemplates, setTreatTemplates] = useState(() => loadSavedArray(treatmentTemplatesKey, loadSavedArray('ayurflow:treatment-templates:v1', [])));
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [templateName, setTemplateName] = useState('');
+  const [treatError, setTreatError] = useState('');
+  const medicineCatalog = useMemo(() => {
+    const operations = loadSavedObject(branchKey('Operations:tabs:v3'), loadSavedObject('ayurflow:Operations:tabs:v3', {}));
+    return (Array.isArray(operations.medicines) ? operations.medicines : []).map((row) => (
+      Array.isArray(row)
+        ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '', Status: row[4] ?? '' }
+        : row
+    )).filter((row) => row.Medicine && row.Status !== 'Inactive');
+  }, [branchKey]);
   const [treatServiceOptions] = useState(() => {
     const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
     const savedNames = saved.map((row) => row[0]).filter(Boolean);
     return Array.from(new Set([...savedNames, ...services]));
   });
   const [treatForm, setTreatForm] = useState({ service: treatServiceOptions[0] ?? services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
+  const [treatMedicineRows, setTreatMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
   const [apptForm, setApptForm] = useState(() => ({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' }));
   const [payForm, setPayForm] = useState({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
 
@@ -863,6 +873,40 @@ function ClientProfile({ client, onBack }) {
       timing: template.timing ?? '',
       status: template.status ?? current.status,
     }));
+    const medicines = String(template.medicine ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+    const doses = String(template.dose ?? '').split(',').map((item) => item.trim());
+    const timings = String(template.timing ?? '').split(',').map((item) => item.trim());
+    setTreatMedicineRows(medicines.length ? medicines.map((medicine, index) => ({ medicine, dose: doses[index] ?? '', timing: timings[index] ?? '' })) : [{ medicine: '', dose: '', timing: '' }]);
+  };
+
+  const syncTreatmentMedicines = (rows) => {
+    setTreatMedicineRows(rows);
+    setTreatForm((current) => ({
+      ...current,
+      medicine: rows.map((row) => row.medicine).filter(Boolean).join(', '),
+      dose: rows.map((row) => row.dose).filter(Boolean).join(', '),
+      timing: rows.map((row) => row.timing).filter(Boolean).join(', '),
+    }));
+  };
+
+  const selectTreatmentMedicine = (index, medicineName) => {
+    setTreatError('');
+    const catalogEntry = medicineCatalog.find((item) => item.Medicine.toLowerCase() === medicineName.toLowerCase());
+    const nextRows = treatMedicineRows.map((row, rowIndex) => rowIndex === index ? {
+      medicine: catalogEntry?.Medicine ?? medicineName,
+      dose: catalogEntry?.['Default Dose'] ?? row.dose,
+      timing: catalogEntry?.Timing ?? row.timing,
+    } : row);
+    syncTreatmentMedicines(nextRows);
+  };
+
+  const updateTreatmentMedicineRow = (index, field, value) => {
+    syncTreatmentMedicines(treatMedicineRows.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
+  };
+
+  const removeTreatmentMedicineRow = (index) => {
+    const nextRows = treatMedicineRows.filter((_, rowIndex) => rowIndex !== index);
+    syncTreatmentMedicines(nextRows.length ? nextRows : [{ medicine: '', dose: '', timing: '' }]);
   };
 
   const saveTreatmentTemplate = () => {
@@ -900,12 +944,24 @@ function ClientProfile({ client, onBack }) {
   }, [clientName, refreshKey]);
 
   const saveTreatment = () => {
+    const selectedRows = treatMedicineRows.filter((row) => row.medicine.trim());
+    const invalidMedicine = selectedRows.find((row) => !medicineCatalog.some((item) => item.Medicine.toLowerCase() === row.medicine.toLowerCase()));
+    if (!selectedRows.length) {
+      setTreatError('Select at least one medicine from the Medicines page.');
+      return;
+    }
+    if (invalidMedicine) {
+      setTreatError(`${invalidMedicine.medicine} is not in the Medicines master. Select a medicine from search results.`);
+      return;
+    }
     const key = 'ayurflow:Treatment Plans:rows:v2';
     const current = loadSavedArray(key, []);
     window.localStorage.setItem(key, JSON.stringify([[clientName, treatForm.service, treatForm.goal, treatForm.duration, treatForm.medicine, treatForm.dose, treatForm.timing, treatForm.status], ...current]));
     setRefreshKey((k) => k + 1);
     setTreatModal(false);
     setTreatForm({ service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
+    setTreatMedicineRows([{ medicine: '', dose: '', timing: '' }]);
+    setTreatError('');
   };
 
   const saveAppointment = () => {
@@ -1089,18 +1145,29 @@ function ClientProfile({ client, onBack }) {
                 <span>Duration</span>
                 <input className="lead-input" value={treatForm.duration} onChange={(e) => setTreatForm((f) => ({ ...f, duration: e.target.value }))} placeholder="30 days" />
               </label>
-              <label className="field-block">
-                <span>Medicines / Products</span>
-                <textarea className="lead-input" rows="3" value={treatForm.medicine} onChange={(e) => setTreatForm((f) => ({ ...f, medicine: e.target.value }))} placeholder="Add one or more medicines/products" />
-              </label>
-              <label className="field-block">
-                <span>Dose</span>
-                <input className="lead-input" value={treatForm.dose} onChange={(e) => setTreatForm((f) => ({ ...f, dose: e.target.value }))} placeholder="e.g. 10ml twice" />
-              </label>
-              <label className="field-block">
-                <span>Timing</span>
-                <input className="lead-input" value={treatForm.timing} onChange={(e) => setTreatForm((f) => ({ ...f, timing: e.target.value }))} placeholder="e.g. After meals" />
-              </label>
+              <div className="treatment-medicine-builder">
+                <div className="medicine-builder-head">
+                  <div><strong>Medicines</strong><span>Select from the Medicines master; dose and timing fill automatically.</span></div>
+                  <button className="pill" type="button" onClick={() => syncTreatmentMedicines([...treatMedicineRows, { medicine: '', dose: '', timing: '' }])}>Add Medicine</button>
+                </div>
+                <datalist id="treatment-medicine-options">
+                  {medicineCatalog.map((medicine) => <option key={medicine.Medicine} value={medicine.Medicine}>{medicine['Default Dose']}</option>)}
+                </datalist>
+                {treatMedicineRows.map((row, index) => {
+                  const selectedMedicine = medicineCatalog.find((medicine) => medicine.Medicine === row.medicine);
+                  const doseOptions = Array.from(new Set([selectedMedicine?.['Default Dose'], row.dose].filter(Boolean)));
+                  return (
+                    <div className="treatment-medicine-row" key={index}>
+                      <label className="field-block"><span>Medicine {index + 1}</span><input className="lead-input" list="treatment-medicine-options" value={row.medicine} onChange={(event) => selectTreatmentMedicine(index, event.target.value)} placeholder={medicineCatalog.length ? 'Search medicine...' : 'Add medicines on Medicines page first'} /></label>
+                      <label className="field-block"><span>Dose</span><select className="lead-input" value={row.dose} onChange={(event) => updateTreatmentMedicineRow(index, 'dose', event.target.value)}><option value="">Select dose</option>{doseOptions.map((dose) => <option key={dose} value={dose}>{dose}</option>)}</select></label>
+                      <label className="field-block"><span>Timing</span><input className="lead-input" value={row.timing} onChange={(event) => updateTreatmentMedicineRow(index, 'timing', event.target.value)} placeholder="After meals" /></label>
+                      <button className="icon-btn" type="button" onClick={() => removeTreatmentMedicineRow(index)} aria-label={`Remove medicine ${index + 1}`}>x</button>
+                    </div>
+                  );
+                })}
+                {!medicineCatalog.length && <button className="row-link" type="button" onClick={() => window.open('/medicines', '_self')}>Open Medicines page to add catalog items</button>}
+                {treatError && <div className="action-note danger-note">{treatError}</div>}
+              </div>
               <label className="field-block">
                 <span>Status</span>
                 <select className="lead-input" value={treatForm.status} onChange={(e) => setTreatForm((f) => ({ ...f, status: e.target.value }))}>

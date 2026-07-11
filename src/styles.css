@@ -1302,6 +1302,40 @@ body {
   align-items: center;
 }
 
+.treatment-medicine-builder {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.medicine-builder-head,
+.treatment-medicine-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.4fr) minmax(130px, 0.8fr) minmax(150px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.medicine-builder-head {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.medicine-builder-head div {
+  display: grid;
+  gap: 3px;
+}
+
+.medicine-builder-head span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.danger-note { color: #9c2f2f; }
+
 @media (max-width: 980px) {
   .journey-layout { grid-template-columns: 1fr; }
   .app-shell { grid-template-columns: 1fr; }
@@ -1326,6 +1360,8 @@ body {
 
 @media (max-width: 640px) {
   .treatment-template-tools { grid-template-columns: 1fr; }
+  .medicine-builder-head,
+  .treatment-medicine-row { grid-template-columns: 1fr; }
   .login-page { padding: 14px; }
   .login-shell { padding: 22px 18px; }
   .kpis { grid-template-columns: 1fr; }
