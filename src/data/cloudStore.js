@@ -2,7 +2,7 @@ import { getSupabaseAccessToken } from './auth.js';
 
 const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim().replace(/\/$/, '');
 const supabaseAnonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
-const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
+const originalSetItem = window.Storage.prototype.setItem;
 let syncInstalled = false;
 
 export const CLOUD_STORAGE_CONFIGURED = Boolean(supabaseUrl && supabaseAnonKey);
@@ -44,16 +44,23 @@ export async function hydrateCloudState() {
   const rows = await request('/rest/v1/app_state?branch=eq.workspace&select=key,value');
   if (!Array.isArray(rows)) return 0;
   rows.forEach((row) => {
-    if (shouldSync(row.key)) originalSetItem(row.key, JSON.stringify(row.value));
+    if (shouldSync(row.key)) originalSetItem.call(window.localStorage, row.key, JSON.stringify(row.value));
   });
+  if (!rows.length) {
+    const localEntries = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
+      .filter((key) => key && shouldSync(key))
+      .map((key) => [key, window.localStorage.getItem(key)]);
+    await Promise.all(localEntries.map(([key, value]) => syncCloudValue(key, value)));
+    return localEntries.length;
+  }
   return rows.length;
 }
 
 export function installCloudSync() {
   if (syncInstalled || !CLOUD_STORAGE_CONFIGURED) return;
   syncInstalled = true;
-  window.localStorage.setItem = (key, value) => {
-    originalSetItem(key, value);
-    syncCloudValue(String(key), String(value)).catch(() => {});
+  window.Storage.prototype.setItem = function cloudSyncedSetItem(key, value) {
+    originalSetItem.call(this, key, value);
+    if (this === window.localStorage) syncCloudValue(String(key), String(value)).catch(() => {});
   };
 }
