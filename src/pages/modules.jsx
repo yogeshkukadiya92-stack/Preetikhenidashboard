@@ -2946,8 +2946,9 @@ export function ServicesPage() {
 }
 
 export function TreatmentPlansPage() {
-  const PLANS_KEY = 'ayurflow:Treatment Plans:rows:v2';
-  const TEMPLATES_KEY = 'ayurflow:treatment-templates:v1';
+  const { branchKey } = useBranch();
+  const PLANS_KEY = branchKey('Treatment Plans:rows:v2');
+  const TEMPLATES_KEY = branchKey('treatment-templates:v2');
 
   const [clientNames] = useState(() =>
     loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
@@ -2958,7 +2959,13 @@ export function TreatmentPlansPage() {
     return Array.from(new Set([...savedNames, ...services]));
   });
   const [plans, setPlans] = useState(() => loadSavedArray(PLANS_KEY, []));
-  const [templates, setTemplates] = useState(() => loadSavedArray(TEMPLATES_KEY, []));
+  const [templates, setTemplates] = useState(() => loadSavedArray(TEMPLATES_KEY, loadSavedArray('ayurflow:treatment-templates:v1', [])));
+  const medicineCatalog = useMemo(() => {
+    const operations = loadSavedObject(branchKey('Operations:tabs:v3'), loadSavedObject('ayurflow:Operations:tabs:v3', {}));
+    return (Array.isArray(operations.medicines) ? operations.medicines : []).map((row) => Array.isArray(row)
+      ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '', Status: row[4] ?? '' }
+      : row).filter((row) => row.Medicine && row.Status !== 'Inactive');
+  }, [branchKey]);
   const [activeTab, setActiveTab] = useState('plans');
 
   const blankPlan = { client: '', service: serviceOptions[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' };
@@ -2970,6 +2977,8 @@ export function TreatmentPlansPage() {
 
   const [templateModal, setTemplateModal] = useState(false);
   const [templateForm, setTemplateForm] = useState(blankTemplate);
+  const [templateMedicineRows, setTemplateMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
+  const [templateMedicineError, setTemplateMedicineError] = useState('');
   const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
 
   useEffect(() => {
@@ -3000,10 +3009,39 @@ export function TreatmentPlansPage() {
 
   const saveTemplate = () => {
     if (!templateForm.name.trim()) return;
+    const selectedRows = templateMedicineRows.filter((row) => row.medicine.trim());
+    const invalid = selectedRows.find((row) => !medicineCatalog.some((item) => item.Medicine.toLowerCase() === row.medicine.toLowerCase()));
+    if (!selectedRows.length) {
+      setTemplateMedicineError('Select at least one medicine from the Medicines page.');
+      return;
+    }
+    if (invalid) {
+      setTemplateMedicineError(`${invalid.medicine} is not in the Medicines master.`);
+      return;
+    }
     setTemplates((current) => editingTemplateIndex === null ? [{ ...templateForm }, ...current] : current.map((t, i) => i === editingTemplateIndex ? { ...templateForm } : t));
     setTemplateModal(false);
     setEditingTemplateIndex(null);
     setTemplateForm(blankTemplate);
+    setTemplateMedicineRows([{ medicine: '', dose: '', timing: '' }]);
+    setTemplateMedicineError('');
+  };
+
+  const syncTemplateMedicines = (rows) => {
+    setTemplateMedicineRows(rows);
+    setTemplateForm((current) => ({ ...current, medicine: rows.map((row) => row.medicine).filter(Boolean).join(', '), dose: rows.map((row) => row.dose).filter(Boolean).join(', '), timing: rows.map((row) => row.timing).filter(Boolean).join(', ') }));
+  };
+
+  const selectTemplateMedicine = (index, medicineName) => {
+    setTemplateMedicineError('');
+    const entry = medicineCatalog.find((item) => item.Medicine.toLowerCase() === medicineName.toLowerCase());
+    syncTemplateMedicines(templateMedicineRows.map((row, rowIndex) => rowIndex === index ? { medicine: entry?.Medicine ?? medicineName, dose: entry?.['Default Dose'] ?? row.dose, timing: entry?.Timing ?? row.timing } : row));
+  };
+
+  const updateTemplateMedicine = (index, field, value) => syncTemplateMedicines(templateMedicineRows.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
+  const removeTemplateMedicine = (index) => {
+    const rows = templateMedicineRows.filter((_, rowIndex) => rowIndex !== index);
+    syncTemplateMedicines(rows.length ? rows : [{ medicine: '', dose: '', timing: '' }]);
   };
 
   const openNewPlan = () => {
@@ -3014,6 +3052,8 @@ export function TreatmentPlansPage() {
 
   const openNewTemplate = () => {
     setTemplateForm(blankTemplate);
+    setTemplateMedicineRows([{ medicine: '', dose: '', timing: '' }]);
+    setTemplateMedicineError('');
     setEditingTemplateIndex(null);
     setTemplateModal(true);
   };
@@ -3082,7 +3122,7 @@ export function TreatmentPlansPage() {
                   {[t.name, t.service, t.goal, t.duration, t.medicine, t.dose, t.timing].map((cell, ci) => <div key={ci}>{cell}</div>)}
                   <div>
                     <ActionMenu compact label={`Actions for ${t.name || 'template'}`} items={[
-                      { label: 'Edit template', onClick: () => { setTemplateForm({ ...t }); setEditingTemplateIndex(i); setTemplateModal(true); } },
+                      { label: 'Edit template', onClick: () => { const medicines = String(t.medicine ?? '').split(',').map((item) => item.trim()).filter(Boolean); const doses = String(t.dose ?? '').split(',').map((item) => item.trim()); const timings = String(t.timing ?? '').split(',').map((item) => item.trim()); setTemplateMedicineRows(medicines.length ? medicines.map((medicine, index) => ({ medicine, dose: doses[index] ?? '', timing: timings[index] ?? '' })) : [{ medicine: '', dose: '', timing: '' }]); setTemplateForm({ ...t }); setEditingTemplateIndex(i); setTemplateModal(true); } },
                       { label: 'Delete template', description: 'Permanently remove this preset', danger: true, onClick: () => deleteTemplate(i) },
                     ]} />
                   </div>
@@ -3169,7 +3209,7 @@ export function TreatmentPlansPage() {
 
       {templateModal && (
         <div className="modal-backdrop" role="presentation" onClick={() => setTemplateModal(false)}>
-          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Treatment Template" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-shell consultation-modal" role="dialog" aria-modal="true" aria-label="Treatment Template" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <div><h2>{editingTemplateIndex === null ? 'Add Template' : 'Edit Template'}</h2><p>Save a reusable treatment preset.</p></div>
               <button className="icon-btn" type="button" onClick={() => setTemplateModal(false)} aria-label="Close">x</button>
@@ -3193,18 +3233,13 @@ export function TreatmentPlansPage() {
                 <span>Duration</span>
                 <input className="lead-input" value={templateForm.duration} onChange={(e) => setTemplateForm((f) => ({ ...f, duration: e.target.value }))} placeholder="30 days" />
               </label>
-              <label className="field-block">
-                <span>Medicine</span>
-                <input className="lead-input" value={templateForm.medicine} onChange={(e) => setTemplateForm((f) => ({ ...f, medicine: e.target.value }))} placeholder="Medicine name" />
-              </label>
-              <label className="field-block">
-                <span>Dose</span>
-                <input className="lead-input" value={templateForm.dose} onChange={(e) => setTemplateForm((f) => ({ ...f, dose: e.target.value }))} placeholder="e.g. 10ml twice daily" />
-              </label>
-              <label className="field-block">
-                <span>Timing</span>
-                <input className="lead-input" value={templateForm.timing} onChange={(e) => setTemplateForm((f) => ({ ...f, timing: e.target.value }))} placeholder="e.g. After meals" />
-              </label>
+              <div className="treatment-medicine-builder">
+                <div className="medicine-builder-head"><div><strong>Template Medicines</strong><span>Select multiple medicines from the Medicines master.</span></div><button className="pill" type="button" onClick={() => syncTemplateMedicines([...templateMedicineRows, { medicine: '', dose: '', timing: '' }])}>Add Medicine</button></div>
+                <datalist id="template-medicine-options">{medicineCatalog.map((medicine) => <option key={medicine.Medicine} value={medicine.Medicine}>{medicine['Default Dose']}</option>)}</datalist>
+                {templateMedicineRows.map((row, index) => { const entry = medicineCatalog.find((medicine) => medicine.Medicine === row.medicine); const doses = Array.from(new Set([entry?.['Default Dose'], row.dose].filter(Boolean))); return <div className="treatment-medicine-row" key={index}><label className="field-block"><span>Medicine {index + 1}</span><input className="lead-input" list="template-medicine-options" value={row.medicine} onChange={(event) => selectTemplateMedicine(index, event.target.value)} placeholder={medicineCatalog.length ? 'Search medicine...' : 'Add medicines first'} /></label><label className="field-block"><span>Dose</span><select className="lead-input" value={row.dose} onChange={(event) => updateTemplateMedicine(index, 'dose', event.target.value)}><option value="">Select dose</option>{doses.map((dose) => <option key={dose}>{dose}</option>)}</select></label><label className="field-block"><span>Timing</span><input className="lead-input" value={row.timing} onChange={(event) => updateTemplateMedicine(index, 'timing', event.target.value)} placeholder="After meals" /></label><button className="icon-btn" type="button" onClick={() => removeTemplateMedicine(index)} aria-label={`Remove medicine ${index + 1}`}>x</button></div>; })}
+                {!medicineCatalog.length && <button className="row-link" type="button" onClick={() => window.open('/medicines', '_self')}>Open Medicines page</button>}
+                {templateMedicineError && <div className="action-note danger-note">{templateMedicineError}</div>}
+              </div>
             </div>
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setTemplateModal(false)}>Cancel</button>
