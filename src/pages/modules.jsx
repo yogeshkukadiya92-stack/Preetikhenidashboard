@@ -823,13 +823,17 @@ export function CRMPage() {
 }
 
 function ClientProfile({ client, onBack }) {
+  const { branchKey } = useBranch();
   const clientName = client.name ?? '';
   const [activeTab, setActiveTab] = useState('overview');
   const [refreshKey, setRefreshKey] = useState(0);
   const [treatModal, setTreatModal] = useState(false);
   const [apptModal, setApptModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
-  const [treatTemplates] = useState(() => loadSavedArray('ayurflow:treatment-templates:v1', []));
+  const treatmentTemplatesKey = branchKey('treatment-templates:v2');
+  const [treatTemplates, setTreatTemplates] = useState(() => loadSavedArray(treatmentTemplatesKey, loadSavedArray('ayurflow:treatment-templates:v1', [])));
+  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [templateName, setTemplateName] = useState('');
   const [treatServiceOptions] = useState(() => {
     const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
     const savedNames = saved.map((row) => row[0]).filter(Boolean);
@@ -838,6 +842,47 @@ function ClientProfile({ client, onBack }) {
   const [treatForm, setTreatForm] = useState({ service: treatServiceOptions[0] ?? services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
   const [apptForm, setApptForm] = useState(() => ({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' }));
   const [payForm, setPayForm] = useState({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
+
+  useEffect(() => {
+    window.localStorage.setItem(treatmentTemplatesKey, JSON.stringify(treatTemplates));
+  }, [treatTemplates, treatmentTemplatesKey]);
+
+  const applyTreatmentTemplate = (indexValue) => {
+    setSelectedTemplate(indexValue);
+    if (indexValue === '') return;
+    const template = treatTemplates[Number(indexValue)];
+    if (!template) return;
+    setTemplateName(template.name ?? '');
+    setTreatForm((current) => ({
+      ...current,
+      service: template.service ?? current.service,
+      goal: template.goal ?? '',
+      duration: template.duration ?? '',
+      medicine: template.medicine ?? '',
+      dose: template.dose ?? '',
+      timing: template.timing ?? '',
+      status: template.status ?? current.status,
+    }));
+  };
+
+  const saveTreatmentTemplate = () => {
+    const name = templateName.trim();
+    if (!name) return;
+    const template = { name, ...treatForm, updatedAt: new Date().toISOString() };
+    setTreatTemplates((current) => {
+      const existingIndex = current.findIndex((item) => item.name?.toLowerCase() === name.toLowerCase());
+      if (existingIndex === -1) return [...current, template];
+      return current.map((item, index) => index === existingIndex ? template : item);
+    });
+    setSelectedTemplate('');
+  };
+
+  const deleteTreatmentTemplate = () => {
+    if (selectedTemplate === '') return;
+    setTreatTemplates((current) => current.filter((_, index) => index !== Number(selectedTemplate)));
+    setSelectedTemplate('');
+    setTemplateName('');
+  };
 
   const allTreatments = useMemo(() => {
     const saved = loadSavedState('ayurflow:Treatment Plans:rows:v2', []);
@@ -1013,18 +1058,23 @@ function ClientProfile({ client, onBack }) {
               <button className="icon-btn" type="button" onClick={() => setTreatModal(false)} aria-label="Close modal">x</button>
             </div>
             <div className="modal-body detail-grid">
-              {treatTemplates.length > 0 && (
-                <label className="field-block" style={{ gridColumn: '1 / -1' }}>
+              <div className="treatment-template-tools">
+                <label className="field-block">
                   <span>Use Template</span>
-                  <select className="lead-input" defaultValue="" onChange={(e) => {
-                    const t = treatTemplates[Number(e.target.value)];
-                    if (t) setTreatForm((f) => ({ ...f, service: t.service, goal: t.goal, duration: t.duration, medicine: t.medicine, dose: t.dose, timing: t.timing }));
-                  }}>
-                    <option value="">Select template to auto-fill...</option>
-                    {treatTemplates.map((t, i) => <option key={i} value={i}>{t.name}</option>)}
+                  <select className="lead-input" value={selectedTemplate} onChange={(event) => applyTreatmentTemplate(event.target.value)}>
+                    <option value="">{treatTemplates.length ? 'Select template to auto-fill...' : 'No templates saved yet'}</option>
+                    {treatTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}
                   </select>
                 </label>
-              )}
+                <label className="field-block">
+                  <span>Template Name</span>
+                  <input className="lead-input" value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="e.g. Weight Loss - 120 Days" />
+                </label>
+                <div className="template-actions">
+                  <button className="pill" type="button" onClick={saveTreatmentTemplate} disabled={!templateName.trim()}>Save Template</button>
+                  {selectedTemplate !== '' && <button className="pill danger-action" type="button" onClick={deleteTreatmentTemplate}>Delete</button>}
+                </div>
+              </div>
               <label className="field-block">
                 <span>Service</span>
                 <select className="lead-input" value={treatForm.service} onChange={(e) => setTreatForm((f) => ({ ...f, service: e.target.value }))}>
@@ -1040,8 +1090,8 @@ function ClientProfile({ client, onBack }) {
                 <input className="lead-input" value={treatForm.duration} onChange={(e) => setTreatForm((f) => ({ ...f, duration: e.target.value }))} placeholder="30 days" />
               </label>
               <label className="field-block">
-                <span>Medicine</span>
-                <input className="lead-input" value={treatForm.medicine} onChange={(e) => setTreatForm((f) => ({ ...f, medicine: e.target.value }))} placeholder="Medicine name" />
+                <span>Medicines / Products</span>
+                <textarea className="lead-input" rows="3" value={treatForm.medicine} onChange={(e) => setTreatForm((f) => ({ ...f, medicine: e.target.value }))} placeholder="Add one or more medicines/products" />
               </label>
               <label className="field-block">
                 <span>Dose</span>

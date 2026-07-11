@@ -1285,6 +1285,23 @@ body {
   .lead-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+.treatment-template-tools {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.template-actions {
+  display: flex;
+  gap: 8px;
+  min-height: 42px;
+  align-items: center;
+}
+
 @media (max-width: 980px) {
   .journey-layout { grid-template-columns: 1fr; }
   .app-shell { grid-template-columns: 1fr; }
@@ -1308,6 +1325,7 @@ body {
 }
 
 @media (max-width: 640px) {
+  .treatment-template-tools { grid-template-columns: 1fr; }
   .login-page { padding: 14px; }
   .login-shell { padding: 22px 18px; }
   .kpis { grid-template-columns: 1fr; }
