@@ -1501,6 +1501,10 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const serviceOptions = (Array.isArray(rowsByTab.services) ? rowsByTab.services : [])
     .map((row) => row[0])
     .filter(Boolean);
+  const clientOptions = Array.from(new Set(loadSavedArray(
+    branchKey('ayurflow-clients:rows:v3'),
+    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients),
+  ).map((row) => (Array.isArray(row) ? row[0] : row?.name ?? row?.Client ?? row?.client ?? '')).filter(Boolean)));
   const treatmentServiceIndex = active.columns.indexOf('Service');
   const treatmentMedicineIndex = active.columns.indexOf('Medicine');
 
@@ -1512,6 +1516,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   };
 
   const shouldUseSelect = (column) => active.id === 'treatments' && ['Service', 'Medicine'].includes(column);
+  const isTreatmentClient = (column) => active.id === 'treatments' && column === 'Client';
   const isMedicineColumn = active.id === 'treatments' && active.columns[treatmentMedicineIndex] === 'Medicine';
   const selectedMedicines = (value) => String(value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
   const scheduleOptions = ['Morning', 'Afternoon', 'Evening', 'Night'];
@@ -1965,7 +1970,21 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
               {active.columns.map((column, index) => (
                 <label className="field-block" key={column}>
                   <span>{column}</span>
-                  {shouldUseSelect(column) || optionsForColumn(column).length ? (
+                  {isTreatmentClient(column) ? (
+                    <>
+                      <input
+                        className="lead-input"
+                        value={draftRow[index] ?? ''}
+                        onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
+                        placeholder={clientOptions.length ? 'Search or select client' : 'Add a client first'}
+                        list="treatment-client-options-add"
+                        autoComplete="off"
+                      />
+                      <datalist id="treatment-client-options-add">
+                        {clientOptions.map((client) => <option value={client} key={client} />)}
+                      </datalist>
+                    </>
+                  ) : shouldUseSelect(column) || optionsForColumn(column).length ? (
                     <select
                       className="lead-input"
                       multiple={isMedicineColumn}
@@ -2071,7 +2090,21 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
               {active.columns.map((column, index) => (
                 <label className="field-block" key={column}>
                   <span>{column}</span>
-                  {shouldUseSelect(column) || optionsForColumn(column).length ? (
+                  {isTreatmentClient(column) ? (
+                    <>
+                      <input
+                        className="lead-input"
+                        value={editRow[index] ?? ''}
+                        onChange={(event) => setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
+                        placeholder={clientOptions.length ? 'Search or select client' : 'Add a client first'}
+                        list="treatment-client-options-edit"
+                        autoComplete="off"
+                      />
+                      <datalist id="treatment-client-options-edit">
+                        {clientOptions.map((client) => <option value={client} key={client} />)}
+                      </datalist>
+                    </>
+                  ) : shouldUseSelect(column) || optionsForColumn(column).length ? (
                     <select
                       className="lead-input"
                       multiple={isMedicineColumn}
