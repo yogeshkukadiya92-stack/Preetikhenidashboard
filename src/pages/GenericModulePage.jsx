@@ -45,7 +45,7 @@ function asImportRows(value) {
   return [];
 }
 
-export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, rowActions = null, filterPresets = [], viewPresets = [] }) {
+export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, fieldTypes = {}, rowActions = null, filterPresets = [], viewPresets = [] }) {
   const { branchKey, currentBranch } = useBranch();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRow, setSelectedRow] = useState(null);
@@ -97,9 +97,14 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const rowToMap = (row) => Object.fromEntries(columns.map((column, index) => [column, row[index] ?? '']));
 
   const openAddModal = () => {
+    const now = new Date();
+    const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const localTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     setDraftRow(columns.map((column) => {
       if (column === 'Client') return searchParams.get('client') ?? '';
       if (column === 'Mobile') return searchParams.get('mobile') ?? '';
+      if (title === 'Appointments' && column === 'Date') return localDate;
+      if (title === 'Appointments' && column === 'Time') return localTime;
       return '';
     }));
     setAddOpen(true);
@@ -327,7 +332,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
                   ) : (
                     <input
                       className="lead-input"
-                      type={column === 'Date' ? 'date' : column === 'Time' ? 'time' : 'text'}
+                      type={fieldTypes[column] ?? (column === 'Date' ? 'date' : column === 'Time' ? 'time' : 'text')}
                       value={draftRow[index] ?? ''}
                       onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
                       placeholder={`Enter ${column.toLowerCase()}`}

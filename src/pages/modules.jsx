@@ -88,6 +88,14 @@ function getSavedPackageNames() {
   return Array.from(new Set([...savedPackageNames, ...seedPackageNames]));
 }
 
+function currentAppointmentSlot() {
+  const now = new Date();
+  return {
+    date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+    time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+  };
+}
+
 function ImportExportModule({
   title,
   description,
@@ -102,6 +110,7 @@ function ImportExportModule({
   customRows = null,
   rowActions = null,
   fieldOptions = {},
+  fieldTypes = {},
 }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -345,6 +354,7 @@ function ImportExportModule({
                   ) : (
                     <input
                       className="lead-input"
+                      type={fieldTypes[header] ?? 'text'}
                       value={draftRecord[header] ?? ''}
                       onChange={(event) => setDraftRecord((current) => ({ ...current, [header]: event.target.value }))}
                       placeholder={`Enter ${header.toLowerCase()}`}
@@ -826,7 +836,7 @@ function ClientProfile({ client, onBack }) {
     return Array.from(new Set([...savedNames, ...services]));
   });
   const [treatForm, setTreatForm] = useState({ service: treatServiceOptions[0] ?? services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
-  const [apptForm, setApptForm] = useState({ mobile: '', date: '', time: '', type: services[0] ?? '', status: 'Confirmed' });
+  const [apptForm, setApptForm] = useState(() => ({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' }));
   const [payForm, setPayForm] = useState({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
 
   const allTreatments = useMemo(() => {
@@ -859,7 +869,7 @@ function ClientProfile({ client, onBack }) {
     window.localStorage.setItem(key, JSON.stringify([[clientName, apptForm.mobile, apptForm.date, apptForm.time, apptForm.type, apptForm.status], ...current]));
     setRefreshKey((k) => k + 1);
     setApptModal(false);
-    setApptForm({ mobile: '', date: '', time: '', type: services[0] ?? '', status: 'Confirmed' });
+    setApptForm({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' });
   };
 
   const savePayment = () => {
@@ -903,7 +913,7 @@ function ClientProfile({ client, onBack }) {
       {activeTab === 'overview' && (
         <Card title="Client Details">
           <div className="detail-grid">
-            {[['Client', client.name], ['Age', client.age], ['Program', client.program], ['Progress', client.progress], ['Next Visit', client.nextVisit]].map(([label, value]) => (
+            {[['Client', client.name], ['Age', client.age], ['Address', client.address], ['Program', client.program], ['Next Visit', client.nextVisit], ['Birthday', client.birthday], ['Anniversary', client.anniversary]].map(([label, value]) => (
               <div className="mini-stat" key={label}>
                 <span>{label}</span>
                 <strong>{value || '—'}</strong>
@@ -1151,23 +1161,24 @@ export function ClientsPage() {
         { label: 'Treatment Plans', value: '0' },
         { label: 'Next Visits', value: '0' },
       ]}
-      headers={['Client', 'Age', 'Program', 'Progress', 'Next Visit', 'Birthday', 'Anniversary']}
+      headers={['Client', 'Age', 'Address', 'Program', 'Next Visit', 'Birthday', 'Anniversary']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
       fieldOptions={{ Program: getSavedPackageNames() }}
+      fieldTypes={{ Age: 'number', 'Next Visit': 'date', Birthday: 'date', Anniversary: 'date' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
         { label: 'Age wise', column: 'Age' },
         { label: 'Program wise', column: 'Program' },
-        { label: 'Progress wise', column: 'Progress' },
+        { label: 'Address wise', column: 'Address' },
         { label: 'Next visit wise', column: 'Next Visit' },
         { label: 'Birthday wise', column: 'Birthday' },
       ]}
       rowToValues={(row) => ({
         Client: row.name,
         Age: row.age,
+        Address: row.address,
         Program: row.program,
-        Progress: row.progress,
         'Next Visit': row.nextVisit,
         Birthday: row.birthday,
         Anniversary: row.anniversary,
@@ -1175,8 +1186,8 @@ export function ClientsPage() {
       parseRow={(entry) => ({
         name: entry.Client ?? entry.client ?? entry.name ?? '',
         age: entry.Age ?? entry.age ?? '',
+        address: entry.Address ?? entry.address ?? '',
         program: entry.Program ?? entry.program ?? '',
-        progress: entry.Progress ?? entry.progress ?? '',
         nextVisit: entry['Next Visit'] ?? entry.nextVisit ?? '',
         birthday: entry.Birthday ?? entry.birthday ?? '',
         anniversary: entry.Anniversary ?? entry.anniversary ?? '',
@@ -2653,6 +2664,7 @@ export function AppointmentsPage() {
       columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Staff', 'Status']}
       rows={[]}
       fieldOptions={{ Client: clientNames, Type: services, Staff: staffNames }}
+      fieldTypes={{ Mobile: 'tel', Date: 'date', Time: 'time' }}
       filterPresets={[
         { label: 'Date wise', column: 'Date' },
         { label: 'Type wise', column: 'Type' },
