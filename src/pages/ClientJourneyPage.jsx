@@ -24,6 +24,11 @@ const STAGES = [
   ['followup', 'Follow-up'],
 ];
 
+const SYMPTOM_OPTIONS = ['Fever', 'Cough', 'Cold', 'Headache', 'Fatigue', 'Body pain', 'Joint pain', 'Acidity', 'Constipation', 'Bloating', 'Poor appetite', 'Weight gain', 'Weight loss', 'High blood sugar', 'High blood pressure', 'Skin rash', 'Hair fall', 'Sleep disturbance', 'Stress', 'Menstrual concern'];
+const DIAGNOSIS_OPTIONS = ['General consultation', 'Obesity', 'Prediabetes', 'Type 2 diabetes', 'Hypertension', 'Dyslipidemia', 'Hypothyroidism', 'PCOS', 'Digestive disorder', 'Joint disorder', 'Skin disorder', 'Hair disorder', 'Stress-related condition'];
+const NOTE_OPTIONS = ['Diet and lifestyle counselling given', 'Continue current medicines', 'Lab tests advised', 'Hydration and sleep guidance given', 'Review after 7 days', 'Review after 15 days', 'Review after 30 days'];
+const VITAL_OPTIONS = ['BP 120/80, Pulse 72', 'BP 130/80, Pulse 76', 'BP 140/90, Pulse 80', 'Vitals stable'];
+
 export function ClientJourneyPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -33,12 +38,17 @@ export function ClientJourneyPage() {
   const paymentsKey = branchKey('ayurflow-payments:rows:v3');
   const operationsKey = branchKey('Operations:tabs:v3');
   const journeysKey = branchKey('client-journeys:v1');
+  const consultationTemplatesKey = branchKey('consultation-templates:v1');
   const [clients, setClients] = useState(() => loadValue(clientsKey, []));
   const [journeys, setJourneys] = useState(() => loadValue(journeysKey, {}));
   const [selectedClient, setSelectedClient] = useState(() => searchParams.get('client') ?? '');
   const [search, setSearch] = useState('');
   const [consultationOpen, setConsultationOpen] = useState(false);
   const [consultation, setConsultation] = useState({ complaint: '', diagnosis: '', notes: '', vitals: '' });
+  const [consultationTemplates, setConsultationTemplates] = useState(() => loadValue(consultationTemplatesKey, []));
+  const [consultationTemplateName, setConsultationTemplateName] = useState('');
+  const [selectedConsultationTemplate, setSelectedConsultationTemplate] = useState('');
+  const [symptomChoice, setSymptomChoice] = useState('');
   const appointments = loadValue(appointmentsKey, []);
   const payments = loadValue(paymentsKey, []);
   const operationRows = loadValue(operationsKey, {});
@@ -53,6 +63,10 @@ export function ClientJourneyPage() {
   useEffect(() => {
     window.localStorage.setItem(journeysKey, JSON.stringify(journeys));
   }, [journeys, journeysKey]);
+
+  useEffect(() => {
+    window.localStorage.setItem(consultationTemplatesKey, JSON.stringify(consultationTemplates));
+  }, [consultationTemplates, consultationTemplatesKey]);
 
   const names = useMemo(() => Array.from(new Set(clients.map(clientName).filter(Boolean))), [clients]);
   const visibleNames = names.filter((name) => name.toLowerCase().includes(search.toLowerCase()));
@@ -86,6 +100,38 @@ export function ClientJourneyPage() {
     if (!consultation.diagnosis.trim() && !consultation.notes.trim()) return;
     updateJourney({ consultation: true, consultationData: consultation, consultedAt: new Date().toISOString() });
     setConsultationOpen(false);
+  };
+
+  const addSymptom = () => {
+    if (!symptomChoice) return;
+    const current = consultation.complaint.split(',').map((item) => item.trim()).filter(Boolean);
+    if (!current.includes(symptomChoice)) current.push(symptomChoice);
+    setConsultation((value) => ({ ...value, complaint: current.join(', ') }));
+    setSymptomChoice('');
+  };
+
+  const removeSymptom = (symptom) => {
+    setConsultation((value) => ({ ...value, complaint: value.complaint.split(',').map((item) => item.trim()).filter((item) => item && item !== symptom).join(', ') }));
+  };
+
+  const applyConsultationTemplate = (indexValue) => {
+    setSelectedConsultationTemplate(indexValue);
+    if (indexValue === '') return;
+    const template = consultationTemplates[Number(indexValue)];
+    if (!template) return;
+    setConsultationTemplateName(template.name ?? '');
+    setConsultation({ complaint: template.complaint ?? '', diagnosis: template.diagnosis ?? '', notes: template.notes ?? '', vitals: template.vitals ?? '' });
+  };
+
+  const saveConsultationTemplate = () => {
+    const name = consultationTemplateName.trim();
+    if (!name) return;
+    const template = { name, ...consultation, updatedAt: new Date().toISOString() };
+    setConsultationTemplates((current) => {
+      const existing = current.findIndex((item) => item.name?.toLowerCase() === name.toLowerCase());
+      return existing === -1 ? [...current, template] : current.map((item, index) => index === existing ? template : item);
+    });
+    setSelectedConsultationTemplate('');
   };
 
   const nextAction = () => STAGES.find(([id]) => !stageDone(id))?.[0] ?? 'completed';
@@ -131,7 +177,7 @@ export function ClientJourneyPage() {
         </Card>
       </div>
 
-      {consultationOpen && <div className="modal-backdrop" role="presentation" onClick={() => setConsultationOpen(false)}><div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Doctor Consultation" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>Doctor Consultation</h2><p>{selectedClient}</p></div><button className="icon-btn" type="button" onClick={() => setConsultationOpen(false)} aria-label="Close modal">x</button></div><div className="modal-body detail-grid"><label className="field-block"><span>Chief complaint</span><textarea className="lead-input" value={consultation.complaint} onChange={(event) => setConsultation((current) => ({ ...current, complaint: event.target.value }))} /></label><label className="field-block"><span>Vitals</span><input className="lead-input" value={consultation.vitals} onChange={(event) => setConsultation((current) => ({ ...current, vitals: event.target.value }))} placeholder="BP, pulse, weight..." /></label><label className="field-block"><span>Diagnosis</span><textarea className="lead-input" value={consultation.diagnosis} onChange={(event) => setConsultation((current) => ({ ...current, diagnosis: event.target.value }))} /></label><label className="field-block"><span>Doctor notes</span><textarea className="lead-input" value={consultation.notes} onChange={(event) => setConsultation((current) => ({ ...current, notes: event.target.value }))} /></label></div><div className="modal-actions"><button className="pill" type="button" onClick={() => setConsultationOpen(false)}>Cancel</button><button className="pill primary-action" type="button" onClick={saveConsultation}>Complete Consultation</button></div></div></div>}
+      {consultationOpen && <div className="modal-backdrop" role="presentation" onClick={() => setConsultationOpen(false)}><div className="modal-shell consultation-modal" role="dialog" aria-modal="true" aria-label="Doctor Consultation" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>Doctor Consultation</h2><p>{selectedClient}</p></div><button className="icon-btn" type="button" onClick={() => setConsultationOpen(false)} aria-label="Close modal">x</button></div><div className="modal-body detail-grid"><div className="consultation-template-tools"><label className="field-block"><span>Use Template</span><select className="lead-input" value={selectedConsultationTemplate} onChange={(event) => applyConsultationTemplate(event.target.value)}><option value="">{consultationTemplates.length ? 'Select consultation template...' : 'No templates saved yet'}</option>{consultationTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}</select></label><label className="field-block"><span>Template Name</span><input className="lead-input" value={consultationTemplateName} onChange={(event) => setConsultationTemplateName(event.target.value)} placeholder="e.g. Diabetes Follow-up" /></label><button className="pill" type="button" disabled={!consultationTemplateName.trim()} onClick={saveConsultationTemplate}>Save Template</button></div><div className="symptom-builder"><label className="field-block"><span>Symptoms / Chief Complaint</span><select className="lead-input" value={symptomChoice} onChange={(event) => setSymptomChoice(event.target.value)}><option value="">Select symptom...</option>{SYMPTOM_OPTIONS.map((symptom) => <option key={symptom}>{symptom}</option>)}</select></label><button className="pill" type="button" onClick={addSymptom} disabled={!symptomChoice}>Add Symptom</button><div className="consultation-chips">{consultation.complaint.split(',').map((item) => item.trim()).filter(Boolean).map((symptom) => <button className="tag symptom-chip" type="button" key={symptom} onClick={() => removeSymptom(symptom)}>{symptom} x</button>)}</div></div><label className="field-block"><span>Vitals</span><input className="lead-input" list="vital-presets" value={consultation.vitals} onChange={(event) => setConsultation((current) => ({ ...current, vitals: event.target.value }))} placeholder="Select or enter measured vitals" /><datalist id="vital-presets">{VITAL_OPTIONS.map((option) => <option key={option} value={option} />)}</datalist></label><label className="field-block"><span>Diagnosis</span><select className="lead-input" value={consultation.diagnosis} onChange={(event) => setConsultation((current) => ({ ...current, diagnosis: event.target.value }))}><option value="">Select diagnosis...</option>{DIAGNOSIS_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Doctor Notes</span><select className="lead-input" value={consultation.notes} onChange={(event) => setConsultation((current) => ({ ...current, notes: event.target.value }))}><option value="">Select reusable note...</option>{NOTE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label></div><div className="modal-actions"><button className="pill" type="button" onClick={() => setConsultationOpen(false)}>Cancel</button><button className="pill primary-action" type="button" onClick={saveConsultation}>Complete Consultation</button></div></div></div>}
     </section>
   );
 }

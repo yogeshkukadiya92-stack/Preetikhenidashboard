@@ -1355,6 +1355,30 @@ body {
   gap: 10px;
 }
 
+.consultation-modal { width: min(760px, calc(100vw - 28px)); }
+
+.consultation-template-tools,
+.symptom-builder {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(190px, 1fr) minmax(210px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.symptom-builder { grid-template-columns: minmax(220px, 1fr) auto; }
+
+.consultation-chips {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.symptom-chip { cursor: pointer; }
+
 @media (max-width: 980px) {
   .journey-layout { grid-template-columns: 1fr; }
   .app-shell { grid-template-columns: 1fr; }
@@ -1382,6 +1406,8 @@ body {
   .medicine-builder-head,
   .treatment-medicine-row { grid-template-columns: 1fr; }
   .next-appointment-fields { grid-template-columns: 1fr; }
+  .consultation-template-tools,
+  .symptom-builder { grid-template-columns: 1fr; }
   .login-page { padding: 14px; }
   .login-shell { padding: 22px 18px; }
   .kpis { grid-template-columns: 1fr; }
