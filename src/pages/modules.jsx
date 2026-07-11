@@ -71,6 +71,29 @@ function loadSavedObject(key, fallback = {}) {
   return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : fallback;
 }
 
+const TREATMENT_PLANS_KEY = 'ayurflow:Treatment Plans:rows:v2';
+
+function treatmentPlanToOperationRow(row) {
+  if (!Array.isArray(row)) return [];
+  return [row[0] ?? '', row[1] ?? '', row[4] ?? '', row[5] ?? '', row[6] ?? '', row[2] ?? '', row[3] ?? '', row[7] ?? ''];
+}
+
+function operationRowToTreatmentPlan(row) {
+  if (!Array.isArray(row)) return [];
+  return [row[0] ?? '', row[1] ?? '', row[5] ?? '', row[6] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[7] ?? ''];
+}
+
+function mergeUniqueRows(...rowGroups) {
+  const seen = new Set();
+  return rowGroups.flat().filter((row) => {
+    if (!Array.isArray(row) || !row.some((cell) => String(cell ?? '').trim())) return false;
+    const key = JSON.stringify(row.map((cell) => String(cell ?? '').trim().toLowerCase()));
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function asImportRows(value) {
   if (Array.isArray(value)) return value;
   if (value && typeof value === 'object') return [value];
@@ -1645,7 +1668,15 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const [rxDraft, setRxDraft] = useState([{ medicine: '', dose: '', timing: 'Morning', schedule: 'Daily' }]);
   const storageKey = branchKey(`${title}:tabs:v3`);
   const legacyStorageKey = `ayurflow:${title}:tabs:v3`;
-  const [rowsByTab, setRowsByTab] = useState(() => loadSavedObject(storageKey, loadSavedObject(legacyStorageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows])))));
+  const [rowsByTab, setRowsByTab] = useState(() => {
+    const savedTabs = loadSavedObject(storageKey, loadSavedObject(legacyStorageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows]))));
+    if (title !== 'Operations') return savedTabs;
+    const sharedTreatments = loadSavedArray(TREATMENT_PLANS_KEY, []).map(treatmentPlanToOperationRow);
+    return {
+      ...savedTabs,
+      treatments: mergeUniqueRows(sharedTreatments, savedTabs.treatments ?? []),
+    };
+  });
   const importInputRef = useRef(null);
   const handledHubAddAction = useRef('');
 
@@ -1689,10 +1720,32 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   useEffect(() => {
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(rowsByTab));
+      if (title === 'Operations') {
+        const sharedTreatments = (rowsByTab.treatments ?? []).map(operationRowToTreatmentPlan);
+        window.localStorage.setItem(TREATMENT_PLANS_KEY, JSON.stringify(sharedTreatments));
+      }
     } catch {
       setMessage('Local browser storage is full or blocked.');
     }
-  }, [rowsByTab, storageKey]);
+  }, [rowsByTab, storageKey, title]);
+
+  useEffect(() => {
+    if (title !== 'Operations') return undefined;
+    const syncSharedTreatments = (event) => {
+      if (event.key !== TREATMENT_PLANS_KEY || !event.newValue) return;
+      try {
+        const sharedTreatments = JSON.parse(event.newValue).map(treatmentPlanToOperationRow);
+        setRowsByTab((current) => ({
+          ...current,
+          treatments: mergeUniqueRows(sharedTreatments, current.treatments ?? []),
+        }));
+      } catch {
+        setMessage('Treatment data could not be synchronized.');
+      }
+    };
+    window.addEventListener('storage', syncSharedTreatments);
+    return () => window.removeEventListener('storage', syncSharedTreatments);
+  }, [title]);
 
   useEffect(() => {
     try {
