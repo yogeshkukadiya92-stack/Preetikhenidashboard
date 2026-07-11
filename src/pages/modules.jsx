@@ -825,6 +825,7 @@ export function CRMPage() {
 function ClientProfile({ client, onBack }) {
   const { branchKey } = useBranch();
   const clientName = client.name ?? '';
+  const appointmentsStorageKey = branchKey('Appointments:rows:v3');
   const [activeTab, setActiveTab] = useState('overview');
   const [refreshKey, setRefreshKey] = useState(0);
   const [treatModal, setTreatModal] = useState(false);
@@ -850,6 +851,7 @@ function ClientProfile({ client, onBack }) {
   });
   const [treatForm, setTreatForm] = useState({ service: treatServiceOptions[0] ?? services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
   const [treatMedicineRows, setTreatMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
+  const [nextAppointment, setNextAppointment] = useState(() => ({ enabled: false, mobile: client.mobile ?? '', ...currentAppointmentSlot(), status: 'Confirmed' }));
   const [apptForm, setApptForm] = useState(() => ({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' }));
   const [payForm, setPayForm] = useState({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
 
@@ -934,9 +936,9 @@ function ClientProfile({ client, onBack }) {
   }, [clientName, refreshKey]);
 
   const allAppointments = useMemo(() => {
-    const saved = loadSavedState('ayurflow:Appointments:rows:v2', []);
+    const saved = loadSavedState(appointmentsStorageKey, loadSavedState('ayurflow:Appointments:rows:v2', []));
     return saved.filter((row) => String(row[0] ?? '').toLowerCase().includes(clientName.toLowerCase()));
-  }, [clientName, refreshKey]);
+  }, [appointmentsStorageKey, clientName, refreshKey]);
 
   const allPayments = useMemo(() => {
     const saved = loadSavedState('ayurflow:ayurflow-payments:rows:v3', []);
@@ -957,17 +959,22 @@ function ClientProfile({ client, onBack }) {
     const key = 'ayurflow:Treatment Plans:rows:v2';
     const current = loadSavedArray(key, []);
     window.localStorage.setItem(key, JSON.stringify([[clientName, treatForm.service, treatForm.goal, treatForm.duration, treatForm.medicine, treatForm.dose, treatForm.timing, treatForm.status], ...current]));
+    if (nextAppointment.enabled && nextAppointment.date && nextAppointment.time) {
+      const appointments = loadSavedArray(appointmentsStorageKey, []);
+      const appointment = [clientName, nextAppointment.mobile, nextAppointment.date, nextAppointment.time, treatForm.service, '', nextAppointment.status];
+      window.localStorage.setItem(appointmentsStorageKey, JSON.stringify([appointment, ...appointments]));
+    }
     setRefreshKey((k) => k + 1);
     setTreatModal(false);
     setTreatForm({ service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
     setTreatMedicineRows([{ medicine: '', dose: '', timing: '' }]);
+    setNextAppointment({ enabled: false, mobile: client.mobile ?? '', ...currentAppointmentSlot(), status: 'Confirmed' });
     setTreatError('');
   };
 
   const saveAppointment = () => {
-    const key = 'ayurflow:Appointments:rows:v2';
-    const current = loadSavedArray(key, []);
-    window.localStorage.setItem(key, JSON.stringify([[clientName, apptForm.mobile, apptForm.date, apptForm.time, apptForm.type, apptForm.status], ...current]));
+    const current = loadSavedArray(appointmentsStorageKey, []);
+    window.localStorage.setItem(appointmentsStorageKey, JSON.stringify([[clientName, apptForm.mobile, apptForm.date, apptForm.time, apptForm.type, '', apptForm.status], ...current]));
     setRefreshKey((k) => k + 1);
     setApptModal(false);
     setApptForm({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' });
@@ -1040,7 +1047,7 @@ function ClientProfile({ client, onBack }) {
                 <div>{row[2]}</div>
                 <div>{row[3]}</div>
                 <div>{row[4]}</div>
-                <div>{row[5]}</div>
+                <div>{row[6] ?? row[5]}</div>
                 <div>{row[6]}</div>
                 <div>{row[7] ?? row[4]}</div>
                 <div />
@@ -1174,6 +1181,15 @@ function ClientProfile({ client, onBack }) {
                   <option>Active</option><option>Pending</option><option>Paused</option><option>Completed</option>
                 </select>
               </label>
+              <div className="next-appointment-builder">
+                <label className="toggle-row"><input type="checkbox" checked={nextAppointment.enabled} onChange={(event) => setNextAppointment((current) => ({ ...current, enabled: event.target.checked }))} /><span>Schedule next appointment</span></label>
+                {nextAppointment.enabled && <div className="next-appointment-fields">
+                  <label className="field-block"><span>Next Appointment Date</span><input className="lead-input" type="date" min={new Date().toISOString().slice(0, 10)} value={nextAppointment.date} onChange={(event) => setNextAppointment((current) => ({ ...current, date: event.target.value }))} /></label>
+                  <label className="field-block"><span>Time</span><input className="lead-input" type="time" value={nextAppointment.time} onChange={(event) => setNextAppointment((current) => ({ ...current, time: event.target.value }))} /></label>
+                  <label className="field-block"><span>Reminder Mobile</span><input className="lead-input" type="tel" value={nextAppointment.mobile} onChange={(event) => setNextAppointment((current) => ({ ...current, mobile: event.target.value }))} placeholder="WhatsApp mobile number" /></label>
+                  <label className="field-block"><span>Status</span><select className="lead-input" value={nextAppointment.status} onChange={(event) => setNextAppointment((current) => ({ ...current, status: event.target.value }))}><option>Confirmed</option><option>Pending</option></select></label>
+                </div>}
+              </div>
             </div>
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setTreatModal(false)}>Cancel</button>
