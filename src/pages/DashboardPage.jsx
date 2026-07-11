@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ActionMenu, Card, StatusPill, Tag } from '../components/ui.jsx';
-import { FunnelChart, RevenueChart } from '../components/Charts.jsx';
 import { ChevronRight } from '../components/icons.jsx';
 import { loadLiveDashboardData, parseLiveAmount } from '../data/liveData.js';
 import { useBranch } from '../context/BranchContext.jsx';
@@ -26,21 +25,15 @@ function KpiIcon({ accent }) {
 export function DashboardPage() {
   const navigate = useNavigate();
   const { branches, currentBranch, setCurrentBranch } = useBranch();
-  const [revenuePeriod, setRevenuePeriod] = useState('Week');
   const [datePreset, setDatePreset] = useState('7 Days');
   const [moreInsightsOpen, setMoreInsightsOpen] = useState(false);
   const liveData = loadLiveDashboardData(currentBranch);
-  const { funnelStages, kpis, leads, payments, todaySchedule, urgentTasks, revenueSeries, appointments, clients, inventory, packages, staff, treatments } = liveData;
+  const { kpis, leads, payments, todaySchedule, urgentTasks, appointments, clients, inventory, packages, staff, treatments } = liveData;
   const filteredLeads = filterRowsByPreset(leads, datePreset, (lead) => lead.addedOn);
   const filteredPayments = filterRowsByPreset(payments, datePreset, (payment) => payment.paidOn);
   const filteredAppointments = filterRowsByPreset(appointments, datePreset, (appointment) => appointment[2] ?? appointment.date);
-  const totalRevenue = filteredPayments.reduce((sum, payment) => sum + parseLiveAmount(payment.amount), 0);
-  const totalCollections = filteredPayments
-    .filter((payment) => String(payment.status ?? '').toLowerCase() === 'paid')
-    .reduce((sum, payment) => sum + parseLiveAmount(payment.amount), 0);
   const paymentAging = buildPaymentAging(payments);
   const leadSources = buildLeadSourcePerformance(filteredLeads.length ? filteredLeads : leads);
-  const branchComparison = buildBranchComparison(branches, currentBranch);
   const staffWorkload = buildStaffWorkload(filteredAppointments.length ? filteredAppointments : appointments, staff);
   const lowStockAlerts = buildLowStockAlerts(inventory);
   const salesSummary = buildSalesSummary(filteredPayments.length ? filteredPayments : payments, packages, treatments);
@@ -67,6 +60,22 @@ export function DashboardPage() {
 
   return (
     <>
+      <section className="dashboard-primary-workflow" aria-labelledby="client-journey-title">
+        <div className="workflow-copy">
+          <span className="workflow-label">Primary workflow</span>
+          <h1 id="client-journey-title">Client Journey</h1>
+          <p>Reception thi appointment, form, consultation, treatment ane payment sudhi nu complete workflow ekaj jagya par chalavo.</p>
+        </div>
+        <div className="workflow-summary" aria-label="Client journey summary">
+          <span><strong>{clients.length}</strong> Registered clients</span>
+          <span><strong>{todaySchedule.length}</strong> Today&apos;s visits</span>
+          <span><strong>{actionQueue.length}</strong> Pending actions</span>
+        </div>
+        <button className="workflow-primary-action" type="button" onClick={() => navigate('/journey')}>
+          Open Client Journey <ChevronRight />
+        </button>
+      </section>
+
       <section className="dashboard-controls" aria-label="Dashboard filters">
         <div>
           <span className="control-label">Date range</span>
@@ -94,7 +103,7 @@ export function DashboardPage() {
       </section>
 
       <section className="kpis">
-        {kpis.map((kpi) => (
+        {kpis.slice(0, 4).map((kpi) => (
           <article className="kpi action-card" key={kpi.label} role="button" tabIndex={0} onClick={() => navigate(kpiRoute(kpi.label))} onKeyDown={(event) => { if (event.key === 'Enter') navigate(kpiRoute(kpi.label)); }}>
             <div className="kpi-head">
               <KpiIcon accent={kpi.accent} />
@@ -113,46 +122,14 @@ export function DashboardPage() {
       </section>
 
       <section className="dashboard-action-strip" aria-label="Dashboard actions">
-        <p className="command-message">Use Actions for entry work; open More insights for detailed operational panels.</p>
+        <p className="command-message">Daily entry work mate Actions vapro. Detailed reports More insights ma available che.</p>
         <div className="sheet-actions toolbar-actions">
           <ActionMenu label="Actions" items={quickActions} />
           <button className="pill" type="button" onClick={() => setMoreInsightsOpen(true)}>More insights <ChevronRight /></button>
         </div>
       </section>
 
-      <section className="insights-grid">
-        <Card title="Branch Comparison" subtitle="Quick health check across active branches.">
-          <div className="branch-comparison">
-            {branchComparison.map((branch) => (
-              <button className={`branch-row ${branch.name === currentBranch ? 'active' : ''}`} type="button" key={branch.name} onClick={() => setCurrentBranch(branch.name)}>
-                <span>
-                  <strong>{branch.name}</strong>
-                  <small>{branch.leads} leads · {branch.appointments} appointments</small>
-                </span>
-                <b>₹ {branch.revenue.toLocaleString('en-IN')}</b>
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        <Card title="Payment Aging" subtitle="Unpaid collections grouped by age.">
-          <InsightBars
-            rows={paymentAging}
-            emptyTitle="No pending payments."
-            emptyCopy="Pending invoices will appear here by age bucket."
-            valueFormatter={(row) => `₹ ${row.amount.toLocaleString('en-IN')}`}
-          />
-        </Card>
-
-        <Card title="Lead Source Performance" subtitle={`Showing ${datePreset.toLowerCase()} performance.`}>
-          <InsightBars
-            rows={leadSources}
-            emptyTitle="No lead sources yet."
-            emptyCopy="Add leads with sources to compare performance."
-            valueFormatter={(row) => `${row.count} lead${row.count === 1 ? '' : 's'}`}
-          />
-        </Card>
-
+      <section className="dashboard-focus-grid">
         <Card title="Action Queue" subtitle="The next best work items for today.">
           {actionQueue.length ? (
             <div className="action-queue">
@@ -174,6 +151,31 @@ export function DashboardPage() {
             </div>
           )}
         </Card>
+
+        <Card title="Today&apos;s Schedule" action={<button className="icon-btn inline-icon" type="button" onClick={() => navigate('/appointments')} aria-label="Open appointments"><ChevronRight /></button>}>
+          {todaySchedule.length ? (
+            <div className="schedule-list">
+              {todaySchedule.slice(0, 5).map((item) => (
+                <div className="schedule-item" key={`${item.time}-${item.name}`}>
+                  <div className="time">{item.time}</div>
+                  <div>
+                    <div className="item-title">{item.name}</div>
+                    <div className="item-sub">{item.note}</div>
+                  </div>
+                  <StatusPill tone={`st-${item.tone}`}>{item.status}</StatusPill>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state compact-empty">
+              <strong>No appointments today.</strong>
+              <p>Client Journey mathi check-in karo athva appointment book karo.</p>
+            </div>
+          )}
+          <button className="footer-action button-reset" type="button" onClick={() => navigate('/appointments')}>
+            <span>Open Appointments</span><ChevronRight />
+          </button>
+        </Card>
       </section>
 
       {moreInsightsOpen && (
@@ -187,6 +189,14 @@ export function DashboardPage() {
               <button className="icon-btn" type="button" onClick={() => setMoreInsightsOpen(false)} aria-label="Close modal">x</button>
             </div>
             <div className="more-insights-grid">
+              <Card title="Payment Aging" subtitle="Unpaid collections grouped by age.">
+                <InsightBars rows={paymentAging} emptyTitle="No pending payments." emptyCopy="Pending invoices will appear here by age bucket." valueFormatter={(row) => `₹ ${row.amount.toLocaleString('en-IN')}`} />
+              </Card>
+
+              <Card title="Lead Source Performance" subtitle={`Showing ${datePreset.toLowerCase()} performance.`}>
+                <InsightBars rows={leadSources} emptyTitle="No lead sources yet." emptyCopy="Add leads with sources to compare performance." valueFormatter={(row) => `${row.count} lead${row.count === 1 ? '' : 's'}`} />
+              </Card>
+
               <Card title="Staff Workload" subtitle={`Appointments per team member (${datePreset.toLowerCase()}).`}>
                 <InsightBars
                   rows={staffWorkload}
@@ -232,11 +242,11 @@ export function DashboardPage() {
                 />
               </Card>
 
-              <Card title="Birthdays & Anniversaries" subtitle="Client dates coming up soon.">
+              <Card title="Birthday Reminders" subtitle="Upcoming client birthdays.">
                 <AlertList
                   rows={reminders}
                   emptyTitle="No reminders due."
-                  emptyCopy="Add birthdays and anniversaries in client profiles."
+                  emptyCopy="Add birthdays in client profiles."
                   route="/clients"
                 />
               </Card>
@@ -245,95 +255,6 @@ export function DashboardPage() {
         </div>
       )}
 
-      <section className="grid">
-        <div className="stack">
-          <Card title="Lead Conversion Funnel">
-            <FunnelChart stages={funnelStages} />
-            <div className="footer-action" style={{ marginTop: 18 }}>
-              <span>Conversion Rate: <strong style={{ color: 'var(--green)' }}>0%</strong></span>
-              <span className="delta">Awaiting records</span>
-            </div>
-          </Card>
-        </div>
-
-        <Card title="Revenue Trend" action={<button className="pill" type="button" onClick={() => setRevenuePeriod((current) => (current === 'Week' ? 'Month' : 'Week'))}>By {revenuePeriod} <ChevronRight /></button>}>
-          <RevenueChart series={revenueSeries} />
-          <div className="chart-stats">
-            <div className="mini-stat">
-              <span>Total Revenue ({datePreset})</span>
-              <strong>₹ {totalRevenue.toLocaleString('en-IN')} <span className="delta">{filteredPayments.length ? `${filteredPayments.length} invoice(s)` : 'Awaiting records'}</span></strong>
-            </div>
-            <div className="mini-stat">
-              <span>Total Collections ({datePreset})</span>
-              <strong>₹ {totalCollections.toLocaleString('en-IN')} <span className="delta">{totalCollections ? 'Collected' : 'Awaiting records'}</span></strong>
-            </div>
-          </div>
-        </Card>
-
-        <aside className="stack tasks">
-          <Card title="Today's Schedule" action={<button className="icon-btn inline-icon" type="button" onClick={() => navigate('/appointments')} aria-label="Open appointments"><ChevronRight /></button>}>
-            {todaySchedule.length ? (
-              <div className="schedule-list">
-                {todaySchedule.map((item) => (
-                  <div className="schedule-item" key={`${item.time}-${item.name}`}>
-                    <div className="time">{item.time}</div>
-                    <div className="tiny-avatar" />
-                    <div>
-                      <div className="item-title">{item.name}</div>
-                      <div className="item-sub">{item.note}</div>
-                    </div>
-                    <StatusPill tone={`st-${item.tone}`}>{item.status}</StatusPill>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state compact-empty">
-                <strong>No appointments yet today.</strong>
-                <p>Create the first booking or import data to populate this panel.</p>
-              </div>
-            )}
-            <button className="footer-action button-reset" type="button" onClick={() => navigate('/appointments')}>
-              <span>View Full Schedule</span>
-              <ChevronRight />
-            </button>
-          </Card>
-
-          <Card title="Urgent Tasks" action={<StatusPill tone="st-bad">{urgentTasks.length}</StatusPill>}>
-            {urgentTasks.length ? (
-              <div className="task-list">
-                {urgentTasks.map((task, index) => (
-                  <div className="task-item" key={task.title}>
-                    <div className={`task-icon ${index === 1 ? 'gold' : index === 2 ? 'blue' : index === 3 ? 'green' : ''}`} />
-                    <div>
-                      <div className="item-title">{task.title}</div>
-                      <div className="item-sub">{task.note}</div>
-                    </div>
-                    <span style={{ color: index === 0 ? '#e35c3e' : '#d98a17', fontWeight: 700 }}>{task.due}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state compact-empty">
-                <strong>No urgent tasks.</strong>
-                <p>Once records arrive, follow-ups and collections will appear here.</p>
-              </div>
-            )}
-            <button className="footer-action button-reset" type="button" onClick={() => navigate('/crm')}>
-              <span>View All Tasks</span>
-              <ChevronRight />
-            </button>
-          </Card>
-        </aside>
-      </section>
-
-      <section className="grid" style={{ marginTop: 16 }}>
-        <Card title="Recent Leads" action={<button className="row-link" type="button" onClick={() => navigate('/crm')}>View All</button>}>
-          <ModuleTable type="leads" rows={leads} />
-        </Card>
-        <Card title="Recent Payments" action={<button className="row-link" type="button" onClick={() => navigate('/payments')}>View All</button>}>
-          <ModuleTable type="payments" rows={payments} />
-        </Card>
-      </section>
     </>
   );
 }
