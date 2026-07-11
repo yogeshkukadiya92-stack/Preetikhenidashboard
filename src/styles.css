@@ -1229,6 +1229,19 @@ body {
 .primary-action { border-color: var(--green); background: var(--green); color: #fff; box-shadow: none; }
 .primary-action:hover { background: #185c3e; }
 .empty-state .primary-action { margin-top: 12px; }
+.journey-layout { display: grid; grid-template-columns: minmax(280px, 0.7fr) minmax(0, 1.3fr); gap: 12px; align-items: start; }
+.journey-client-list { display: grid; gap: 7px; margin-top: 12px; max-height: 520px; overflow-y: auto; }
+.journey-client { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px; border: 1px solid var(--border); border-radius: 9px; background: #fff; color: var(--text); text-align: left; }
+.journey-client span { color: var(--muted); font-size: 0.75rem; }
+.journey-client.active { border-color: var(--green); background: #eef8f2; box-shadow: inset 3px 0 0 var(--green); }
+.journey-stages { display: grid; gap: 8px; }
+.journey-stage { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 58px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
+.journey-stage.complete { background: #f1f8f4; }
+.journey-index { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #e5ece8; color: var(--muted); font-weight: 900; }
+.journey-stage.complete .journey-index { background: var(--green); color: #fff; }
+.journey-stage strong, .journey-stage small { display: block; }
+.journey-stage small { margin-top: 2px; color: var(--muted); }
+.journey-next { width: 100%; margin-top: 12px; }
 
 .login-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #eef6f3; color: var(--text); }
 .login-shell { width: min(420px, 100%); padding: 28px; border: 1px solid rgba(23, 53, 40, 0.14); border-radius: 12px; background: #fff; box-shadow: 0 18px 48px rgba(19, 52, 39, 0.12); }
@@ -1273,6 +1286,7 @@ body {
 }
 
 @media (max-width: 980px) {
+  .journey-layout { grid-template-columns: 1fr; }
   .app-shell { grid-template-columns: 1fr; }
   .dashboard-controls { grid-template-columns: 1fr; }
   .sidebar { padding-bottom: 24px; height: auto; min-height: auto; position: relative; overflow: visible; }

@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute.jsx';
 import { DashboardPage } from './pages/DashboardPage.jsx';
 import { FormsPage, PublicFormPage } from './pages/forms.jsx';
 import { LoginPage } from './pages/LoginPage.jsx';
+import { ClientJourneyPage } from './pages/ClientJourneyPage.jsx';
 import {
   AccountsPage,
   AppointmentsPage,
@@ -40,6 +41,7 @@ export function App() {
             <Route path="/" element={<DashboardPage />} />
           <Route path="/crm" element={<CRMPage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/journey" element={<ClientJourneyPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/appointments" element={<AppointmentsPage />} />

@@ -10,6 +10,7 @@ const iconByPath = {
   '/': HomeIcon,
   '/crm': UsersIcon,
   '/clients': UsersIcon,
+  '/journey': ChartIcon,
   '/users': UsersIcon,
   '/forms': FileIcon,
   '/appointments': CalendarIcon,

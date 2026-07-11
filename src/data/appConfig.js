@@ -2,6 +2,7 @@ export const navItems = [
   { path: '/', label: 'Dashboard', section: 'Overview' },
   { path: '/crm', label: 'CRM', section: 'Clients & CRM' },
   { path: '/clients', label: 'Clients', section: 'Clients & CRM' },
+  { path: '/journey', label: 'Client Journey', section: 'Clients & CRM' },
   { path: '/appointments', label: 'Appointments', section: 'Clients & CRM' },
   { path: '/forms', label: 'Forms', section: 'Clients & CRM' },
   { path: '/services', label: 'Services', section: 'Care Programs' },

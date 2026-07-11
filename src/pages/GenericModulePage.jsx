@@ -62,6 +62,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const [previewRows, setPreviewRows] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
   const importInputRef = useRef(null);
+  const handledAddAction = useRef('');
   const activeViewPredicate = viewPresets.find((preset) => preset.id === activeView)?.match ?? null;
   const activeViewLabel = viewPresets.find((preset) => preset.id === activeView)?.label ?? 'All';
 
@@ -96,17 +97,21 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const rowToMap = (row) => Object.fromEntries(columns.map((column, index) => [column, row[index] ?? '']));
 
   const openAddModal = () => {
-    setDraftRow(columns.map(() => ''));
+    setDraftRow(columns.map((column) => {
+      if (column === 'Client') return searchParams.get('client') ?? '';
+      if (column === 'Mobile') return searchParams.get('mobile') ?? '';
+      return '';
+    }));
     setAddOpen(true);
     setActionMessage(`Create new ${title.toLowerCase()} record.`);
   };
 
   useEffect(() => {
     if (searchParams.get('action') !== 'add') return;
+    const actionToken = searchParams.toString();
+    if (handledAddAction.current === actionToken) return;
+    handledAddAction.current = actionToken;
     openAddModal();
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('action');
-    setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
   const runAction = (action) => {
@@ -267,7 +272,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
               <div className="data-row" key={index}>
                 {row.map((cell, cellIndex) => <div key={`${columns[cellIndex]}-${index}`}>{cell}</div>)}
                 <div>
-                  {rowActions ? rowActions(row, setSelectedRow, setActionMessage) : (
+                  {rowActions ? rowActions(row, setSelectedRow, setActionMessage, setTableRows) : (
                     <button className="row-link" type="button" onClick={() => setSelectedRow(row[0])}>View</button>
                   )}
                 </div>

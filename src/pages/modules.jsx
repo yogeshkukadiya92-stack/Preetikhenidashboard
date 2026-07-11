@@ -120,6 +120,7 @@ function ImportExportModule({
   const [filterText, setFilterText] = useState('');
   const [activeFilter, setActiveFilter] = useState(filterPresets[0]?.column ?? '');
   const bannerFileInputRef = useRef(null);
+  const handledAddRecordAction = useRef('');
 
   useEffect(() => {
     try {
@@ -130,17 +131,17 @@ function ImportExportModule({
   }, [rows, storageKey]);
 
   const openAddRecord = () => {
-    setDraftRecord(Object.fromEntries(headers.map((header) => [header, ''])));
+    setDraftRecord(Object.fromEntries(headers.map((header) => [header, header === 'Client' ? (searchParams.get('client') ?? '') : header === 'Mobile' ? (searchParams.get('mobile') ?? '') : ''])));
     setAddOpen(true);
     setMessage(`Add ${title.toLowerCase()} record opened.`);
   };
 
   useEffect(() => {
     if (searchParams.get('action') !== 'add') return;
+    const actionToken = searchParams.toString();
+    if (handledAddRecordAction.current === actionToken) return;
+    handledAddRecordAction.current = actionToken;
     openAddRecord();
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('action');
-    setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
   const rowToCsvValues = (row) => {
@@ -1188,8 +1189,9 @@ export function ClientsPage() {
 }
 
 export function PaymentsPage() {
+  const { branchKey } = useBranch();
   const [clientNames] = useState(() =>
-    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
+    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map((row) => Array.isArray(row) ? row[0] : row.name ?? row.Client ?? '').filter(Boolean)
   );
   return (
     <ImportExportModule
@@ -1484,6 +1486,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const legacyStorageKey = `ayurflow:${title}:tabs:v3`;
   const [rowsByTab, setRowsByTab] = useState(() => loadSavedObject(storageKey, loadSavedObject(legacyStorageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows])))));
   const importInputRef = useRef(null);
+  const handledHubAddAction = useRef('');
 
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const rawActiveRows = Array.isArray(rowsByTab[active.id]) ? rowsByTab[active.id] : active.rows;
@@ -1639,6 +1642,8 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
 
   const openAddForActive = () => {
     const nextDraft = createDraftRow();
+    const clientIndex = active.columns.indexOf('Client');
+    if (clientIndex !== -1) nextDraft[clientIndex] = searchParams.get('client') ?? '';
     if (active.id === 'treatments' && treatmentServiceIndex !== -1 && treatmentMedicineIndex !== -1) {
       const service = String(nextDraft[treatmentServiceIndex] ?? '');
       const defaults = getSuggestedTreatmentDefaults(service);
@@ -1704,11 +1709,10 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       return;
     }
     if (queryAction !== 'add') return;
+    const actionToken = searchParams.toString();
+    if (handledHubAddAction.current === actionToken) return;
+    handledHubAddAction.current = actionToken;
     openAddForActive();
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('action');
-    if (!nextParams.get('tab')) nextParams.set('tab', active.id);
-    setSearchParams(nextParams, { replace: true });
   }, [queryTab, queryAction, activeTab, active.id, activeRows.length, searchParams, setSearchParams]);
 
   const saveDraft = () => {
@@ -2629,8 +2633,10 @@ function LegacyFormsPage() {
 }
 
 export function AppointmentsPage() {
+  const { branchKey } = useBranch();
+  const navigate = useNavigate();
   const [clientNames] = useState(() =>
-    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
+    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map((row) => Array.isArray(row) ? row[0] : row.name ?? row.Client ?? '').filter(Boolean)
   );
   const [staffNames] = useState(() =>
     loadSavedArray('ayurflow:Staff:rows:v2', staffRoles.map((member) => [member.name])).map((row) => row?.[0] ?? row?.name ?? '').filter(Boolean)
@@ -2666,9 +2672,24 @@ export function AppointmentsPage() {
           match: (row) => row[2] === new Date().toISOString().slice(0, 10),
         },
       ]}
-      rowActions={(row, setSelectedRow, setActionMessage) => (
+      rowActions={(row, setSelectedRow, setActionMessage, setTableRows) => (
         <ActionMenu compact label={`Actions for ${row[0] || 'appointment'}`} items={[
           { label: 'View appointment', onClick: () => setSelectedRow(row[0]) },
+          {
+            label: 'Confirm appointment',
+            onClick: () => {
+              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 6 ? 'Confirmed' : cell) : item));
+              setActionMessage(`${row[0]} appointment confirmed.`);
+            },
+          },
+          {
+            label: 'Check in client',
+            onClick: () => {
+              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 6 ? 'Checked-in' : cell) : item));
+              setActionMessage(`${row[0]} checked in and ready for consultation.`);
+            },
+          },
+          { label: 'Open client journey', onClick: () => navigate(`/journey?client=${encodeURIComponent(row[0])}`) },
           {
             label: 'Send WhatsApp reminder',
             onClick: () => {
