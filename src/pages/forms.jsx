@@ -946,7 +946,7 @@ export function FormsPage() {
         </div>
       </div>
 
-      <Card title="All Forms" subtitle="Create, publish, share, and review responses." action={<ActionMenu label="Actions" items={[{ label: 'Create new form', description: 'Open the full form builder', onClick: startCreate }]} />}>
+      <Card title="All Forms" subtitle="Create, publish, share, and review responses." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={startCreate}>+ Create Form</button><ActionMenu label="Actions" items={[{ label: 'Create new form', description: 'Open the full form builder', onClick: startCreate }]} /></div>}>
         {forms.length ? (
           <div className="data-table adaptive-table" style={{ '--table-columns': 5 }}>
             <div className="table-head"><div>Form</div><div>Fields</div><div>Responses</div><div>Status</div><div>Updated</div><div /></div>
@@ -973,7 +973,7 @@ export function FormsPage() {
             ))}
           </div>
         ) : (
-          <div className="empty-state compact-empty table-empty"><strong>No forms created yet.</strong><p>Use Actions, then Create new form, to open the builder.</p></div>
+          <div className="empty-state compact-empty table-empty"><strong>No forms created yet.</strong><p>Create your first intake form, assessment, or registration form.</p><button className="pill primary-action" type="button" onClick={startCreate}>+ Create Form</button></div>
         )}
       </Card>
     </section>

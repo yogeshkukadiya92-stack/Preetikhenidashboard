@@ -294,7 +294,7 @@ function ImportExportModule({
       )}
 
       <div className="grid single-module-grid">
-        <Card title={`Current ${title}`} subtitle={message} action={<ActionMenu label="Actions" items={moduleActions} />}>
+        <Card title={`Current ${title}`} subtitle={message} action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {title}</button><ActionMenu label="Actions" items={moduleActions} /></div>}>
           <div className="table adaptive-table" style={{ '--table-columns': headers.length }}>
             <div className="table-head">
               {headers.map((header) => <div key={header}>{header}</div>)}
@@ -311,6 +311,7 @@ function ImportExportModule({
               <div className="empty-state compact-empty table-empty">
                 <strong>No records yet.</strong>
                 <p>Add a record or import a file to start using this module.</p>
+                <button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {title}</button>
               </div>
             )}
           </div>
@@ -630,7 +631,7 @@ export function CRMPage() {
       </div>
 
       {activeTab === 'leads' ? (
-        <Card title="Current Leads" subtitle={`${manualLeads.length} manual lead(s). ${message}`} action={<ActionMenu label="Actions" items={leadActions} />}>
+        <Card title="Current Leads" subtitle={`${manualLeads.length} manual lead(s). ${message}`} action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openCreateLead}>+ Add Lead</button><ActionMenu label="Actions" items={leadActions} /></div>}>
             {showLeads ? (
               <div className="table adaptive-table" style={{ '--table-columns': headers.length }}>
                 <div className="table-head">
@@ -1854,7 +1855,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
         </div>
       </div>
 
-      <Card title={`${title} Menu`} subtitle={message} action={<ActionMenu label="Actions" items={hubActions} />}>
+      <Card title={`${title} Menu`} subtitle={message} action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openAddForActive}>+ Add {active.singular ?? active.label}</button><ActionMenu label="Actions" items={hubActions} /></div>}>
         <input ref={importInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
         <div className="sheet-tabs compact-tabs">
           {tabs.map((tab) => (
@@ -1919,6 +1920,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
             <div className="empty-state compact-empty table-empty">
               <strong>No records yet.</strong>
               <p>Add or import the first row to unlock this section.</p>
+              <button className="pill primary-action" type="button" onClick={openAddForActive}>+ Add {active.singular ?? active.label}</button>
             </div>
           )}
         </div>
@@ -2775,7 +2777,7 @@ export function TreatmentPlansPage() {
       </div>
 
       {activeTab === 'plans' && (
-        <Card title="Treatment Plans" subtitle="All client treatment records." action={<ActionMenu label="Actions" items={[{ label: 'Add treatment plan', description: 'Create a new client plan', onClick: openNewPlan }]} />}>
+        <Card title="Treatment Plans" subtitle="All client treatment records." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openNewPlan}>+ Add Treatment Plan</button><ActionMenu label="Actions" items={[{ label: 'Add treatment plan', description: 'Create a new client plan', onClick: openNewPlan }]} /></div>}>
             <div className="table adaptive-table" style={{ '--table-columns': PLAN_COLS.length }}>
               <div className="table-head">
                 {PLAN_COLS.map((h) => <div key={h}>{h}</div>)}
@@ -2792,6 +2794,7 @@ export function TreatmentPlansPage() {
                 <div className="empty-state compact-empty table-empty">
                   <strong>No treatment plans yet.</strong>
                   <p>Click Add Treatment Plan, or create a template first for quick entry.</p>
+                  <button className="pill primary-action" type="button" onClick={openNewPlan}>+ Add Treatment Plan</button>
                 </div>
               )}
             </div>
@@ -2799,7 +2802,7 @@ export function TreatmentPlansPage() {
       )}
 
       {activeTab === 'templates' && (
-        <Card title="Treatment Templates" subtitle="Reusable presets that auto-fill treatment details." action={<ActionMenu label="Actions" items={[{ label: 'Add template', description: 'Create a reusable preset', onClick: openNewTemplate }]} />}>
+        <Card title="Treatment Templates" subtitle="Reusable presets that auto-fill treatment details." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openNewTemplate}>+ Add Template</button><ActionMenu label="Actions" items={[{ label: 'Add template', description: 'Create a reusable preset', onClick: openNewTemplate }]} /></div>}>
             <div className="table adaptive-table" style={{ '--table-columns': TMPL_COLS.length }}>
               <div className="table-head">
                 {TMPL_COLS.map((h) => <div key={h}>{h}</div>)}
@@ -2819,6 +2822,7 @@ export function TreatmentPlansPage() {
                 <div className="empty-state compact-empty table-empty">
                   <strong>No templates yet.</strong>
                   <p>Create a template to quickly fill in treatment details — service, medicine, dose, timing — in one tap.</p>
+                  <button className="pill primary-action" type="button" onClick={openNewTemplate}>+ Add Template</button>
                 </div>
               )}
             </div>

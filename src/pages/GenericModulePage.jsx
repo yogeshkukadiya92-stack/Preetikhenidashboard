@@ -217,6 +217,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
         subtitle={`${actionMessage}${viewPresets.length ? ` Selected view: ${activeViewLabel}.` : ''}`}
         action={(
           <div className="card-action-group">
+            <button className="pill primary-action" type="button" onClick={openAddModal}>+ Add {title}</button>
             {viewPresets.length > 0 && <ActionMenu label="Views" items={viewItems} />}
             <ActionMenu label="Actions" items={actionItems} />
           </div>
@@ -276,6 +277,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
             <div className="empty-state compact-empty table-empty">
               <strong>No records yet.</strong>
               <p>Add a record or import a file to start using this module.</p>
+              <button className="pill primary-action" type="button" onClick={openAddModal}>+ Add {title}</button>
             </div>
           )}
         </div>

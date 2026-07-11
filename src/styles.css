@@ -1226,6 +1226,9 @@ body {
 .form-notice { margin: 16px 26px 0; padding: 9px 10px; border: 1px solid #e4c46e; border-radius: 9px; background: #fff8df; color: #6d571b; font-size: 0.8rem; }
 .file-input { padding: 8px; }
 .form-submit-error { text-align: right; }
+.primary-action { border-color: var(--green); background: var(--green); color: #fff; box-shadow: none; }
+.primary-action:hover { background: #185c3e; }
+.empty-state .primary-action { margin-top: 12px; }
 
 .login-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #eef6f3; color: var(--text); }
 .login-shell { width: min(420px, 100%); padding: 28px; border: 1px solid rgba(23, 53, 40, 0.14); border-radius: 12px; background: #fff; box-shadow: 0 18px 48px rgba(19, 52, 39, 0.12); }
