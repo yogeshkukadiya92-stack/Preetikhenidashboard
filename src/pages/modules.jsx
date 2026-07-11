@@ -128,6 +128,17 @@ function nextInvoiceNumber(rows = []) {
   return `INV-${String(highest + 1).padStart(3, '0')}`;
 }
 
+function ageFromBirthday(birthday) {
+  if (!birthday) return '';
+  const birthDate = new Date(`${birthday}T00:00:00`);
+  const today = new Date();
+  if (Number.isNaN(birthDate.getTime()) || birthDate > today) return '';
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const birthdayPending = today.getMonth() < birthDate.getMonth() || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate());
+  if (birthdayPending) age -= 1;
+  return String(Math.max(age, 0));
+}
+
 function ImportExportModule({
   title,
   description,
@@ -390,8 +401,9 @@ function ImportExportModule({
                       className="lead-input"
                       type={fieldTypes[header] ?? 'text'}
                       value={draftRecord[header] ?? ''}
-                      readOnly={header === 'Invoice'}
-                      onChange={(event) => setDraftRecord((current) => ({ ...current, [header]: event.target.value }))}
+                      readOnly={header === 'Invoice' || (title === 'Clients' && header === 'Age')}
+                      max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
+                      onChange={(event) => setDraftRecord((current) => ({ ...current, [header]: event.target.value, ...(title === 'Clients' && header === 'Birthday' ? { Age: ageFromBirthday(event.target.value) } : {}) }))}
                       placeholder={`Enter ${header.toLowerCase()}`}
                     />
                   )}
@@ -1060,7 +1072,7 @@ function ClientProfile({ client, onBack }) {
       {activeTab === 'overview' && (
         <Card title="Client Details">
           <div className="detail-grid">
-            {[['Client', client.name], ['Age', client.age], ['Address', client.address], ['Program', client.program], ['Next Visit', client.nextVisit], ['Birthday', client.birthday], ['Anniversary', client.anniversary]].map(([label, value]) => (
+            {[['Client', client.name], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Program', client.program], ['Next Visit', client.nextVisit]].map(([label, value]) => (
               <div className="mini-stat" key={label}>
                 <span>{label}</span>
                 <strong>{value || '—'}</strong>
@@ -1333,11 +1345,11 @@ export function ClientsPage() {
         { label: 'Treatment Plans', value: '0' },
         { label: 'Next Visits', value: '0' },
       ]}
-      headers={['Client', 'Age', 'Address', 'Program', 'Next Visit', 'Birthday', 'Anniversary']}
+      headers={['Client', 'Birthday', 'Age', 'Address', 'Program', 'Next Visit']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
       fieldOptions={{ Program: getSavedPackageNames() }}
-      fieldTypes={{ Age: 'number', 'Next Visit': 'date', Birthday: 'date', Anniversary: 'date' }}
+      fieldTypes={{ Age: 'number', 'Next Visit': 'date', Birthday: 'date' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
         { label: 'Age wise', column: 'Age' },
@@ -1348,12 +1360,11 @@ export function ClientsPage() {
       ]}
       rowToValues={(row) => ({
         Client: row.name,
+        Birthday: row.birthday,
         Age: row.age,
         Address: row.address,
         Program: row.program,
         'Next Visit': row.nextVisit,
-        Birthday: row.birthday,
-        Anniversary: row.anniversary,
       })}
       parseRow={(entry) => ({
         name: entry.Client ?? entry.client ?? entry.name ?? '',
@@ -1362,7 +1373,6 @@ export function ClientsPage() {
         program: entry.Program ?? entry.program ?? '',
         nextVisit: entry['Next Visit'] ?? entry.nextVisit ?? '',
         birthday: entry.Birthday ?? entry.birthday ?? '',
-        anniversary: entry.Anniversary ?? entry.anniversary ?? '',
       })}
       rowActions={(row) => (
         <button className="row-link" type="button" onClick={() => setSelectedClient(row)}>View Profile</button>
