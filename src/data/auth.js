@@ -75,6 +75,30 @@ export function getSupabaseAccessToken() {
   } catch { return ''; }
 }
 
+export async function getValidSupabaseAccessToken() {
+  const localRaw = window.localStorage.getItem(SUPABASE_SESSION_KEY);
+  const sessionRaw = window.sessionStorage.getItem(SUPABASE_SESSION_KEY);
+  const raw = sessionRaw ?? localRaw;
+  if (!raw) return '';
+  try {
+    const session = JSON.parse(raw);
+    if (session.access_token && Number(session.expires_at ?? 0) * 1000 > Date.now() + 60_000) return session.access_token;
+    if (!session.refresh_token || !supabaseConfigured) return session.access_token ?? '';
+    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!response.ok) return '';
+    const refreshed = await response.json();
+    const storage = sessionRaw ? window.sessionStorage : window.localStorage;
+    storage.setItem(SUPABASE_SESSION_KEY, JSON.stringify(refreshed));
+    return refreshed.access_token ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export function clearAuthSession() {
   window.sessionStorage.removeItem(SESSION_KEY);
   window.localStorage.removeItem(SESSION_KEY);
