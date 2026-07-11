@@ -96,6 +96,15 @@ function currentAppointmentSlot() {
   };
 }
 
+function nextInvoiceNumber(rows = []) {
+  const highest = rows.reduce((maximum, row) => {
+    const invoice = Array.isArray(row) ? row[1] : row?.invoice ?? row?.Invoice ?? '';
+    const match = String(invoice).match(/(\d+)$/);
+    return match ? Math.max(maximum, Number(match[1])) : maximum;
+  }, 0);
+  return `INV-${String(highest + 1).padStart(3, '0')}`;
+}
+
 function ImportExportModule({
   title,
   description,
@@ -111,6 +120,7 @@ function ImportExportModule({
   rowActions = null,
   fieldOptions = {},
   fieldTypes = {},
+  createDefaultRecord = null,
 }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -140,7 +150,8 @@ function ImportExportModule({
   }, [rows, storageKey]);
 
   const openAddRecord = () => {
-    setDraftRecord(Object.fromEntries(headers.map((header) => [header, header === 'Client' ? (searchParams.get('client') ?? '') : header === 'Mobile' ? (searchParams.get('mobile') ?? '') : ''])));
+    const defaults = typeof createDefaultRecord === 'function' ? createDefaultRecord(rows) : {};
+    setDraftRecord(Object.fromEntries(headers.map((header) => [header, defaults[header] ?? (header === 'Client' ? (searchParams.get('client') ?? '') : header === 'Mobile' ? (searchParams.get('mobile') ?? '') : '')])));
     setAddOpen(true);
     setMessage(`Add ${title.toLowerCase()} record opened.`);
   };
@@ -356,6 +367,7 @@ function ImportExportModule({
                       className="lead-input"
                       type={fieldTypes[header] ?? 'text'}
                       value={draftRecord[header] ?? ''}
+                      readOnly={header === 'Invoice'}
                       onChange={(event) => setDraftRecord((current) => ({ ...current, [header]: event.target.value }))}
                       placeholder={`Enter ${header.toLowerCase()}`}
                     />
@@ -826,6 +838,7 @@ function ClientProfile({ client, onBack }) {
   const { branchKey } = useBranch();
   const clientName = client.name ?? '';
   const appointmentsStorageKey = branchKey('Appointments:rows:v3');
+  const paymentsStorageKey = branchKey('ayurflow-payments:rows:v3');
   const [activeTab, setActiveTab] = useState('overview');
   const [refreshKey, setRefreshKey] = useState(0);
   const [treatModal, setTreatModal] = useState(false);
@@ -853,7 +866,10 @@ function ClientProfile({ client, onBack }) {
   const [treatMedicineRows, setTreatMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
   const [nextAppointment, setNextAppointment] = useState(() => ({ enabled: false, mobile: client.mobile ?? '', ...currentAppointmentSlot(), status: 'Confirmed' }));
   const [apptForm, setApptForm] = useState(() => ({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' }));
-  const [payForm, setPayForm] = useState({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
+  const [payForm, setPayForm] = useState(() => {
+    const savedPayments = loadSavedArray(paymentsStorageKey, loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []));
+    return { invoice: nextInvoiceNumber(savedPayments), amount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) };
+  });
 
   useEffect(() => {
     window.localStorage.setItem(treatmentTemplatesKey, JSON.stringify(treatTemplates));
@@ -941,9 +957,9 @@ function ClientProfile({ client, onBack }) {
   }, [appointmentsStorageKey, clientName, refreshKey]);
 
   const allPayments = useMemo(() => {
-    const saved = loadSavedState('ayurflow:ayurflow-payments:rows:v3', []);
+    const saved = loadSavedState(paymentsStorageKey, loadSavedState('ayurflow:ayurflow-payments:rows:v3', []));
     return saved.filter((row) => String(row.client ?? '').toLowerCase().includes(clientName.toLowerCase()));
-  }, [clientName, refreshKey]);
+  }, [clientName, paymentsStorageKey, refreshKey]);
 
   const saveTreatment = () => {
     const selectedRows = treatMedicineRows.filter((row) => row.medicine.trim());
@@ -981,12 +997,12 @@ function ClientProfile({ client, onBack }) {
   };
 
   const savePayment = () => {
-    const key = 'ayurflow:ayurflow-payments:rows:v3';
-    const current = loadSavedArray(key, []);
-    window.localStorage.setItem(key, JSON.stringify([{ client: clientName, invoice: payForm.invoice, amount: payForm.amount, status: payForm.status, paidOn: payForm.paidOn }, ...current]));
+    const current = loadSavedArray(paymentsStorageKey, []);
+    const updatedPayments = [{ client: clientName, invoice: payForm.invoice, amount: payForm.amount, status: payForm.status, paidOn: payForm.paidOn }, ...current];
+    window.localStorage.setItem(paymentsStorageKey, JSON.stringify(updatedPayments));
     setRefreshKey((k) => k + 1);
     setPayModal(false);
-    setPayForm({ invoice: '', amount: '', status: 'Paid', paidOn: '' });
+    setPayForm({ invoice: nextInvoiceNumber(updatedPayments), amount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
   };
 
   return (
@@ -1250,7 +1266,7 @@ function ClientProfile({ client, onBack }) {
             <div className="modal-body detail-grid">
               <label className="field-block">
                 <span>Invoice</span>
-                <input className="lead-input" value={payForm.invoice} onChange={(e) => setPayForm((f) => ({ ...f, invoice: e.target.value }))} placeholder="INV-001" />
+                <input className="lead-input" value={payForm.invoice} readOnly aria-readonly="true" />
               </label>
               <label className="field-block">
                 <span>Amount</span>
@@ -1350,6 +1366,7 @@ export function PaymentsPage() {
       seedRows={payments}
       filenameBase="ayurflow-payments"
       fieldOptions={{ Client: clientNames }}
+      createDefaultRecord={(rows) => ({ Invoice: nextInvoiceNumber(rows), Status: 'Paid', 'Paid On': new Date().toISOString().slice(0, 10) })}
       rowToValues={(row) => ({
         Client: row.client,
         Invoice: row.invoice,
