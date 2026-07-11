@@ -4,6 +4,7 @@ import { BellIcon, CalendarIcon, ChartIcon, ChevronDown, ChevronRight, FileIcon,
 import { navItems } from '../data/appConfig.js';
 import { loadLiveDashboardData } from '../data/liveData.js';
 import { useBranch } from '../context/BranchContext.jsx';
+import { ADMIN_EMAIL, clearAuthSession } from '../data/auth.js';
 
 const iconByPath = {
   '/': HomeIcon,
@@ -48,6 +49,7 @@ export function Layout() {
   const [searchText, setSearchText] = useState('');
   const [dateRange, setDateRange] = useState(() => getCurrentDateRange());
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [notificationSummary, setNotificationSummary] = useState({ followUps: 0, pendingPayments: 0 });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navSections = useMemo(() => sectionOrder.map((label) => ({
@@ -67,6 +69,7 @@ export function Layout() {
   };
 
   const toggleNotifications = () => {
+    setProfileOpen(false);
     if (!notificationsOpen) {
       const liveData = loadLiveDashboardData(currentBranch);
       setNotificationSummary({
@@ -211,7 +214,13 @@ export function Layout() {
               <button className="row-link" type="button" onClick={() => { setNotificationsOpen(false); navigate('/crm'); }}>Open CRM</button>
             </div>
           )}
-          <button className="profile" type="button" onClick={() => navigate('/users')} aria-label="Open user profile">
+          <button
+            className="profile"
+            type="button"
+            onClick={() => { setNotificationsOpen(false); setProfileOpen((current) => !current); }}
+            aria-label="Open user profile"
+            aria-expanded={profileOpen}
+          >
             <div className="avatar" aria-hidden="true" />
             <div className="meta">
               <strong>Mom's Pathshala</strong>
@@ -219,6 +228,24 @@ export function Layout() {
             </div>
             <ChevronRight />
           </button>
+          {profileOpen && (
+            <div className="profile-popover">
+              <strong>Administrator</strong>
+              <span>{ADMIN_EMAIL || 'Administrator account'}</span>
+              <div className="profile-popover-actions">
+                <button type="button" onClick={() => { setProfileOpen(false); navigate('/users'); }}>Open users</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearAuthSession();
+                    navigate('/login', { replace: true });
+                  }}
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          )}
         </header>
         <Outlet key={currentBranch} />
       </main>

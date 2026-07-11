@@ -1,7 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Layout } from './components/Layout.jsx';
+import { ProtectedRoute } from './components/ProtectedRoute.jsx';
 import { DashboardPage } from './pages/DashboardPage.jsx';
+import { FormsPage, PublicFormPage } from './pages/forms.jsx';
+import { LoginPage } from './pages/LoginPage.jsx';
 import {
   AccountsPage,
   AppointmentsPage,
@@ -10,7 +13,6 @@ import {
   ClientPortalPage,
   CoachingPage,
   CommunicationPage,
-  FormsPage,
   IntegrationsPage,
   InventoryPage,
   FinancePage,
@@ -31,8 +33,11 @@ export function App() {
   return (
     <ErrorBoundary>
       <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<DashboardPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/public/forms/:slug" element={<PublicFormPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/" element={<DashboardPage />} />
           <Route path="/crm" element={<CRMPage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/users" element={<UsersPage />} />
@@ -55,7 +60,8 @@ export function App() {
           <Route path="/branches" element={<BranchesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
         </Route>
       </Routes>
     </ErrorBoundary>

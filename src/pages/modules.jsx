@@ -2324,7 +2324,7 @@ const FIELD_TYPES = [
 function makeUid() { return `id_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`; }
 function makeBlankField() { return { id: makeUid(), type: 'text', label: '', placeholder: '', required: false, options: [] }; }
 
-export function FormsPage() {
+function LegacyFormsPage() {
   const [view, setView] = useState('list');
   const [forms, setForms] = useState(() => loadSavedState('ayurflow:forms:v1', []));
   const [editingId, setEditingId] = useState(null);
