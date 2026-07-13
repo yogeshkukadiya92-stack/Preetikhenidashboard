@@ -3389,6 +3389,7 @@ export function MedicinesPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importPreview, setImportPreview] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
+  const [bulkText, setBulkText] = useState('');
   const medicineImportRef = useRef(null);
 
   useEffect(() => {
@@ -3449,9 +3450,29 @@ export function MedicinesPage() {
     setMessage('Medicine CSV export started.');
   };
 
+  const sampleMedicineRows = [
+    ['Vitamin D3', 'Supplement', '60000 IU', 'Weekly once after meals', 'Active'],
+    ['Triphala Churna', 'Ayurvedic', '1 tsp', 'Night after meals', 'Active'],
+  ];
+
+  const openBulkImport = () => {
+    setImportOpen(true);
+    setMessage('Bulk medicine add opened.');
+  };
+
   const downloadMedicineTemplate = () => {
-    downloadText('medicines-template.csv', rowsToCsv(medicineHeaders, [medicineHeaders.map(() => '')]), 'text/csv;charset=utf-8');
+    downloadText('medicines-template.csv', rowsToCsv(medicineHeaders, sampleMedicineRows), 'text/csv;charset=utf-8');
     setMessage('Medicine CSV template downloaded.');
+  };
+
+  const previewMedicineRows = (parsed, sourceName) => {
+    const normalized = asImportRows(parsed)
+      .map((row) => (Array.isArray(row) ? normalizeMedicine(Object.fromEntries(medicineHeaders.map((header, index) => [header, row[index] ?? '']))) : normalizeMedicine(row)))
+      .filter((row) => row.Medicine);
+    setImportPreview(normalized);
+    setImportOpen(true);
+    setUploadName(sourceName);
+    setMessage(`${normalized.length} medicine record(s) ready to import.`);
   };
 
   const handleMedicineImport = async (file) => {
@@ -3466,12 +3487,23 @@ export function MedicinesPage() {
       setMessage('Import failed. Please upload a valid medicine CSV or JSON file.');
       return;
     }
-    const normalized = asImportRows(parsed)
-      .map((row) => (Array.isArray(row) ? normalizeMedicine(Object.fromEntries(medicineHeaders.map((header, index) => [header, row[index] ?? '']))) : normalizeMedicine(row)))
-      .filter((row) => row.Medicine);
-    setImportPreview(normalized);
-    setImportOpen(true);
-    setMessage(`${normalized.length} medicine record(s) ready to import.`);
+    previewMedicineRows(parsed, file.name);
+  };
+
+  const previewBulkText = () => {
+    if (!bulkText.trim()) {
+      setMessage('Paste medicine rows or upload a CSV/JSON file.');
+      return;
+    }
+    try {
+      const lines = bulkText.trim().split(/\r?\n/);
+      const firstLine = String(lines[0] ?? '').toLowerCase();
+      const body = firstLine.includes('medicine') && firstLine.includes('category') ? lines.slice(1).join('\n') : lines.join('\n');
+      previewMedicineRows(parseCsv(`${medicineHeaders.join(',')}\n${body}`), 'pasted rows');
+    } catch {
+      setImportPreview([]);
+      setMessage('Could not read pasted medicines. Use comma separated columns.');
+    }
   };
 
   const commitMedicineImport = () => {
@@ -3479,8 +3511,16 @@ export function MedicinesPage() {
       setMessage('No medicines found to import.');
       return;
     }
-    setCatalog((current) => [...importPreview, ...current]);
+    setCatalog((current) => {
+      const byName = new Map();
+      [...importPreview, ...current].forEach((row) => {
+        const key = String(row.Medicine ?? '').trim().toLowerCase();
+        if (key && !byName.has(key)) byName.set(key, row);
+      });
+      return Array.from(byName.values());
+    });
     setImportPreview([]);
+    setBulkText('');
     setUploadName('No file selected');
     setImportOpen(false);
     setMessage(`Imported ${importPreview.length} medicine record(s).`);
@@ -3502,7 +3542,7 @@ export function MedicinesPage() {
       <Card
         title={selectedIndex === null ? 'Add Medicine' : 'Edit Medicine'}
         subtitle="This catalog feeds the treatment preset builder."
-        action={<div className="card-action-group"><button className="pill" type="button" onClick={() => medicineImportRef.current?.click()}>Import</button><button className="pill" type="button" onClick={exportMedicines}>Export</button><ActionMenu label="More" items={[{ label: 'Download template', description: 'Blank CSV format', onClick: downloadMedicineTemplate }, { label: 'Reset form', description: 'Clear the current medicine draft', onClick: resetDraft }]} /></div>}
+        action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openBulkImport}>Bulk Add Medicines</button><button className="pill" type="button" onClick={exportMedicines}>Export</button><ActionMenu label="More" items={[{ label: 'Upload CSV/JSON', description: 'Import many medicines at once', onClick: () => medicineImportRef.current?.click() }, { label: 'Download template', description: 'Sample CSV format', onClick: downloadMedicineTemplate }, { label: 'Reset form', description: 'Clear the current medicine draft', onClick: resetDraft }]} /></div>}
       >
         <input ref={medicineImportRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleMedicineImport(event.target.files?.[0])} />
         <div className="modal-body detail-grid">
@@ -3527,10 +3567,27 @@ export function MedicinesPage() {
           <div className="modal-shell" role="dialog" aria-modal="true" aria-label="Import Medicines" onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
               <div>
-                <h2>Import Medicines</h2>
-                <p>{importPreview.length} record(s) detected from {uploadName}.</p>
+                <h2>Bulk Add Medicines</h2>
+                <p>{importPreview.length} record(s) detected from {uploadName}. Existing medicine names will be updated instead of duplicated.</p>
               </div>
               <button className="icon-btn" type="button" onClick={() => setImportOpen(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              <label className="field-block full-field">
+                <span>Paste rows</span>
+                <textarea
+                  className="lead-input"
+                  rows={5}
+                  value={bulkText}
+                  onChange={(event) => setBulkText(event.target.value)}
+                  placeholder="Vitamin D3, Supplement, 60000 IU, Weekly once, Active&#10;Triphala Churna, Ayurvedic, 1 tsp, Night after meals, Active"
+                />
+              </label>
+              <div className="sheet-actions">
+                <button className="pill" type="button" onClick={previewBulkText}>Preview Pasted Rows</button>
+                <button className="pill" type="button" onClick={() => medicineImportRef.current?.click()}>Upload CSV/JSON</button>
+                <button className="pill" type="button" onClick={downloadMedicineTemplate}>Download Template</button>
+              </div>
             </div>
             <div className="modal-table adaptive-table" style={{ '--table-columns': medicineHeaders.length }}>
               <div className="table-head">
