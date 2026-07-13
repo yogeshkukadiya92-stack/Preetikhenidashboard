@@ -208,9 +208,20 @@ function nextInvoiceNumber(rows = []) {
 
 function ageFromBirthday(birthday) {
   if (!birthday) return '';
-  const birthDate = new Date(`${birthday}T00:00:00`);
+  const rawBirthday = String(birthday).trim();
+  const isoMatch = rawBirthday.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const localMatch = rawBirthday.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  const birthDate = isoMatch
+    ? new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
+    : localMatch
+      ? new Date(Number(localMatch[3]), Number(localMatch[2]) - 1, Number(localMatch[1]))
+      : new Date(rawBirthday);
   const today = new Date();
-  if (Number.isNaN(birthDate.getTime()) || birthDate > today) return '';
+  if (
+    Number.isNaN(birthDate.getTime())
+    || birthDate > today
+    || birthDate.getFullYear() < 1900
+  ) return '';
   let age = today.getFullYear() - birthDate.getFullYear();
   const birthdayPending = today.getMonth() < birthDate.getMonth() || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate());
   if (birthdayPending) age -= 1;
@@ -1569,15 +1580,18 @@ export function ClientsPage() {
         Address: row.address,
         Service: row.service || row.program,
       })}
-      parseRow={(entry) => ({
-        name: entry.Client ?? entry.client ?? entry.name ?? '',
-        mobile: entry.Mobile ?? entry.mobile ?? entry.Phone ?? entry.phone ?? '',
-        age: entry.Age ?? entry.age ?? '',
-        address: entry.Address ?? entry.address ?? '',
-        service: entry.Service ?? entry.service ?? entry.Program ?? entry.program ?? '',
-        program: entry.Program ?? entry.program ?? entry.Service ?? entry.service ?? '',
-        birthday: entry.Birthday ?? entry.birthday ?? '',
-      })}
+      parseRow={(entry) => {
+        const birthday = entry.Birthday ?? entry.birthday ?? '';
+        return {
+          name: entry.Client ?? entry.client ?? entry.name ?? '',
+          mobile: entry.Mobile ?? entry.mobile ?? entry.Phone ?? entry.phone ?? '',
+          age: ageFromBirthday(birthday) || entry.Age || entry.age || '',
+          address: entry.Address ?? entry.address ?? '',
+          service: entry.Service ?? entry.service ?? entry.Program ?? entry.program ?? '',
+          program: entry.Program ?? entry.program ?? entry.Service ?? entry.service ?? '',
+          birthday,
+        };
+      }}
       rowActions={(row, openEditRecord) => (
         <ActionMenu
           label="Actions"
