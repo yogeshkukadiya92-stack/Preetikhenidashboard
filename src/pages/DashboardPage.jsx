@@ -443,13 +443,13 @@ function buildRenewalAlerts(clients, packageRows) {
   return clients
     .map((client) => {
       const name = client.name ?? pickRowValue(client, 0, ['Client']);
-      const program = client.program ?? pickRowValue(client, 2, ['Program']);
-      const nextVisit = client.nextVisit ?? pickRowValue(client, 4, ['Next Visit']);
+      const service = client.service ?? client.program ?? pickRowValue(client, 5, ['Service']) ?? pickRowValue(client, 2, ['Program']);
+      const nextVisit = client.nextVisit ?? pickRowValue(client, 6, ['Next Visit']);
       const dueIn = daysUntil(nextVisit);
       if (dueIn === null || dueIn < 0 || dueIn > 30) return null;
       return {
         title: name || 'Unnamed client',
-        note: `${program || 'Package'}${packageNames.has(program) ? '' : ' renewal'} · due in ${dueIn} day${dueIn === 1 ? '' : 's'}`,
+        note: `${service || 'Service'}${packageNames.has(service) ? '' : ' follow-up'} · due in ${dueIn} day${dueIn === 1 ? '' : 's'}`,
         tone: dueIn <= 7 ? 'hot' : 'warm',
       };
     })

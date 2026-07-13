@@ -105,10 +105,10 @@ function getSavedOperationRows(tabId) {
   return Array.isArray(rowsByTab[tabId]) ? rowsByTab[tabId] : [];
 }
 
-function getSavedPackageNames() {
-  const savedPackageNames = getSavedOperationRows('packages').map((row) => row[0]).filter(Boolean);
-  const seedPackageNames = packages.map((item) => item.name).filter(Boolean);
-  return Array.from(new Set([...savedPackageNames, ...seedPackageNames]));
+function getSavedServiceNames() {
+  const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
+  const savedNames = saved.map((row) => (Array.isArray(row) ? row[0] : row.Service ?? row.service)).filter(Boolean);
+  return Array.from(new Set([...savedNames, ...services]));
 }
 
 function currentAppointmentSlot() {
@@ -1056,7 +1056,7 @@ function ClientProfile({ client, onBack }) {
           <div className="client-avatar">{clientName.charAt(0).toUpperCase()}</div>
           <div>
             <h1>{clientName}</h1>
-            <p>{client.program || 'No program'} · Mobile: {client.mobile || '—'} · Age: {client.age || '—'} · Next Visit: {client.nextVisit || '—'}</p>
+            <p>{client.service || client.program || 'No service'} · Mobile: {client.mobile || '—'} · Age: {client.age || '—'} · Next Visit: {client.nextVisit || '—'}</p>
           </div>
           <ActionMenu label="Actions" items={[
             { label: 'Add treatment plan', description: `Create a plan for ${clientName}`, onClick: () => setTreatModal(true) },
@@ -1080,7 +1080,7 @@ function ClientProfile({ client, onBack }) {
       {activeTab === 'overview' && (
         <Card title="Client Details">
           <div className="detail-grid">
-            {[['Client', client.name], ['Mobile', client.mobile], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Program', client.program], ['Next Visit', client.nextVisit]].map(([label, value]) => (
+            {[['Client', client.name], ['Mobile', client.mobile], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Service', client.service || client.program], ['Next Visit', client.nextVisit]].map(([label, value]) => (
               <div className="mini-stat" key={label}>
                 <span>{label}</span>
                 <strong>{value || '—'}</strong>
@@ -1353,16 +1353,16 @@ export function ClientsPage() {
         { label: 'Treatment Plans', value: '0' },
         { label: 'Next Visits', value: '0' },
       ]}
-      headers={['Client', 'Mobile', 'Birthday', 'Age', 'Address', 'Program', 'Next Visit']}
+      headers={['Client', 'Mobile', 'Birthday', 'Age', 'Address', 'Service', 'Next Visit']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
-      fieldOptions={{ Program: getSavedPackageNames() }}
+      fieldOptions={{ Service: getSavedServiceNames() }}
       fieldTypes={{ Mobile: 'tel', Age: 'number', 'Next Visit': 'date', Birthday: 'date' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
         { label: 'Mobile wise', column: 'Mobile' },
         { label: 'Age wise', column: 'Age' },
-        { label: 'Program wise', column: 'Program' },
+        { label: 'Service wise', column: 'Service' },
         { label: 'Address wise', column: 'Address' },
         { label: 'Next visit wise', column: 'Next Visit' },
         { label: 'Birthday wise', column: 'Birthday' },
@@ -1373,7 +1373,7 @@ export function ClientsPage() {
         Birthday: row.birthday,
         Age: row.age,
         Address: row.address,
-        Program: row.program,
+        Service: row.service || row.program,
         'Next Visit': row.nextVisit,
       })}
       parseRow={(entry) => ({
@@ -1381,7 +1381,8 @@ export function ClientsPage() {
         mobile: entry.Mobile ?? entry.mobile ?? entry.Phone ?? entry.phone ?? '',
         age: entry.Age ?? entry.age ?? '',
         address: entry.Address ?? entry.address ?? '',
-        program: entry.Program ?? entry.program ?? '',
+        service: entry.Service ?? entry.service ?? entry.Program ?? entry.program ?? '',
+        program: entry.Program ?? entry.program ?? entry.Service ?? entry.service ?? '',
         nextVisit: entry['Next Visit'] ?? entry.nextVisit ?? '',
         birthday: entry.Birthday ?? entry.birthday ?? '',
       })}
