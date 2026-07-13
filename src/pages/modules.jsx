@@ -3091,7 +3091,7 @@ export function TreatmentPlansPage() {
   const DIET_PLANS_KEY = branchKey('diet-plans:v1');
 
   const [clientNames] = useState(() =>
-    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => (Array.isArray(row) ? row[0] : row.name ?? row.Client ?? row.client ?? '')).filter(Boolean)
+    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map((row) => (Array.isArray(row) ? row[0] : row.name ?? row.Client ?? row.client ?? '')).filter(Boolean)
   );
   const [serviceOptions] = useState(() => {
     const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
@@ -3422,14 +3422,8 @@ export function TreatmentPlansPage() {
               )}
               <label className="field-block">
                 <span>Client</span>
-                {clientNames.length ? (
-                  <select className="lead-input" value={planForm.client} onChange={(e) => setPlanForm((f) => ({ ...f, client: e.target.value }))}>
-                    <option value="">Select client</option>
-                    {clientNames.map((n) => <option key={n}>{n}</option>)}
-                  </select>
-                ) : (
-                  <input className="lead-input" value={planForm.client} onChange={(e) => setPlanForm((f) => ({ ...f, client: e.target.value }))} placeholder="Client name" />
-                )}
+                <input className="lead-input" list="treatment-client-options" value={planForm.client} onChange={(e) => setPlanForm((f) => ({ ...f, client: e.target.value }))} placeholder={clientNames.length ? 'Search or select client...' : 'Client name'} />
+                <datalist id="treatment-client-options">{clientNames.map((name) => <option key={name} value={name} />)}</datalist>
               </label>
               <label className="field-block">
                 <span>Service</span>
@@ -3527,7 +3521,7 @@ export function TreatmentPlansPage() {
                 <button className="pill" type="button" onClick={() => applyDietPreset('muscleGain')}>Muscle Gain</button>
                 <button className="pill" type="button" onClick={() => applyDietPreset('nutrition')}>Nutrition</button>
               </div>
-              <label className="field-block"><span>Client</span>{clientNames.length ? <select className="lead-input" value={dietForm.client} onChange={(e) => setDietForm((f) => ({ ...f, client: e.target.value }))}><option value="">Select client</option>{clientNames.map((name) => <option key={name}>{name}</option>)}</select> : <input className="lead-input" value={dietForm.client} onChange={(e) => setDietForm((f) => ({ ...f, client: e.target.value }))} placeholder="Client name" />}</label>
+              <label className="field-block"><span>Client</span><input className="lead-input" list="diet-client-options" value={dietForm.client} onChange={(e) => setDietForm((f) => ({ ...f, client: e.target.value }))} placeholder={clientNames.length ? 'Search or select client...' : 'Client name'} /><datalist id="diet-client-options">{clientNames.map((name) => <option key={name} value={name} />)}</datalist></label>
               <label className="field-block"><span>Service</span><select className="lead-input" value={dietForm.service} onChange={(e) => setDietForm((f) => ({ ...f, service: e.target.value }))}>{serviceOptions.map((service) => <option key={service}>{service}</option>)}</select></label>
               <label className="field-block"><span>Goal</span><input className="lead-input" value={dietForm.goal} onChange={(e) => setDietForm((f) => ({ ...f, goal: e.target.value }))} /></label>
               <label className="field-block"><span>Duration</span><input className="lead-input" value={dietForm.duration} onChange={(e) => setDietForm((f) => ({ ...f, duration: e.target.value }))} /></label>
