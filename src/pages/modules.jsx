@@ -3072,9 +3072,10 @@ export function TreatmentPlansPage() {
   const { branchKey } = useBranch();
   const PLANS_KEY = branchKey('Treatment Plans:rows:v2');
   const TEMPLATES_KEY = branchKey('treatment-templates:v2');
+  const DIET_PLANS_KEY = branchKey('diet-plans:v1');
 
   const [clientNames] = useState(() =>
-    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => row.name ?? '').filter(Boolean)
+    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients).map((row) => (Array.isArray(row) ? row[0] : row.name ?? row.Client ?? row.client ?? '')).filter(Boolean)
   );
   const [serviceOptions] = useState(() => {
     const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
@@ -3083,6 +3084,7 @@ export function TreatmentPlansPage() {
   });
   const [plans, setPlans] = useState(() => loadSavedArray(PLANS_KEY, []));
   const [templates, setTemplates] = useState(() => loadSavedArray(TEMPLATES_KEY, loadSavedArray('ayurflow:treatment-templates:v1', [])));
+  const [dietPlans, setDietPlans] = useState(() => loadSavedArray(DIET_PLANS_KEY, []));
   const medicineCatalog = useMemo(() => {
     const operations = loadSavedObject(branchKey('Operations:tabs:v3'), loadSavedObject('ayurflow:Operations:tabs:v3', {}));
     return (Array.isArray(operations.medicines) ? operations.medicines : []).map((row) => Array.isArray(row)
@@ -3093,6 +3095,15 @@ export function TreatmentPlansPage() {
 
   const blankPlan = { client: '', service: serviceOptions[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' };
   const blankTemplate = { name: '', service: serviceOptions[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '' };
+  const blankDietMeals = [
+    { time: '07:00', meal: 'Warm water', food: 'Lemon water / methi water', notes: 'Start hydration' },
+    { time: '08:30', meal: 'Breakfast', food: 'Protein breakfast + fruit', notes: 'Avoid sugar' },
+    { time: '11:00', meal: 'Mid meal', food: 'Fruit / nuts / buttermilk', notes: 'Light portion' },
+    { time: '13:30', meal: 'Lunch', food: 'Roti/rice + dal + sabzi + salad', notes: 'Balanced plate' },
+    { time: '17:00', meal: 'Evening', food: 'Tea without sugar + roasted snack', notes: 'No fried snacks' },
+    { time: '20:00', meal: 'Dinner', food: 'Soup / khichdi / protein + vegetables', notes: 'Finish early' },
+  ];
+  const blankDietPlan = { client: '', service: serviceOptions.find((item) => /nutrition|diet|fat|weight|muscle/i.test(item)) ?? serviceOptions[0] ?? '', goal: 'Fat loss', duration: '30 days', calories: '', water: '2.5-3 L', instructions: 'Sleep 7 hours, walk daily, avoid sugar and fried food.', meals: blankDietMeals };
 
   const [planModal, setPlanModal] = useState(false);
   const [planForm, setPlanForm] = useState(blankPlan);
@@ -3103,6 +3114,9 @@ export function TreatmentPlansPage() {
   const [templateMedicineRows, setTemplateMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
   const [templateMedicineError, setTemplateMedicineError] = useState('');
   const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
+  const [dietModal, setDietModal] = useState(false);
+  const [dietForm, setDietForm] = useState(blankDietPlan);
+  const [editingDietIndex, setEditingDietIndex] = useState(null);
 
   useEffect(() => {
     try { window.localStorage.setItem(PLANS_KEY, JSON.stringify(plans)); } catch {}
@@ -3111,6 +3125,10 @@ export function TreatmentPlansPage() {
   useEffect(() => {
     try { window.localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates)); } catch {}
   }, [templates]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(DIET_PLANS_KEY, JSON.stringify(dietPlans)); } catch {}
+  }, [dietPlans, DIET_PLANS_KEY]);
 
   const applyTemplate = (template) => {
     setPlanForm((f) => ({ ...f, service: template.service, goal: template.goal, duration: template.duration, medicine: template.medicine, dose: template.dose, timing: template.timing }));
@@ -3186,8 +3204,80 @@ export function TreatmentPlansPage() {
     setTemplates((current) => current.filter((_, itemIndex) => itemIndex !== index));
   };
 
+  const setDietMeal = (index, field, value) => {
+    setDietForm((current) => ({
+      ...current,
+      meals: current.meals.map((meal, mealIndex) => (mealIndex === index ? { ...meal, [field]: value } : meal)),
+    }));
+  };
+
+  const addDietMeal = () => {
+    setDietForm((current) => ({ ...current, meals: [...current.meals, { time: '', meal: '', food: '', notes: '' }] }));
+  };
+
+  const removeDietMeal = (index) => {
+    setDietForm((current) => ({ ...current, meals: current.meals.length > 1 ? current.meals.filter((_, mealIndex) => mealIndex !== index) : current.meals }));
+  };
+
+  const applyDietPreset = (type) => {
+    const presets = {
+      fatLoss: { goal: 'Fat loss', calories: '1200-1500 kcal', meals: blankDietMeals },
+      muscleGain: {
+        goal: 'Muscle gain',
+        calories: '2200-2600 kcal',
+        meals: [
+          { time: '07:00', meal: 'Pre-workout', food: 'Banana + black coffee / soaked almonds', notes: 'Before training' },
+          { time: '09:00', meal: 'Breakfast', food: 'Paneer/eggs/sprouts + oats/poha', notes: 'High protein' },
+          { time: '11:30', meal: 'Snack', food: 'Fruit + nuts / protein shake', notes: 'Add calories' },
+          { time: '14:00', meal: 'Lunch', food: 'Rice/roti + dal + sabzi + curd + salad', notes: 'Balanced carbs' },
+          { time: '17:30', meal: 'Evening', food: 'Sweet potato / sandwich / chilla', notes: 'Pre-evening snack' },
+          { time: '20:30', meal: 'Dinner', food: 'Protein + roti/rice + vegetables', notes: 'Do not skip' },
+        ],
+      },
+      nutrition: { goal: 'Nutrition balance', calories: 'As per assessment', meals: blankDietMeals },
+    };
+    const preset = presets[type];
+    setDietForm((current) => ({ ...current, goal: preset.goal, calories: preset.calories, meals: preset.meals }));
+  };
+
+  const openNewDietPlan = () => {
+    setDietForm(blankDietPlan);
+    setEditingDietIndex(null);
+    setDietModal(true);
+  };
+
+  const openEditDietPlan = (plan, index) => {
+    setDietForm({ ...blankDietPlan, ...plan, meals: Array.isArray(plan.meals) && plan.meals.length ? plan.meals : blankDietMeals });
+    setEditingDietIndex(index);
+    setDietModal(true);
+  };
+
+  const saveDietPlan = () => {
+    const plan = { ...dietForm, meals: dietForm.meals.filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())) };
+    setDietPlans((current) => editingDietIndex === null ? [plan, ...current] : current.map((item, index) => (index === editingDietIndex ? plan : item)));
+    setDietModal(false);
+    setEditingDietIndex(null);
+    setDietForm(blankDietPlan);
+  };
+
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+
+  const openDietPdf = (plan) => {
+    const mealRows = (plan.meals ?? []).map((meal) => `<tr><td>${escapeHtml(meal.time)}</td><td>${escapeHtml(meal.meal)}</td><td>${escapeHtml(meal.food)}</td><td>${escapeHtml(meal.notes)}</td></tr>`).join('');
+    const win = window.open('', '_blank', 'noopener,noreferrer');
+    if (!win) return;
+    win.document.write(`<!doctype html><html><head><title>${escapeHtml(plan.client || 'Diet Plan')}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#163f33}h1{margin:0 0 8px}p{margin:4px 0 12px;color:#4f6f65}.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:20px 0}.box{border:1px solid #d6e4df;border-radius:8px;padding:10px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #d6e4df;padding:10px;text-align:left;vertical-align:top}th{background:#eaf5f1}@media print{button{display:none}}</style></head><body><button onclick="window.print()">Print / Save PDF</button><h1>Diet Plan</h1><p>Mom's Pathshala</p><div class="meta"><div class="box"><strong>Client</strong><br>${escapeHtml(plan.client)}</div><div class="box"><strong>Service</strong><br>${escapeHtml(plan.service)}</div><div class="box"><strong>Goal</strong><br>${escapeHtml(plan.goal)}</div><div class="box"><strong>Duration</strong><br>${escapeHtml(plan.duration)}</div><div class="box"><strong>Calories</strong><br>${escapeHtml(plan.calories)}</div><div class="box"><strong>Water</strong><br>${escapeHtml(plan.water)}</div></div><h2>Meal Schedule</h2><table><thead><tr><th>Time</th><th>Meal</th><th>Food</th><th>Notes</th></tr></thead><tbody>${mealRows}</tbody></table><h2>Instructions</h2><p>${escapeHtml(plan.instructions)}</p><script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script></body></html>`);
+    win.document.close();
+  };
+
+  const shareDietPlan = (plan) => {
+    const text = encodeURIComponent(`Diet Plan for ${plan.client}\nGoal: ${plan.goal}\nDuration: ${plan.duration}\n${(plan.meals ?? []).map((meal) => `${meal.time} - ${meal.meal}: ${meal.food}`).join('\n')}\nInstructions: ${plan.instructions}`);
+    window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer');
+  };
+
   const PLAN_COLS = ['Client', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing', 'Status'];
   const TMPL_COLS = ['Template Name', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing'];
+  const DIET_COLS = ['Client', 'Service', 'Goal', 'Duration', 'Meals', 'Calories', 'Water'];
 
   return (
     <section className="module-page">
@@ -3199,13 +3289,14 @@ export function TreatmentPlansPage() {
         <div className="module-stats">
           <div className="mini-stat"><span>Active</span><strong>{plans.filter((r) => (r[7] ?? r[4]) === 'Active').length}</strong></div>
           <div className="mini-stat"><span>Templates</span><strong>{templates.length}</strong></div>
-          <div className="mini-stat"><span>Total Plans</span><strong>{plans.length}</strong></div>
+          <div className="mini-stat"><span>Diet Plans</span><strong>{dietPlans.length}</strong></div>
         </div>
       </div>
 
       <div className="sheet-tabs">
         <button className={`sheet-tab ${activeTab === 'plans' ? 'active' : ''}`} type="button" onClick={() => setActiveTab('plans')}>Treatment Plans</button>
         <button className={`sheet-tab ${activeTab === 'templates' ? 'active' : ''}`} type="button" onClick={() => setActiveTab('templates')}>Templates</button>
+        <button className={`sheet-tab ${activeTab === 'diet' ? 'active' : ''}`} type="button" onClick={() => setActiveTab('diet')}>Diet Plans</button>
       </div>
 
       {activeTab === 'plans' && (
@@ -3231,6 +3322,41 @@ export function TreatmentPlansPage() {
               )}
             </div>
           </Card>
+      )}
+
+      {activeTab === 'diet' && (
+        <Card title="Diet Plans" subtitle="Create time-wise meal plans for nutrition, fat loss, and muscle gain clients." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openNewDietPlan}>+ Add Diet Plan</button><ActionMenu label="Actions" items={[{ label: 'Add diet plan', description: 'Build a meal schedule', onClick: openNewDietPlan }]} /></div>}>
+          <div className="table adaptive-table" style={{ '--table-columns': DIET_COLS.length }}>
+            <div className="table-head">
+              {DIET_COLS.map((h) => <div key={h}>{h}</div>)}
+              <div />
+            </div>
+            {dietPlans.length ? dietPlans.map((plan, index) => (
+              <div className="data-row" key={`${plan.client}-${index}`}>
+                <div>{plan.client}</div>
+                <div>{plan.service}</div>
+                <div>{plan.goal}</div>
+                <div>{plan.duration}</div>
+                <div>{plan.meals?.length ?? 0}</div>
+                <div>{plan.calories}</div>
+                <div>{plan.water}</div>
+                <div>
+                  <ActionMenu compact label={`Actions for ${plan.client || 'diet plan'}`} items={[
+                    { label: 'Edit diet plan', onClick: () => openEditDietPlan(plan, index) },
+                    { label: 'Print / save PDF', onClick: () => openDietPdf(plan) },
+                    { label: 'Share on WhatsApp', onClick: () => shareDietPlan(plan) },
+                  ]} />
+                </div>
+              </div>
+            )) : (
+              <div className="empty-state compact-empty table-empty">
+                <strong>No diet plans yet.</strong>
+                <p>Create a meal plan for nutrition, fat loss, or muscle gain services.</p>
+                <button className="pill primary-action" type="button" onClick={openNewDietPlan}>+ Add Diet Plan</button>
+              </div>
+            )}
+          </div>
+        </Card>
       )}
 
       {activeTab === 'templates' && (
@@ -3367,6 +3493,48 @@ export function TreatmentPlansPage() {
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setTemplateModal(false)}>Cancel</button>
               <button className="pill" type="button" onClick={saveTemplate} disabled={!templateForm.name.trim()}>Save <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dietModal && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setDietModal(false)}>
+          <div className="modal-shell consultation-modal" role="dialog" aria-modal="true" aria-label="Diet Plan" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div><h2>{editingDietIndex === null ? 'Add Diet Plan' : 'Edit Diet Plan'}</h2><p>Build time-wise meals, then print/save as PDF or share.</p></div>
+              <button className="icon-btn" type="button" onClick={() => setDietModal(false)} aria-label="Close">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              <div className="quick-preset-row">
+                <button className="pill" type="button" onClick={() => applyDietPreset('fatLoss')}>Fat Loss</button>
+                <button className="pill" type="button" onClick={() => applyDietPreset('muscleGain')}>Muscle Gain</button>
+                <button className="pill" type="button" onClick={() => applyDietPreset('nutrition')}>Nutrition</button>
+              </div>
+              <label className="field-block"><span>Client</span>{clientNames.length ? <select className="lead-input" value={dietForm.client} onChange={(e) => setDietForm((f) => ({ ...f, client: e.target.value }))}><option value="">Select client</option>{clientNames.map((name) => <option key={name}>{name}</option>)}</select> : <input className="lead-input" value={dietForm.client} onChange={(e) => setDietForm((f) => ({ ...f, client: e.target.value }))} placeholder="Client name" />}</label>
+              <label className="field-block"><span>Service</span><select className="lead-input" value={dietForm.service} onChange={(e) => setDietForm((f) => ({ ...f, service: e.target.value }))}>{serviceOptions.map((service) => <option key={service}>{service}</option>)}</select></label>
+              <label className="field-block"><span>Goal</span><input className="lead-input" value={dietForm.goal} onChange={(e) => setDietForm((f) => ({ ...f, goal: e.target.value }))} /></label>
+              <label className="field-block"><span>Duration</span><input className="lead-input" value={dietForm.duration} onChange={(e) => setDietForm((f) => ({ ...f, duration: e.target.value }))} /></label>
+              <label className="field-block"><span>Calories</span><input className="lead-input" value={dietForm.calories} onChange={(e) => setDietForm((f) => ({ ...f, calories: e.target.value }))} placeholder="e.g. 1500 kcal" /></label>
+              <label className="field-block"><span>Water</span><input className="lead-input" value={dietForm.water} onChange={(e) => setDietForm((f) => ({ ...f, water: e.target.value }))} /></label>
+              <div className="treatment-medicine-builder">
+                <div className="medicine-builder-head"><div><strong>Meal Schedule</strong><span>Add time, meal name, food items, and notes.</span></div><button className="pill" type="button" onClick={addDietMeal}>Add Meal</button></div>
+                {dietForm.meals.map((meal, index) => (
+                  <div className="treatment-medicine-row" key={index}>
+                    <label className="field-block"><span>Time</span><input className="lead-input" type="time" value={meal.time} onChange={(e) => setDietMeal(index, 'time', e.target.value)} /></label>
+                    <label className="field-block"><span>Meal</span><input className="lead-input" value={meal.meal} onChange={(e) => setDietMeal(index, 'meal', e.target.value)} placeholder="Breakfast" /></label>
+                    <label className="field-block"><span>Food</span><input className="lead-input" value={meal.food} onChange={(e) => setDietMeal(index, 'food', e.target.value)} placeholder="Food items" /></label>
+                    <label className="field-block"><span>Notes</span><input className="lead-input" value={meal.notes} onChange={(e) => setDietMeal(index, 'notes', e.target.value)} placeholder="Instructions" /></label>
+                    <button className="icon-btn" type="button" onClick={() => removeDietMeal(index)} aria-label={`Remove meal ${index + 1}`}>x</button>
+                  </div>
+                ))}
+              </div>
+              <label className="field-block full-field"><span>Instructions</span><textarea className="lead-input" rows={3} value={dietForm.instructions} onChange={(e) => setDietForm((f) => ({ ...f, instructions: e.target.value }))} /></label>
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setDietModal(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={() => openDietPdf(dietForm)}>Preview PDF</button>
+              <button className="pill primary-action" type="button" onClick={saveDietPlan} disabled={!dietForm.client.trim()}>Save Diet Plan</button>
             </div>
           </div>
         </div>
