@@ -3089,6 +3089,7 @@ export function TreatmentPlansPage() {
   const PLANS_KEY = branchKey('Treatment Plans:rows:v2');
   const TEMPLATES_KEY = branchKey('treatment-templates:v2');
   const DIET_PLANS_KEY = branchKey('diet-plans:v1');
+  const DIET_TEMPLATES_KEY = branchKey('diet-templates:v1');
 
   const [clientNames] = useState(() =>
     loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map((row) => (Array.isArray(row) ? row[0] : row.name ?? row.Client ?? row.client ?? '')).filter(Boolean)
@@ -3101,6 +3102,7 @@ export function TreatmentPlansPage() {
   const [plans, setPlans] = useState(() => loadSavedArray(PLANS_KEY, []));
   const [templates, setTemplates] = useState(() => loadSavedArray(TEMPLATES_KEY, loadSavedArray('ayurflow:treatment-templates:v1', [])));
   const [dietPlans, setDietPlans] = useState(() => loadSavedArray(DIET_PLANS_KEY, []));
+  const [dietTemplates, setDietTemplates] = useState(() => loadSavedArray(DIET_TEMPLATES_KEY, []));
   const medicineCatalog = useMemo(() => {
     const operations = loadSavedObject(branchKey('Operations:tabs:v3'), loadSavedObject('ayurflow:Operations:tabs:v3', {}));
     return (Array.isArray(operations.medicines) ? operations.medicines : []).map((row) => Array.isArray(row)
@@ -3132,6 +3134,7 @@ export function TreatmentPlansPage() {
   const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
   const [dietModal, setDietModal] = useState(false);
   const [dietForm, setDietForm] = useState(blankDietPlan);
+  const [dietTemplateName, setDietTemplateName] = useState('');
   const [editingDietIndex, setEditingDietIndex] = useState(null);
 
   useEffect(() => {
@@ -3145,6 +3148,10 @@ export function TreatmentPlansPage() {
   useEffect(() => {
     try { window.localStorage.setItem(DIET_PLANS_KEY, JSON.stringify(dietPlans)); } catch {}
   }, [dietPlans, DIET_PLANS_KEY]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(DIET_TEMPLATES_KEY, JSON.stringify(dietTemplates)); } catch {}
+  }, [dietTemplates, DIET_TEMPLATES_KEY]);
 
   const applyTemplate = (template) => {
     setPlanForm((f) => ({ ...f, service: template.service, goal: template.goal, duration: template.duration, medicine: template.medicine, dose: template.dose, timing: template.timing }));
@@ -3258,14 +3265,51 @@ export function TreatmentPlansPage() {
 
   const openNewDietPlan = () => {
     setDietForm(blankDietPlan);
+    setDietTemplateName('');
     setEditingDietIndex(null);
     setDietModal(true);
   };
 
   const openEditDietPlan = (plan, index) => {
     setDietForm({ ...blankDietPlan, ...plan, meals: Array.isArray(plan.meals) && plan.meals.length ? plan.meals : blankDietMeals });
+    setDietTemplateName('');
     setEditingDietIndex(index);
     setDietModal(true);
+  };
+
+  const applyDietTemplate = (templateIndex) => {
+    const template = dietTemplates[Number(templateIndex)];
+    if (!template) return;
+    setDietForm((current) => ({
+      ...current,
+      service: template.service ?? current.service,
+      goal: template.goal ?? current.goal,
+      duration: template.duration ?? current.duration,
+      calories: template.calories ?? current.calories,
+      water: template.water ?? current.water,
+      instructions: template.instructions ?? current.instructions,
+      meals: Array.isArray(template.meals) && template.meals.length ? template.meals : current.meals,
+    }));
+    setDietTemplateName(template.name ?? '');
+  };
+
+  const saveDietTemplate = () => {
+    if (!dietTemplateName.trim()) return;
+    const template = {
+      name: dietTemplateName.trim(),
+      service: dietForm.service,
+      goal: dietForm.goal,
+      duration: dietForm.duration,
+      calories: dietForm.calories,
+      water: dietForm.water,
+      instructions: dietForm.instructions,
+      meals: dietForm.meals.filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())),
+    };
+    setDietTemplates((current) => {
+      const existingIndex = current.findIndex((item) => String(item.name ?? '').toLowerCase() === template.name.toLowerCase());
+      if (existingIndex === -1) return [template, ...current];
+      return current.map((item, index) => (index === existingIndex ? template : item));
+    });
   };
 
   const saveDietPlan = () => {
@@ -3305,7 +3349,7 @@ export function TreatmentPlansPage() {
         <div className="module-stats">
           <div className="mini-stat"><span>Active</span><strong>{plans.filter((r) => (r[7] ?? r[4]) === 'Active').length}</strong></div>
           <div className="mini-stat"><span>Templates</span><strong>{templates.length}</strong></div>
-          <div className="mini-stat"><span>Diet Plans</span><strong>{dietPlans.length}</strong></div>
+          <div className="mini-stat"><span>Diet</span><strong>{dietPlans.length}/{dietTemplates.length}</strong></div>
         </div>
       </div>
 
@@ -3516,6 +3560,20 @@ export function TreatmentPlansPage() {
               <button className="icon-btn" type="button" onClick={() => setDietModal(false)} aria-label="Close">x</button>
             </div>
             <div className="modal-body detail-grid">
+              <div className="consultation-template-tools">
+                <label className="field-block">
+                  <span>Use Diet Template</span>
+                  <select className="lead-input" defaultValue="" onChange={(event) => applyDietTemplate(event.target.value)}>
+                    <option value="">{dietTemplates.length ? 'Select saved diet template...' : 'No diet templates saved yet'}</option>
+                    {dietTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}
+                  </select>
+                </label>
+                <label className="field-block">
+                  <span>Template Name</span>
+                  <input className="lead-input" value={dietTemplateName} onChange={(event) => setDietTemplateName(event.target.value)} placeholder="e.g. Fat Loss 30 Days" />
+                </label>
+                <button className="pill" type="button" onClick={saveDietTemplate} disabled={!dietTemplateName.trim()}>Save Template</button>
+              </div>
               <div className="quick-preset-row">
                 <button className="pill" type="button" onClick={() => applyDietPreset('fatLoss')}>Fat Loss</button>
                 <button className="pill" type="button" onClick={() => applyDietPreset('muscleGain')}>Muscle Gain</button>
