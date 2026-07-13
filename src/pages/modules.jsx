@@ -1056,7 +1056,7 @@ function ClientProfile({ client, onBack }) {
           <div className="client-avatar">{clientName.charAt(0).toUpperCase()}</div>
           <div>
             <h1>{clientName}</h1>
-            <p>{client.service || client.program || 'No service'} · Mobile: {client.mobile || '—'} · Age: {client.age || '—'} · Next Visit: {client.nextVisit || '—'}</p>
+            <p>{client.service || client.program || 'No service'} · Mobile: {client.mobile || '—'} · Age: {client.age || '—'}</p>
           </div>
           <ActionMenu label="Actions" items={[
             { label: 'Add treatment plan', description: `Create a plan for ${clientName}`, onClick: () => setTreatModal(true) },
@@ -1080,7 +1080,7 @@ function ClientProfile({ client, onBack }) {
       {activeTab === 'overview' && (
         <Card title="Client Details">
           <div className="detail-grid">
-            {[['Client', client.name], ['Mobile', client.mobile], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Service', client.service || client.program], ['Next Visit', client.nextVisit]].map(([label, value]) => (
+            {[['Client', client.name], ['Mobile', client.mobile], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Service', client.service || client.program]].map(([label, value]) => (
               <div className="mini-stat" key={label}>
                 <span>{label}</span>
                 <strong>{value || '—'}</strong>
@@ -1351,20 +1351,19 @@ export function ClientsPage() {
       stats={[
         { label: 'Active Clients', value: '0' },
         { label: 'Treatment Plans', value: '0' },
-        { label: 'Next Visits', value: '0' },
+        { label: 'Services', value: getSavedServiceNames().length },
       ]}
-      headers={['Client', 'Mobile', 'Birthday', 'Age', 'Address', 'Service', 'Next Visit']}
+      headers={['Client', 'Mobile', 'Birthday', 'Age', 'Address', 'Service']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
       fieldOptions={{ Service: getSavedServiceNames() }}
-      fieldTypes={{ Mobile: 'tel', Age: 'number', 'Next Visit': 'date', Birthday: 'date' }}
+      fieldTypes={{ Mobile: 'tel', Age: 'number', Birthday: 'date' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
         { label: 'Mobile wise', column: 'Mobile' },
         { label: 'Age wise', column: 'Age' },
         { label: 'Service wise', column: 'Service' },
         { label: 'Address wise', column: 'Address' },
-        { label: 'Next visit wise', column: 'Next Visit' },
         { label: 'Birthday wise', column: 'Birthday' },
       ]}
       rowToValues={(row) => ({
@@ -1374,7 +1373,6 @@ export function ClientsPage() {
         Age: row.age,
         Address: row.address,
         Service: row.service || row.program,
-        'Next Visit': row.nextVisit,
       })}
       parseRow={(entry) => ({
         name: entry.Client ?? entry.client ?? entry.name ?? '',
@@ -1383,7 +1381,6 @@ export function ClientsPage() {
         address: entry.Address ?? entry.address ?? '',
         service: entry.Service ?? entry.service ?? entry.Program ?? entry.program ?? '',
         program: entry.Program ?? entry.program ?? entry.Service ?? entry.service ?? '',
-        nextVisit: entry['Next Visit'] ?? entry.nextVisit ?? '',
         birthday: entry.Birthday ?? entry.birthday ?? '',
       })}
       rowActions={(row) => (

@@ -38,9 +38,8 @@ export function DashboardPage() {
   const lowStockAlerts = buildLowStockAlerts(inventory);
   const salesSummary = buildSalesSummary(filteredPayments.length ? filteredPayments : payments, packages, treatments);
   const treatmentProgress = buildTreatmentProgress(treatments, clients);
-  const renewalAlerts = buildRenewalAlerts(clients, packages);
   const reminders = buildClientReminders(clients);
-  const actionQueue = buildActionQueue(urgentTasks, leads, payments, lowStockAlerts, renewalAlerts, reminders);
+  const actionQueue = buildActionQueue(urgentTasks, leads, payments, lowStockAlerts, reminders);
 
   const kpiRoute = (label) => {
     if (label.includes('Appointment')) return '/appointments';
@@ -230,15 +229,6 @@ export function DashboardPage() {
                   emptyTitle="No treatment progress yet."
                   emptyCopy="Create treatment plans or update client progress to track outcomes."
                   valueFormatter={(row) => `${row.count} record${row.count === 1 ? '' : 's'}`}
-                />
-              </Card>
-
-              <Card title="Renewals & Expiring Packages" subtitle="Upcoming client package renewals.">
-                <AlertList
-                  rows={renewalAlerts}
-                  emptyTitle="No renewals due."
-                  emptyCopy="Package renewal reminders will appear before expiry."
-                  route="/packages"
                 />
               </Card>
 
@@ -438,25 +428,6 @@ function buildTreatmentProgress(treatments, clients) {
   return buckets.map((bucket) => ({ ...bucket, percent: Math.round((bucket.count / maxCount) * 100) }));
 }
 
-function buildRenewalAlerts(clients, packageRows) {
-  const packageNames = new Set(packageRows.map((row) => pickRowValue(row, 0, ['package', 'Package', 'name'])).filter(Boolean));
-  return clients
-    .map((client) => {
-      const name = client.name ?? pickRowValue(client, 0, ['Client']);
-      const service = client.service ?? client.program ?? pickRowValue(client, 5, ['Service']) ?? pickRowValue(client, 2, ['Program']);
-      const nextVisit = client.nextVisit ?? pickRowValue(client, 6, ['Next Visit']);
-      const dueIn = daysUntil(nextVisit);
-      if (dueIn === null || dueIn < 0 || dueIn > 30) return null;
-      return {
-        title: name || 'Unnamed client',
-        note: `${service || 'Service'}${packageNames.has(service) ? '' : ' follow-up'} · due in ${dueIn} day${dueIn === 1 ? '' : 's'}`,
-        tone: dueIn <= 7 ? 'hot' : 'warm',
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 6);
-}
-
 function nextAnnualDate(value) {
   const date = parseLooseDate(value);
   if (!date) return null;
@@ -489,7 +460,7 @@ function buildClientReminders(clients) {
   return rows.sort((a, b) => Number(a.note.match(/\d+/)?.[0] ?? 0) - Number(b.note.match(/\d+/)?.[0] ?? 0)).slice(0, 6);
 }
 
-function buildActionQueue(tasks, leads, payments, lowStockAlerts = [], renewalAlerts = [], reminders = []) {
+function buildActionQueue(tasks, leads, payments, lowStockAlerts = [], reminders = []) {
   const followUps = leads
     .filter((lead) => String(lead.status ?? '').toLowerCase().includes('follow'))
     .slice(0, 3)
@@ -514,12 +485,6 @@ function buildActionQueue(tasks, leads, payments, lowStockAlerts = [], renewalAl
     route: '/inventory',
     tone: item.tone,
   }));
-  const renewalTasks = renewalAlerts.slice(0, 1).map((item) => ({
-    title: `Renewal: ${item.title}`,
-    note: item.note,
-    route: '/packages',
-    tone: item.tone,
-  }));
   const reminderTasks = reminders.slice(0, 1).map((item) => ({
     title: item.title,
     note: item.note,
@@ -532,7 +497,7 @@ function buildActionQueue(tasks, leads, payments, lowStockAlerts = [], renewalAl
     route: '/crm',
     tone: 'cool',
   }));
-  return [...collections, ...stockTasks, ...renewalTasks, ...reminderTasks, ...followUps, ...fallback].slice(0, 5);
+  return [...collections, ...stockTasks, ...reminderTasks, ...followUps, ...fallback].slice(0, 5);
 }
 
 function AlertList({ rows, emptyTitle, emptyCopy, route }) {
