@@ -37,12 +37,12 @@ function clearPending(key, syncedValue) {
 async function request(path, options = {}) {
   const accessToken = await getValidSupabaseAccessToken();
   if (!CLOUD_STORAGE_CONFIGURED) return null;
-  if (!accessToken) throw new Error('Cloud storage authentication is unavailable.');
+  const bearerToken = accessToken || supabaseAnonKey;
   const response = await fetch(`${supabaseUrl}${path}`, {
     ...options,
     headers: {
       apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${bearerToken}`,
       'Content-Type': 'application/json',
       ...(options.headers ?? {}),
     },
