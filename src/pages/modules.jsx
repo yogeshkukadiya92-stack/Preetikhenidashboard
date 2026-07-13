@@ -3414,13 +3414,23 @@ export function TreatmentPlansPage() {
   };
 
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const fileSafeName = (value) => String(value || 'diet-plan').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'diet-plan';
+
+  const buildDietPlanPrintHtml = (plan) => {
+    const mealRows = (plan.meals ?? []).map((meal) => `<tr><td>${escapeHtml(meal.time)}</td><td>${escapeHtml(meal.meal)}</td><td>${escapeHtml(meal.food)}</td><td>${escapeHtml(meal.notes)}</td></tr>`).join('');
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(plan.client || 'Diet Plan')}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#163f33}h1{margin:0 0 8px}p{margin:4px 0 12px;color:#4f6f65;white-space:pre-wrap}.toolbar{display:flex;gap:10px;margin-bottom:20px}.toolbar button{border:1px solid #bcd4cc;background:#087c68;color:#fff;border-radius:8px;padding:10px 14px;font-weight:700}.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:20px 0}.box{border:1px solid #d6e4df;border-radius:8px;padding:10px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #d6e4df;padding:10px;text-align:left;vertical-align:top;white-space:pre-wrap}th{background:#eaf5f1}@page{margin:16mm}@media print{.toolbar{display:none}body{margin:0;color:#163f33}thead th{background:#eaf5f1!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><h1>Diet Plan</h1><p>Mom's Pathshala</p><div class="meta"><div class="box"><strong>Client</strong><br>${escapeHtml(plan.client)}</div><div class="box"><strong>Service</strong><br>${escapeHtml(plan.service)}</div><div class="box"><strong>Goal</strong><br>${escapeHtml(plan.goal)}</div><div class="box"><strong>Duration</strong><br>${escapeHtml(plan.duration)}</div><div class="box"><strong>Calories</strong><br>${escapeHtml(plan.calories)}</div><div class="box"><strong>Water</strong><br>${escapeHtml(plan.water)}</div></div><h2>Meal Schedule</h2><table><thead><tr><th>Time</th><th>Meal</th><th>Food</th><th>Notes</th></tr></thead><tbody>${mealRows || '<tr><td colspan="4">No meals added.</td></tr>'}</tbody></table><h2>Instructions</h2><p>${escapeHtml(plan.instructions)}</p><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},500)});<\/script></body></html>`;
+  };
 
   const openDietPdf = (plan) => {
-    const mealRows = (plan.meals ?? []).map((meal) => `<tr><td>${escapeHtml(meal.time)}</td><td>${escapeHtml(meal.meal)}</td><td>${escapeHtml(meal.food)}</td><td>${escapeHtml(meal.notes)}</td></tr>`).join('');
-    const win = window.open('', '_blank', 'noopener,noreferrer');
-    if (!win) return;
-    win.document.write(`<!doctype html><html><head><title>${escapeHtml(plan.client || 'Diet Plan')}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#163f33}h1{margin:0 0 8px}p{margin:4px 0 12px;color:#4f6f65}.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:20px 0}.box{border:1px solid #d6e4df;border-radius:8px;padding:10px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #d6e4df;padding:10px;text-align:left;vertical-align:top}th{background:#eaf5f1}@media print{button{display:none}}</style></head><body><button onclick="window.print()">Print / Save PDF</button><h1>Diet Plan</h1><p>Mom's Pathshala</p><div class="meta"><div class="box"><strong>Client</strong><br>${escapeHtml(plan.client)}</div><div class="box"><strong>Service</strong><br>${escapeHtml(plan.service)}</div><div class="box"><strong>Goal</strong><br>${escapeHtml(plan.goal)}</div><div class="box"><strong>Duration</strong><br>${escapeHtml(plan.duration)}</div><div class="box"><strong>Calories</strong><br>${escapeHtml(plan.calories)}</div><div class="box"><strong>Water</strong><br>${escapeHtml(plan.water)}</div></div><h2>Meal Schedule</h2><table><thead><tr><th>Time</th><th>Meal</th><th>Food</th><th>Notes</th></tr></thead><tbody>${mealRows}</tbody></table><h2>Instructions</h2><p>${escapeHtml(plan.instructions)}</p><script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script></body></html>`);
-    win.document.close();
+    const html = buildDietPlanPrintHtml(plan);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      downloadText(`${fileSafeName(plan.client)}-diet-plan.html`, html, 'text/html;charset=utf-8');
+      return;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
 
   const shareDietPlan = (plan) => {
