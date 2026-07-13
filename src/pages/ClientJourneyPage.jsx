@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '../components/ui.jsx';
 import { useBranch } from '../context/BranchContext.jsx';
+import { loadAllLocalResponses, loadForms } from '../data/formStore.js';
 
 function loadValue(key, fallback) {
   try {
@@ -17,6 +18,33 @@ function clientName(row) {
 function clientMobile(row) {
   if (Array.isArray(row)) return row[1] ?? '';
   return row?.mobile ?? row?.Mobile ?? row?.phone ?? row?.Phone ?? '';
+}
+
+function normalizePhoneNumber(value) {
+  return String(value ?? '').replace(/\D/g, '').slice(-10);
+}
+
+function answerValue(response, matcher) {
+  const answers = response?.answers ?? {};
+  return Object.entries(answers).find(([key]) => matcher(key))?.[1] ?? '';
+}
+
+function responseFieldValue(response, form, matcher) {
+  const field = form?.fields?.find((item) => matcher(item));
+  if (!field) return '';
+  return response?.answers?.[field.id] ?? '';
+}
+
+function responsePhone(response, form) {
+  const value = responseFieldValue(response, form, (field) => field.type === 'phone' || /phone|mobile|whatsapp/i.test(field.label))
+    || answerValue(response, (key) => /phone|mobile|whatsapp/i.test(key));
+  return normalizePhoneNumber(value);
+}
+
+function responseName(response, form) {
+  const value = responseFieldValue(response, form, (field) => /name|client|patient/i.test(field.label))
+    || answerValue(response, (key) => /name|client|patient/i.test(key));
+  return String(value ?? '').trim().toLowerCase();
 }
 
 const STAGES = [
@@ -106,6 +134,8 @@ export function ClientJourneyPage() {
   const payments = loadValue(paymentsKey, []);
   const operationRows = loadValue(operationsKey, {});
   const treatmentTemplates = loadValue(treatmentTemplatesKey, loadValue('ayurflow:treatment-templates:v1', []));
+  const localForms = loadForms();
+  const localResponses = loadAllLocalResponses();
   const medicineCatalog = useMemo(() => {
     return (Array.isArray(operationRows.medicines) ? operationRows.medicines : []).map((row) => Array.isArray(row)
       ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '', Status: row[4] ?? '' }
@@ -134,12 +164,24 @@ export function ClientJourneyPage() {
   const hasAppointment = appointments.some((row) => String(row?.[0] ?? row?.Client ?? '').toLowerCase() === selectedClient.toLowerCase());
   const hasPayment = payments.some((row) => String(row?.[0] ?? row?.Client ?? '').toLowerCase() === selectedClient.toLowerCase());
   const hasTreatment = (operationRows.treatments ?? []).some((row) => String(row?.[0] ?? row?.Client ?? '').toLowerCase() === selectedClient.toLowerCase());
+  const selectedClientPhone = normalizePhoneNumber(clientMobile(selectedClientRecord));
+  const requiredFormRecord = localForms.find((form) => String(form.title ?? '').toLowerCase() === requiredForm.toLowerCase());
+  const hasRequiredFormResponse = localResponses.some((response) => {
+    const sameForm = requiredFormRecord
+      ? response.formId === requiredFormRecord.id || response.formSlug === requiredFormRecord.slug
+      : String(response.formTitle ?? '').toLowerCase() === requiredForm.toLowerCase();
+    if (!sameForm) return false;
+    const phoneMatches = selectedClientPhone && responsePhone(response, requiredFormRecord) === selectedClientPhone;
+    const nameMatches = selectedClient && responseName(response, requiredFormRecord) === selectedClient.toLowerCase();
+    return phoneMatches || nameMatches;
+  });
 
   const stageDone = (id) => {
     if (id === 'registration') return Boolean(selectedClient);
     if (id === 'appointment') return hasAppointment || journey.appointment;
     if (id === 'billing') return hasPayment || journey.billing;
     if (id === 'treatment') return hasTreatment || journey.treatment;
+    if (id === 'forms') return hasRequiredFormResponse || journey.forms;
     return Boolean(journey[id]);
   };
 
@@ -150,6 +192,11 @@ export function ClientJourneyPage() {
       [selectedClient]: { ...(current[selectedClient] ?? {}), ...changes, updatedAt: new Date().toISOString() },
     }));
   };
+
+  useEffect(() => {
+    if (!selectedClient || journey.forms || !hasRequiredFormResponse) return;
+    updateJourney({ forms: true, requiredForm, formsCompletedAt: new Date().toISOString(), formAutoMatched: true });
+  }, [selectedClient, journey.forms, hasRequiredFormResponse, requiredForm]);
 
   const openConsultation = () => {
     setConsultation(journey.consultationData ?? { complaint: '', diagnosis: '', notes: '', vitals: '' });
@@ -266,6 +313,7 @@ export function ClientJourneyPage() {
   };
 
   const saveRequiredForm = () => {
+    if (!hasRequiredFormResponse) return;
     updateJourney({ forms: true, requiredForm, formsCompletedAt: new Date().toISOString() });
     setStageModal('');
   };
@@ -327,7 +375,7 @@ export function ClientJourneyPage() {
 
       {stageModal === 'appointment' && <JourneyModal title="Add Appointment" client={selectedClient} onClose={() => setStageModal('')} onSave={saveAppointment} saveLabel="Save Appointment"><div className="quick-preset-row"><button className="pill" type="button" onClick={() => setAppointmentPreset('now')}>Walk-in now</button><button className="pill" type="button" onClick={() => setAppointmentPreset('today')}>Today</button><button className="pill" type="button" onClick={() => setAppointmentPreset('tomorrow')}>Tomorrow</button><button className="pill" type="button" onClick={() => setAppointmentPreset('week')}>After 7 days</button><button className="pill" type="button" onClick={() => setAppointmentPreset('month')}>After 30 days</button></div><label className="field-block"><span>Mobile</span><input className="lead-input" type="tel" value={appointmentForm.mobile} onChange={(event) => setAppointmentForm((value) => ({ ...value, mobile: event.target.value }))} /></label><label className="field-block"><span>Date</span><input className="lead-input" type="date" value={appointmentForm.date} onChange={(event) => setAppointmentForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Time</span><input className="lead-input" type="time" value={appointmentForm.time} onChange={(event) => setAppointmentForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block"><span>Type</span><select className="lead-input" value={appointmentForm.type} onChange={(event) => setAppointmentForm((value) => ({ ...value, type: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Status</span><select className="lead-input" value={appointmentForm.status} onChange={(event) => setAppointmentForm((value) => ({ ...value, status: event.target.value }))}><option>Pending</option><option>Confirmed</option><option>Checked-in</option><option>Cancelled</option></select></label></JourneyModal>}
 
-      {stageModal === 'forms' && <JourneyModal title="Required Form" client={selectedClient} onClose={() => setStageModal('')} onSave={saveRequiredForm} saveLabel="Mark Form Received"><label className="field-block"><span>Form</span><select className="lead-input" value={requiredForm} onChange={(event) => setRequiredForm(event.target.value)}><option>Client Intake Form</option><option>Health Assessment</option><option>Consent Form</option><option>Diet & Lifestyle Assessment</option><option>Follow-up Assessment</option></select></label><div className="action-note"><strong>Submission confirmation</strong> Mark received only after the client has submitted the selected form.</div></JourneyModal>}
+      {stageModal === 'forms' && <JourneyModal title="Required Form" client={selectedClient} onClose={() => setStageModal('')} onSave={saveRequiredForm} saveLabel={hasRequiredFormResponse ? 'Mark Form Received' : 'Waiting for Submission'} saveDisabled={!hasRequiredFormResponse}><label className="field-block"><span>Form</span><select className="lead-input" value={requiredForm} onChange={(event) => setRequiredForm(event.target.value)}><option>Client Intake Form</option><option>Health Assessment</option><option>Consent Form</option><option>Diet & Lifestyle Assessment</option><option>Follow-up Assessment</option></select></label><div className="action-note"><strong>{hasRequiredFormResponse ? 'Submission found' : 'Submission not found'}</strong>{hasRequiredFormResponse ? ' Mobile number matched with a submitted form response. This stage will be marked received automatically.' : ' Ask the client to submit the selected form using the same mobile number saved in the client profile.'}</div></JourneyModal>}
 
       {stageModal === 'treatment' && <JourneyModal title="Add Treatment Plan" client={selectedClient} onClose={() => setStageModal('')} onSave={saveTreatment} saveLabel="Save Treatment"><div className="quick-preset-row">{QUICK_TREATMENTS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickTreatment(preset)}>{preset.label}</button>)}</div>{treatmentTemplates.length > 0 && <label className="field-block full-field"><span>Use Template</span><select className="lead-input" defaultValue="" onChange={(event) => applyTreatmentTemplate(event.target.value)}><option value="">Select saved template...</option>{treatmentTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}</select></label>}<label className="field-block"><span>Service</span><select className="lead-input" value={treatmentForm.service} onChange={(event) => setTreatmentForm((value) => ({ ...value, service: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Goal</span><input className="lead-input" list="goal-presets" value={treatmentForm.goal} onChange={(event) => setTreatmentForm((value) => ({ ...value, goal: event.target.value }))} placeholder="Treatment goal" /><datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist></label><label className="field-block"><span>Duration</span><select className="lead-input" value={treatmentForm.duration} onChange={(event) => setTreatmentForm((value) => ({ ...value, duration: event.target.value }))}>{DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Medicine / Product</span><input className="lead-input" list="journey-medicine-options" value={treatmentForm.medicine} onChange={(event) => selectTreatmentMedicine(event.target.value)} placeholder={medicineCatalog.length ? 'Search medicine...' : 'Add medicines first'} /><datalist id="journey-medicine-options">{medicineCatalog.map((medicine) => <option key={medicine.Medicine} value={medicine.Medicine}>{medicine['Default Dose']}</option>)}</datalist></label><label className="field-block"><span>Dose</span><input className="lead-input" list="dose-presets" value={treatmentForm.dose} onChange={(event) => setTreatmentForm((value) => ({ ...value, dose: event.target.value }))} /><datalist id="dose-presets">{Array.from(new Set(medicineCatalog.map((item) => item['Default Dose']).filter(Boolean))).map((dose) => <option key={dose} value={dose} />)}</datalist></label><label className="field-block"><span>Timing</span><input className="lead-input" list="timing-presets" value={treatmentForm.timing} onChange={(event) => setTreatmentForm((value) => ({ ...value, timing: event.target.value }))} /><datalist id="timing-presets">{Array.from(new Set([...medicineCatalog.map((item) => item.Timing), 'After meals', 'Before meals', 'Morning', 'Night', 'Weekly once'].filter(Boolean))).map((timing) => <option key={timing} value={timing} />)}</datalist></label></JourneyModal>}
 
@@ -338,6 +386,6 @@ export function ClientJourneyPage() {
   );
 }
 
-function JourneyModal({ title, client, children, onClose, onSave, saveLabel }) {
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>{title}</h2><p>For {client}</p></div><button className="icon-btn" type="button" onClick={onClose} aria-label="Close modal">x</button></div><div className="modal-body detail-grid">{children}</div><div className="modal-actions"><button className="pill" type="button" onClick={onClose}>Cancel</button><button className="pill primary-action" type="button" onClick={onSave}>{saveLabel}</button></div></div></div>;
+function JourneyModal({ title, client, children, onClose, onSave, saveLabel, saveDisabled = false }) {
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>{title}</h2><p>For {client}</p></div><button className="icon-btn" type="button" onClick={onClose} aria-label="Close modal">x</button></div><div className="modal-body detail-grid">{children}</div><div className="modal-actions"><button className="pill" type="button" onClick={onClose}>Cancel</button><button className="pill primary-action" type="button" onClick={onSave} disabled={saveDisabled}>{saveLabel}</button></div></div></div>;
 }

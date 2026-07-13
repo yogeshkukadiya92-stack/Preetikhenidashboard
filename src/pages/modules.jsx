@@ -188,6 +188,15 @@ function normalizeAppointmentRows(rows = []) {
   });
 }
 
+function normalizePhoneNumber(value) {
+  return String(value ?? '').replace(/\D/g, '').slice(-10);
+}
+
+function recordPhone(row, rowToValues) {
+  const values = rowToValues(row);
+  return normalizePhoneNumber(values.Mobile ?? values.Phone ?? values['Mobile Number'] ?? values['Phone Number']);
+}
+
 function nextInvoiceNumber(rows = []) {
   const highest = rows.reduce((maximum, row) => {
     const invoice = Array.isArray(row) ? row[1] : row?.invoice ?? row?.Invoice ?? '';
@@ -283,6 +292,11 @@ function ImportExportModule({
   };
 
   const normalize = (entry) => parseRow(entry);
+  const isClientModule = title === 'Clients';
+  const clientPhoneExists = (phone, list = rows) => {
+    if (!isClientModule || !phone) return false;
+    return list.some((row) => recordPhone(row, rowToValues) === phone);
+  };
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -303,8 +317,22 @@ function ImportExportModule({
     const normalized = asImportRows(parsed)
       .map((row) => (Array.isArray(row) ? normalize(Object.fromEntries(headers.map((header, index) => [header, row[index] ?? '']))) : normalize(row)))
       .filter((row) => Object.values(row).some(Boolean));
-    setPreview(normalized);
-    setMessage(`${normalized.length} records ready to import.`);
+    const seenPhones = new Set(rows.map((row) => recordPhone(row, rowToValues)).filter(Boolean));
+    let skippedDuplicates = 0;
+    const uniqueRows = isClientModule ? normalized.filter((row) => {
+      const phone = recordPhone(row, rowToValues);
+      if (!phone) return true;
+      if (seenPhones.has(phone)) {
+        skippedDuplicates += 1;
+        return false;
+      }
+      seenPhones.add(phone);
+      return true;
+    }) : normalized;
+    setPreview(uniqueRows);
+    setMessage(isClientModule && skippedDuplicates
+      ? `${uniqueRows.length} records ready. ${skippedDuplicates} duplicate mobile number(s) skipped.`
+      : `${uniqueRows.length} records ready to import.`);
     setModalOpen(true);
   };
 
@@ -312,6 +340,20 @@ function ImportExportModule({
     if (!preview.length) {
       setMessage('No records found to import.');
       return;
+    }
+    if (isClientModule) {
+      const seenPhones = new Set(rows.map((row) => recordPhone(row, rowToValues)).filter(Boolean));
+      const duplicate = preview.find((row) => {
+        const phone = recordPhone(row, rowToValues);
+        if (!phone) return false;
+        if (seenPhones.has(phone)) return true;
+        seenPhones.add(phone);
+        return false;
+      });
+      if (duplicate) {
+        setMessage('This mobile number already exists. Duplicate client was not imported.');
+        return;
+      }
     }
     setRows((current) => [...preview, ...current]);
     setPreview([]);
@@ -325,6 +367,11 @@ function ImportExportModule({
     const normalized = normalize(draftRecord);
     if (!Object.values(normalized).some(Boolean)) {
       setMessage('Please fill at least one field before saving.');
+      return;
+    }
+    const clientPhone = recordPhone(normalized, rowToValues);
+    if (clientPhoneExists(clientPhone)) {
+      setMessage('This mobile number already exists. Client was not added again.');
       return;
     }
     setRows((current) => [normalized, ...current]);
