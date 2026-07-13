@@ -357,7 +357,7 @@ function ImportExportModule({
       )}
 
       <div className="grid single-module-grid">
-        <Card title={`Current ${title}`} subtitle={message} action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {title}</button><ActionMenu label="Actions" items={moduleActions} /></div>}>
+        <Card title={`Current ${title}`} subtitle={message} action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {title}</button><button className="pill" type="button" onClick={() => bannerFileInputRef.current?.click()}>Import</button><button className="pill" type="button" onClick={exportCsv}>Export</button><ActionMenu label="Actions" items={moduleActions} /></div>}>
           <div className="table adaptive-table" style={{ '--table-columns': headers.length }}>
             <div className="table-head">
               {headers.map((header) => <div key={header}>{header}</div>)}
@@ -3271,6 +3271,7 @@ export function TreatmentPlansPage() {
 export function MedicinesPage() {
   const { branchKey } = useBranch();
   const catalogStorageKey = branchKey('Operations:tabs:v3');
+  const medicineHeaders = ['Medicine', 'Category', 'Default Dose', 'Timing', 'Status'];
   const [catalog, setCatalog] = useState(() => {
     const saved = loadSavedObject(catalogStorageKey, loadSavedObject('ayurflow:Operations:tabs:v3', {}));
     return Array.isArray(saved.medicines) ? saved.medicines : [];
@@ -3278,6 +3279,10 @@ export function MedicinesPage() {
   const [draft, setDraft] = useState({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [message, setMessage] = useState('Shared medicine catalog ready.');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState([]);
+  const [uploadName, setUploadName] = useState('No file selected');
+  const medicineImportRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -3324,6 +3329,56 @@ export function MedicinesPage() {
     }
   };
 
+  const normalizeMedicine = (entry) => ({
+    Medicine: entry.Medicine ?? entry.medicine ?? entry.Name ?? entry.name ?? '',
+    Category: entry.Category ?? entry.category ?? '',
+    'Default Dose': entry['Default Dose'] ?? entry.defaultDose ?? entry.Dose ?? entry.dose ?? '',
+    Timing: entry.Timing ?? entry.timing ?? '',
+    Status: entry.Status ?? entry.status ?? 'Active',
+  });
+
+  const exportMedicines = () => {
+    downloadText('medicines-export.csv', rowsToCsv(medicineHeaders, catalog.map((row) => medicineHeaders.map((header) => row[header] ?? ''))), 'text/csv;charset=utf-8');
+    setMessage('Medicine CSV export started.');
+  };
+
+  const downloadMedicineTemplate = () => {
+    downloadText('medicines-template.csv', rowsToCsv(medicineHeaders, [medicineHeaders.map(() => '')]), 'text/csv;charset=utf-8');
+    setMessage('Medicine CSV template downloaded.');
+  };
+
+  const handleMedicineImport = async (file) => {
+    if (!file) return;
+    setUploadName(file.name);
+    const text = await file.text();
+    let parsed = [];
+    try {
+      parsed = file.name.toLowerCase().endsWith('.json') ? JSON.parse(text) : parseCsv(text);
+    } catch {
+      setImportPreview([]);
+      setMessage('Import failed. Please upload a valid medicine CSV or JSON file.');
+      return;
+    }
+    const normalized = asImportRows(parsed)
+      .map((row) => (Array.isArray(row) ? normalizeMedicine(Object.fromEntries(medicineHeaders.map((header, index) => [header, row[index] ?? '']))) : normalizeMedicine(row)))
+      .filter((row) => row.Medicine);
+    setImportPreview(normalized);
+    setImportOpen(true);
+    setMessage(`${normalized.length} medicine record(s) ready to import.`);
+  };
+
+  const commitMedicineImport = () => {
+    if (!importPreview.length) {
+      setMessage('No medicines found to import.');
+      return;
+    }
+    setCatalog((current) => [...importPreview, ...current]);
+    setImportPreview([]);
+    setUploadName('No file selected');
+    setImportOpen(false);
+    setMessage(`Imported ${importPreview.length} medicine record(s).`);
+  };
+
   return (
     <section className="module-page">
       <div className="module-hero">
@@ -3340,8 +3395,9 @@ export function MedicinesPage() {
       <Card
         title={selectedIndex === null ? 'Add Medicine' : 'Edit Medicine'}
         subtitle="This catalog feeds the treatment preset builder."
-        action={<ActionMenu label="More" items={[{ label: 'Reset form', description: 'Clear the current medicine draft', onClick: resetDraft }]} />}
+        action={<div className="card-action-group"><button className="pill" type="button" onClick={() => medicineImportRef.current?.click()}>Import</button><button className="pill" type="button" onClick={exportMedicines}>Export</button><ActionMenu label="More" items={[{ label: 'Download template', description: 'Blank CSV format', onClick: downloadMedicineTemplate }, { label: 'Reset form', description: 'Clear the current medicine draft', onClick: resetDraft }]} /></div>}
       >
+        <input ref={medicineImportRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleMedicineImport(event.target.files?.[0])} />
         <div className="modal-body detail-grid">
           {['Medicine', 'Category', 'Default Dose', 'Timing', 'Status'].map((field) => (
             <label className="field-block" key={field}>
@@ -3359,6 +3415,38 @@ export function MedicinesPage() {
           <button className="pill" type="button" onClick={save}>Save Medicine <ChevronRight /></button>
         </div>
       </Card>
+      {importOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setImportOpen(false)}>
+          <div className="modal-shell" role="dialog" aria-modal="true" aria-label="Import Medicines" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>Import Medicines</h2>
+                <p>{importPreview.length} record(s) detected from {uploadName}.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setImportOpen(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-table adaptive-table" style={{ '--table-columns': medicineHeaders.length }}>
+              <div className="table-head">
+                {medicineHeaders.map((header) => <div key={header}>{header}</div>)}
+              </div>
+              {importPreview.length ? importPreview.map((row, index) => (
+                <div className="data-row" key={`${row.Medicine}-${index}`}>
+                  {medicineHeaders.map((header) => <div key={header}>{row[header]}</div>)}
+                </div>
+              )) : (
+                <div className="empty-state compact-empty">
+                  <strong>No valid medicines found.</strong>
+                  <p>Use columns: Medicine, Category, Default Dose, Timing, Status.</p>
+                </div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setImportOpen(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={commitMedicineImport}>Import Now <ChevronRight /></button>
+            </div>
+          </div>
+        </div>
+      )}
       <Card title="Medicine Catalog" subtitle="Edit or remove shared medicines used in treatment presets.">
         <div className="table adaptive-table" style={{ '--table-columns': 5 }}>
           <div className="table-head">
