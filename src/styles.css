@@ -1379,6 +1379,44 @@ body {
 }
 
 .consultation-modal { width: min(760px, calc(100vw - 28px)); }
+.diet-plan-modal {
+  width: min(1120px, calc(100vw - 28px));
+}
+
+.diet-plan-modal .modal-body {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.diet-plan-modal .field-block {
+  grid-column: span 2;
+}
+
+.diet-plan-modal .consultation-template-tools,
+.diet-plan-modal .quick-preset-row,
+.diet-plan-modal .treatment-medicine-builder,
+.diet-plan-modal .full-field {
+  grid-column: 1 / -1;
+}
+
+.diet-meal-row {
+  grid-template-columns: minmax(120px, 0.75fr) minmax(150px, 0.9fr) minmax(320px, 2.2fr) minmax(220px, 1.3fr) auto;
+  align-items: start;
+}
+
+.diet-meal-row .field-block {
+  grid-column: auto;
+}
+
+.diet-meal-row .lead-input {
+  min-height: 44px;
+}
+
+.diet-meal-row textarea.lead-input {
+  min-height: 72px;
+  resize: vertical;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
 
 .consultation-template-tools,
 .symptom-builder {
@@ -1462,6 +1500,10 @@ body {
   .treatment-template-tools { grid-template-columns: 1fr; }
   .medicine-builder-head,
   .treatment-medicine-row { grid-template-columns: 1fr; }
+  .diet-plan-modal .modal-body,
+  .diet-meal-row { grid-template-columns: 1fr; }
+  .diet-plan-modal .field-block,
+  .diet-meal-row .field-block { grid-column: 1 / -1; }
   .next-appointment-fields { grid-template-columns: 1fr; }
   .consultation-template-tools,
   .symptom-builder { grid-template-columns: 1fr; }

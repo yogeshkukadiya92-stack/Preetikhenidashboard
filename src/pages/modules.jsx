@@ -3554,7 +3554,7 @@ export function TreatmentPlansPage() {
 
       {dietModal && (
         <div className="modal-backdrop" role="presentation" onClick={() => setDietModal(false)}>
-          <div className="modal-shell consultation-modal" role="dialog" aria-modal="true" aria-label="Diet Plan" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-shell consultation-modal diet-plan-modal" role="dialog" aria-modal="true" aria-label="Diet Plan" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <div><h2>{editingDietIndex === null ? 'Add Diet Plan' : 'Edit Diet Plan'}</h2><p>Build time-wise meals, then print/save as PDF or share.</p></div>
               <button className="icon-btn" type="button" onClick={() => setDietModal(false)} aria-label="Close">x</button>
@@ -3588,11 +3588,11 @@ export function TreatmentPlansPage() {
               <div className="treatment-medicine-builder">
                 <div className="medicine-builder-head"><div><strong>Meal Schedule</strong><span>Add time, meal name, food items, and notes.</span></div><button className="pill" type="button" onClick={addDietMeal}>Add Meal</button></div>
                 {dietForm.meals.map((meal, index) => (
-                  <div className="treatment-medicine-row" key={index}>
+                  <div className="treatment-medicine-row diet-meal-row" key={index}>
                     <label className="field-block"><span>Time</span><input className="lead-input" type="time" value={meal.time} onChange={(e) => setDietMeal(index, 'time', e.target.value)} /></label>
                     <label className="field-block"><span>Meal</span><input className="lead-input" value={meal.meal} onChange={(e) => setDietMeal(index, 'meal', e.target.value)} placeholder="Breakfast" /></label>
-                    <label className="field-block"><span>Food</span><input className="lead-input" value={meal.food} onChange={(e) => setDietMeal(index, 'food', e.target.value)} placeholder="Food items" /></label>
-                    <label className="field-block"><span>Notes</span><input className="lead-input" value={meal.notes} onChange={(e) => setDietMeal(index, 'notes', e.target.value)} placeholder="Instructions" /></label>
+                    <label className="field-block diet-food-field"><span>Food</span><textarea className="lead-input" rows={2} value={meal.food} onChange={(e) => setDietMeal(index, 'food', e.target.value)} placeholder="Food items" /></label>
+                    <label className="field-block"><span>Notes</span><textarea className="lead-input" rows={2} value={meal.notes} onChange={(e) => setDietMeal(index, 'notes', e.target.value)} placeholder="Instructions" /></label>
                     <button className="icon-btn" type="button" onClick={() => removeDietMeal(index)} aria-label={`Remove meal ${index + 1}`}>x</button>
                   </div>
                 ))}
