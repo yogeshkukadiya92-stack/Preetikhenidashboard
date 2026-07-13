@@ -14,6 +14,11 @@ function clientName(row) {
   return Array.isArray(row) ? row[0] : row?.name ?? row?.Client ?? row?.client ?? '';
 }
 
+function clientMobile(row) {
+  if (Array.isArray(row)) return row[1] ?? '';
+  return row?.mobile ?? row?.Mobile ?? row?.phone ?? row?.Phone ?? '';
+}
+
 const STAGES = [
   ['registration', 'Registration'],
   ['appointment', 'Appointment'],
@@ -123,6 +128,7 @@ export function ClientJourneyPage() {
   }, [consultationTemplates, consultationTemplatesKey]);
 
   const names = useMemo(() => Array.from(new Set(clients.map(clientName).filter(Boolean))), [clients]);
+  const selectedClientRecord = useMemo(() => clients.find((row) => clientName(row).toLowerCase() === selectedClient.toLowerCase()), [clients, selectedClient]);
   const visibleNames = names.filter((name) => name.toLowerCase().includes(search.toLowerCase()));
   const journey = journeys[selectedClient] ?? {};
   const hasAppointment = appointments.some((row) => String(row?.[0] ?? row?.Client ?? '').toLowerCase() === selectedClient.toLowerCase());
@@ -244,7 +250,7 @@ export function ClientJourneyPage() {
     }
     if (stage === 'appointment') {
       const existing = normalizeAppointments(appointments).find((row) => String(row[0]).toLowerCase() === selectedClient.toLowerCase());
-      setAppointmentForm(existing ? { mobile: existing[1] ?? '', date: existing[2] ?? '', time: existing[3] ?? '', type: existing[4] ?? 'Consultation', status: existing[5] ?? 'Pending' } : { mobile: '', ...currentSlot(), type: 'Consultation', status: 'Pending' });
+      setAppointmentForm(existing ? { mobile: existing[1] ?? clientMobile(selectedClientRecord), date: existing[2] ?? '', time: existing[3] ?? '', type: existing[4] ?? 'Consultation', status: existing[5] ?? 'Pending' } : { mobile: clientMobile(selectedClientRecord), ...currentSlot(), type: 'Consultation', status: 'Pending' });
     }
     if (stage === 'payment' || stage === 'billing') setPaymentForm({ invoice: nextInvoice(payments), amount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
     setStageModal(stage);

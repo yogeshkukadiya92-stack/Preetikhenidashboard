@@ -1416,6 +1416,22 @@ body {
   min-height: 34px;
 }
 
+.option-preset-row,
+.empty-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.option-preset-row {
+  margin-bottom: 8px;
+}
+
+.signature-input {
+  font-family: "Brush Script MT", "Segoe Script", cursive;
+  font-size: 1.2rem;
+}
+
 .full-field {
   grid-column: 1 / -1;
 }

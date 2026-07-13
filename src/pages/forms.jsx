@@ -19,6 +19,7 @@ const FIELD_TYPES = [
   { value: 'textarea', label: 'Long text', group: 'Input' },
   { value: 'email', label: 'Email', group: 'Input' },
   { value: 'phone', label: 'Phone', group: 'Input' },
+  { value: 'address', label: 'Address', group: 'Input' },
   { value: 'number', label: 'Number', group: 'Input' },
   { value: 'url', label: 'Website URL', group: 'Input' },
   { value: 'date', label: 'Date', group: 'Date & time' },
@@ -27,10 +28,12 @@ const FIELD_TYPES = [
   { value: 'select', label: 'Dropdown', group: 'Choice' },
   { value: 'radio', label: 'Single choice', group: 'Choice' },
   { value: 'multiselect', label: 'Multiple choice', group: 'Choice' },
+  { value: 'yesno', label: 'Yes / No', group: 'Choice' },
   { value: 'checkbox', label: 'Consent checkbox', group: 'Choice' },
   { value: 'rating', label: 'Star rating', group: 'Choice' },
   { value: 'scale', label: 'Number scale', group: 'Choice' },
   { value: 'file', label: 'File upload', group: 'Advanced' },
+  { value: 'signature', label: 'Signature / typed name', group: 'Advanced' },
   { value: 'heading', label: 'Heading', group: 'Layout' },
   { value: 'paragraph', label: 'Paragraph', group: 'Layout' },
   { value: 'divider', label: 'Divider', group: 'Layout' },
@@ -39,8 +42,74 @@ const FIELD_TYPES = [
 
 const INPUT_TYPES = new Set(FIELD_TYPES.filter((item) => !['heading', 'paragraph', 'divider', 'section'].includes(item.value)).map((item) => item.value));
 const OPTION_TYPES = new Set(['select', 'radio', 'multiselect']);
-const TEXT_VALIDATION_TYPES = new Set(['text', 'textarea', 'email', 'phone', 'url']);
+const TEXT_VALIDATION_TYPES = new Set(['text', 'textarea', 'email', 'phone', 'url', 'address', 'signature']);
 const DEFAULT_OPTIONS = ['Option 1', 'Option 2'];
+const OPTION_PRESETS = [
+  { label: 'Yes / No', options: ['Yes', 'No'] },
+  { label: 'Gender', options: ['Female', 'Male', 'Other', 'Prefer not to say'] },
+  { label: 'Frequency', options: ['Daily', 'Weekly', 'Monthly', 'Occasionally', 'Never'] },
+  { label: 'Severity', options: ['Mild', 'Moderate', 'Severe'] },
+  { label: 'Visit type', options: ['Consultation', 'Follow-up', 'Weight Loss', 'Skin Care', 'Hair Treatment', 'Panchakarma'] },
+  { label: 'Symptoms', options: ['Acidity', 'Bloating', 'Constipation', 'Fatigue', 'Hair fall', 'Joint pain', 'Stress', 'Weight gain'] },
+];
+const FORM_TEMPLATES = [
+  {
+    name: 'Client Intake',
+    title: 'Client Intake Form',
+    description: 'Basic client registration and first visit details.',
+    fields: [
+      ['text', 'Full name', { required: true, placeholder: 'Enter full name', width: 'half' }],
+      ['phone', 'Mobile number', { required: true, placeholder: 'WhatsApp mobile number', width: 'half' }],
+      ['date', 'Birth date', { width: 'half' }],
+      ['address', 'Address', { placeholder: 'Full address' }],
+      ['select', 'Visit type', { options: ['Consultation', 'Follow-up', 'Weight Loss', 'Skin Care', 'Hair Treatment', 'Panchakarma'], required: true, width: 'half' }],
+      ['textarea', 'Main concern', { placeholder: 'What brings you here today?' }],
+      ['checkbox', 'Consent', { required: true, placeholder: 'I confirm the details are correct.' }],
+    ],
+  },
+  {
+    name: 'Health Assessment',
+    title: 'Health Assessment Form',
+    description: 'Symptoms, history, lifestyle, and vitals before consultation.',
+    fields: [
+      ['text', 'Client name', { required: true, width: 'half' }],
+      ['phone', 'Mobile number', { required: true, width: 'half' }],
+      ['multiselect', 'Current symptoms', { options: ['Acidity', 'Bloating', 'Constipation', 'Fatigue', 'Hair fall', 'Joint pain', 'Stress', 'Weight gain'] }],
+      ['textarea', 'Medical history', { placeholder: 'Diabetes, BP, thyroid, surgery, allergy...' }],
+      ['textarea', 'Current medicines', { placeholder: 'Medicine name, dose, timing' }],
+      ['scale', 'Energy level', { min: 1, max: 10, width: 'half' }],
+      ['scale', 'Sleep quality', { min: 1, max: 10, width: 'half' }],
+      ['file', 'Upload reports', { acceptedFiles: '.pdf,image/*', maxFileMb: 5 }],
+    ],
+  },
+  {
+    name: 'Consent',
+    title: 'Treatment Consent Form',
+    description: 'Consent and declaration before starting treatment.',
+    fields: [
+      ['text', 'Client name', { required: true, width: 'half' }],
+      ['phone', 'Mobile number', { required: true, width: 'half' }],
+      ['paragraph', 'Consent note', { label: 'I understand the suggested treatment, diet, lifestyle guidance, and follow-up process.' }],
+      ['checkbox', 'Consent confirmation', { required: true, placeholder: 'I agree to start treatment.' }],
+      ['signature', 'Signature / typed full name', { required: true, placeholder: 'Type full name as signature' }],
+      ['date', 'Date', { required: true, width: 'half' }],
+    ],
+  },
+  {
+    name: 'Follow-up',
+    title: 'Follow-up Assessment Form',
+    description: 'Progress review before the next consultation.',
+    fields: [
+      ['text', 'Client name', { required: true, width: 'half' }],
+      ['phone', 'Mobile number', { required: true, width: 'half' }],
+      ['number', 'Current weight', { width: 'half' }],
+      ['yesno', 'Medicine taken regularly?', { required: true, width: 'half' }],
+      ['scale', 'Overall improvement', { min: 1, max: 10 }],
+      ['textarea', 'Challenges faced', { placeholder: 'Diet, exercise, sleep, medicine, travel...' }],
+      ['textarea', 'Questions for doctor', { placeholder: 'Write anything you want to ask.' }],
+    ],
+  },
+];
 
 function makeUid(prefix = 'id') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -66,7 +135,7 @@ function makeField(type = 'text') {
     type,
     label: type === 'section' ? 'New section' : type === 'heading' ? 'Heading' : type === 'paragraph' ? 'Add supporting text here.' : '',
     help: '',
-    placeholder: '',
+    placeholder: type === 'signature' ? 'Type full name' : '',
     required: false,
     options: OPTION_TYPES.has(type) ? [...DEFAULT_OPTIONS] : [],
     min: type === 'scale' ? 1 : '',
@@ -78,6 +147,10 @@ function makeField(type = 'text') {
     width: layoutType ? 'full' : 'full',
     condition: { enabled: false, fieldId: '', operator: 'equals', value: '' },
   };
+}
+
+function templateField([type, label, overrides = {}]) {
+  return { ...makeField(type), label, ...overrides, condition: { enabled: false, fieldId: '', operator: 'equals', value: '', ...(overrides.condition ?? {}) } };
 }
 
 function makeForm() {
@@ -220,8 +293,10 @@ function FormField({ field, value, error, onChange, accentColor }) {
   if (field.type === 'divider') return <hr className="public-form-divider" />;
 
   let control = null;
-  if (field.type === 'textarea') {
+  if (field.type === 'textarea' || field.type === 'address') {
     control = <textarea {...common} rows={4} minLength={field.minLength || undefined} maxLength={field.maxLength || undefined} />;
+  } else if (field.type === 'signature') {
+    control = <input {...common} type="text" minLength={field.minLength || undefined} maxLength={field.maxLength || undefined} className={`lead-input signature-input ${error ? 'input-error' : ''}`} />;
   } else if (field.type === 'select') {
     control = (
       <select {...common}>
@@ -262,6 +337,17 @@ function FormField({ field, value, error, onChange, accentColor }) {
         <input type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} />
         <span>{field.placeholder || 'I agree'}</span>
       </label>
+    );
+  } else if (field.type === 'yesno') {
+    control = (
+      <div className="choice-list yes-no-list" role="radiogroup" aria-labelledby={`${inputId}-label`}>
+        {['Yes', 'No'].map((option) => (
+          <label className="choice-option" key={option}>
+            <input type="radio" name={field.id} value={option} checked={value === option} onChange={() => onChange(option)} />
+            <span>{option}</span>
+          </label>
+        ))}
+      </div>
     );
   } else if (field.type === 'rating') {
     control = (
@@ -336,7 +422,7 @@ function FormField({ field, value, error, onChange, accentColor }) {
 
   return (
     <div className={`public-form-field width-${field.width || 'full'}`}>
-      <label className="public-field-label" id={`${inputId}-label`} htmlFor={['radio', 'multiselect', 'checkbox', 'rating', 'scale'].includes(field.type) ? undefined : inputId}>
+      <label className="public-field-label" id={`${inputId}-label`} htmlFor={['radio', 'multiselect', 'checkbox', 'yesno', 'rating', 'scale'].includes(field.type) ? undefined : inputId}>
         {field.label || 'Untitled field'}
         {field.required && <span aria-hidden="true"> *</span>}
       </label>
@@ -526,6 +612,13 @@ function FieldInspector({ field, allFields, onChange, onAddOption, onUpdateOptio
       {OPTION_TYPES.has(field.type) && (
         <div className="field-options-editor">
           <div className="inspector-section-title">Options</div>
+          <div className="option-preset-row">
+            {OPTION_PRESETS.map((preset) => (
+              <button className="pill" type="button" key={preset.label} onClick={() => onChange('options', preset.options)}>
+                {preset.label}
+              </button>
+            ))}
+          </div>
           {(field.options ?? []).map((option, index) => (
             <div className="field-option-row" key={`${field.id}-${index}`}>
               <input className="lead-input" value={option} onChange={(event) => onUpdateOption(index, event.target.value)} placeholder={`Option ${index + 1}`} />
@@ -624,6 +717,22 @@ export function FormsPage() {
     const form = makeForm();
     setDraftForm(form);
     setSelectedFieldId(form.fields[0].id);
+    setBuilderTab('build');
+    setView('builder');
+  };
+
+  const startFromTemplate = (template) => {
+    const base = makeForm();
+    const fields = template.fields.map(templateField);
+    const form = {
+      ...base,
+      title: template.title,
+      slug: slugify(template.title) || base.id,
+      description: template.description,
+      fields,
+    };
+    setDraftForm(form);
+    setSelectedFieldId(fields[0]?.id ?? null);
     setBuilderTab('build');
     setView('builder');
   };
@@ -818,6 +927,7 @@ export function FormsPage() {
 
   if (view === 'builder' && draftForm) {
     const addFieldItems = FIELD_TYPES.map((type) => ({ label: type.label, description: type.group, onClick: () => addField(type.value) }));
+    const templateItems = FORM_TEMPLATES.map((template) => ({ label: template.name, description: template.description, onClick: () => startFromTemplate(template) }));
     return (
       <section className="module-page form-builder-page">
         <div className="module-hero compact-hero">
@@ -836,6 +946,7 @@ export function FormsPage() {
           </div>
           <div className="card-action-group">
             <button className="pill" type="button" onClick={() => setView('preview')}>Preview</button>
+            <ActionMenu label="Templates" items={templateItems} />
             <ActionMenu label="Save" items={[
               { label: 'Save as draft', description: 'Keep the public link closed', onClick: () => saveBuilder('Draft') },
               { label: 'Publish form', description: 'Enable the public form link', onClick: () => saveBuilder('Published') },
@@ -854,7 +965,7 @@ export function FormsPage() {
             </Card>
 
             <div className="form-builder-grid">
-              <Card title="Form Fields" subtitle="Drag to reorder or use each row menu." action={<ActionMenu label="Add Field" items={addFieldItems} />}>
+              <Card title="Form Fields" subtitle="Drag to reorder or use each row menu." action={<div className="card-action-group"><ActionMenu label="Templates" items={templateItems} /><ActionMenu label="Add Field" items={addFieldItems} /></div>}>
                 <div className="builder-field-list">
                   {draftForm.fields.map((field, index) => (
                     <div
@@ -969,7 +1080,7 @@ export function FormsPage() {
         </div>
       </div>
 
-      <Card title="All Forms" subtitle="Create, publish, share, and review responses." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={startCreate}>+ Create Form</button><ActionMenu label="Actions" items={[{ label: 'Create new form', description: 'Open the full form builder', onClick: startCreate }]} /></div>}>
+      <Card title="All Forms" subtitle="Create, publish, share, and review responses." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={startCreate}>+ Create Form</button><ActionMenu label="Templates" items={FORM_TEMPLATES.map((template) => ({ label: template.name, description: template.description, onClick: () => startFromTemplate(template) }))} /><ActionMenu label="Actions" items={[{ label: 'Create new form', description: 'Open the full form builder', onClick: startCreate }]} /></div>}>
         {forms.length ? (
           <div className="data-table adaptive-table" style={{ '--table-columns': 5 }}>
             <div className="table-head"><div>Form</div><div>Fields</div><div>Responses</div><div>Status</div><div>Updated</div><div /></div>
@@ -996,7 +1107,7 @@ export function FormsPage() {
             ))}
           </div>
         ) : (
-          <div className="empty-state compact-empty table-empty"><strong>No forms created yet.</strong><p>Create your first intake form, assessment, or registration form.</p><button className="pill primary-action" type="button" onClick={startCreate}>+ Create Form</button></div>
+          <div className="empty-state compact-empty table-empty"><strong>No forms created yet.</strong><p>Create your first intake form, assessment, or registration form.</p><div className="empty-action-row"><button className="pill primary-action" type="button" onClick={startCreate}>+ Blank Form</button>{FORM_TEMPLATES.slice(0, 3).map((template) => <button className="pill" type="button" key={template.name} onClick={() => startFromTemplate(template)}>{template.name}</button>)}</div></div>
         )}
       </Card>
     </section>

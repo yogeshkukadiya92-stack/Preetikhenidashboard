@@ -1056,7 +1056,7 @@ function ClientProfile({ client, onBack }) {
           <div className="client-avatar">{clientName.charAt(0).toUpperCase()}</div>
           <div>
             <h1>{clientName}</h1>
-            <p>{client.program || 'No program'} · Age: {client.age || '—'} · Next Visit: {client.nextVisit || '—'}</p>
+            <p>{client.program || 'No program'} · Mobile: {client.mobile || '—'} · Age: {client.age || '—'} · Next Visit: {client.nextVisit || '—'}</p>
           </div>
           <ActionMenu label="Actions" items={[
             { label: 'Add treatment plan', description: `Create a plan for ${clientName}`, onClick: () => setTreatModal(true) },
@@ -1080,7 +1080,7 @@ function ClientProfile({ client, onBack }) {
       {activeTab === 'overview' && (
         <Card title="Client Details">
           <div className="detail-grid">
-            {[['Client', client.name], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Program', client.program], ['Next Visit', client.nextVisit]].map(([label, value]) => (
+            {[['Client', client.name], ['Mobile', client.mobile], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Program', client.program], ['Next Visit', client.nextVisit]].map(([label, value]) => (
               <div className="mini-stat" key={label}>
                 <span>{label}</span>
                 <strong>{value || '—'}</strong>
@@ -1353,13 +1353,14 @@ export function ClientsPage() {
         { label: 'Treatment Plans', value: '0' },
         { label: 'Next Visits', value: '0' },
       ]}
-      headers={['Client', 'Birthday', 'Age', 'Address', 'Program', 'Next Visit']}
+      headers={['Client', 'Mobile', 'Birthday', 'Age', 'Address', 'Program', 'Next Visit']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
       fieldOptions={{ Program: getSavedPackageNames() }}
-      fieldTypes={{ Age: 'number', 'Next Visit': 'date', Birthday: 'date' }}
+      fieldTypes={{ Mobile: 'tel', Age: 'number', 'Next Visit': 'date', Birthday: 'date' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
+        { label: 'Mobile wise', column: 'Mobile' },
         { label: 'Age wise', column: 'Age' },
         { label: 'Program wise', column: 'Program' },
         { label: 'Address wise', column: 'Address' },
@@ -1368,6 +1369,7 @@ export function ClientsPage() {
       ]}
       rowToValues={(row) => ({
         Client: row.name,
+        Mobile: row.mobile,
         Birthday: row.birthday,
         Age: row.age,
         Address: row.address,
@@ -1376,6 +1378,7 @@ export function ClientsPage() {
       })}
       parseRow={(entry) => ({
         name: entry.Client ?? entry.client ?? entry.name ?? '',
+        mobile: entry.Mobile ?? entry.mobile ?? entry.Phone ?? entry.phone ?? '',
         age: entry.Age ?? entry.age ?? '',
         address: entry.Address ?? entry.address ?? '',
         program: entry.Program ?? entry.program ?? '',
