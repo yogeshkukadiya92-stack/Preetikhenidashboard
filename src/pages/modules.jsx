@@ -3064,6 +3064,22 @@ export function ServicesPage() {
         service === 'Panchakarma' ? '14 days' : '30 min',
         'Active',
       ])}
+      rowActions={(row, setSelectedRow, setActionMessage, setTableRows) => (
+        <ActionMenu compact label={`Actions for ${row[0] || 'service'}`} items={[
+          { label: 'View service', onClick: () => { setSelectedRow(row[0]); setActionMessage(`${row[0]} selected in Services.`); } },
+          {
+            label: 'Delete service',
+            description: 'Remove this service from the catalog',
+            danger: true,
+            onClick: () => {
+              if (!window.confirm(`Delete ${row[0]} from services?`)) return;
+              setTableRows((current) => current.filter((candidate) => JSON.stringify(candidate) !== JSON.stringify(row)));
+              setSelectedRow(null);
+              setActionMessage(`${row[0]} deleted from Services.`);
+            },
+          },
+        ]} />
+      )}
     />
   );
 }
