@@ -246,6 +246,9 @@ function ImportExportModule({
   const [modalOpen, setModalOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [draftRecord, setDraftRecord] = useState(() => Object.fromEntries(headers.map((header) => [header, ''])));
+  const [editOpen, setEditOpen] = useState(false);
+  const [editIndex, setEditIndex] = useState(-1);
+  const [editRecord, setEditRecord] = useState(() => Object.fromEntries(headers.map((header) => [header, ''])));
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
@@ -363,6 +366,15 @@ function ImportExportModule({
   };
 
   const visibleRows = customRows ?? rows.map((row) => row);
+
+  const updateRecordField = (setter, header, value) => {
+    setter((current) => ({
+      ...current,
+      [header]: value,
+      ...(title === 'Clients' && header === 'Birthday' ? { Age: ageFromBirthday(value) } : {}),
+    }));
+  };
+
   const saveDraftRecord = () => {
     const normalized = normalize(draftRecord);
     if (!Object.values(normalized).some(Boolean)) {
@@ -377,6 +389,36 @@ function ImportExportModule({
     setRows((current) => [normalized, ...current]);
     setAddOpen(false);
     setMessage(`${rowToCsvValues(normalized)[0] || title} added.`);
+  };
+
+  const openEditRecord = (row) => {
+    const index = rows.findIndex((candidate) => candidate === row);
+    if (index < 0) {
+      setMessage('This record cannot be edited from the current filtered view.');
+      return;
+    }
+    setSelectedRecord(null);
+    setEditIndex(index);
+    setEditRecord({ ...rowToValues(row) });
+    setEditOpen(true);
+    setMessage(`${rowToCsvValues(row)[0] || title} edit opened.`);
+  };
+
+  const saveEditRecord = () => {
+    const normalized = normalize(editRecord);
+    if (!Object.values(normalized).some(Boolean)) {
+      setMessage('Please fill at least one field before saving.');
+      return;
+    }
+    const clientPhone = recordPhone(normalized, rowToValues);
+    if (isClientModule && clientPhone && rows.some((row, index) => index !== editIndex && recordPhone(row, rowToValues) === clientPhone)) {
+      setMessage('This mobile number already exists. Client was not updated.');
+      return;
+    }
+    setRows((current) => current.map((row, index) => (index === editIndex ? normalized : row)));
+    setEditOpen(false);
+    setEditIndex(-1);
+    setMessage(`${rowToCsvValues(normalized)[0] || title} updated.`);
   };
 
   const filteredRows = visibleRows.filter((row) => {
@@ -475,7 +517,7 @@ function ImportExportModule({
               filteredRows.map((row, index) => (
                 <div className="data-row" key={index}>
                   {headers.map((header) => <div key={header}>{rowToValues(row)[header]}</div>)}
-                  <div>{rowActions ? rowActions(row) : defaultRowAction(row)}</div>
+                  <div>{rowActions ? rowActions(row, openEditRecord) : defaultRowAction(row)}</div>
                 </div>
               ))
             ) : (
@@ -519,7 +561,7 @@ function ImportExportModule({
                       value={draftRecord[header] ?? ''}
                       readOnly={header === 'Invoice' || (title === 'Clients' && header === 'Age')}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
-                      onChange={(event) => setDraftRecord((current) => ({ ...current, [header]: event.target.value, ...(title === 'Clients' && header === 'Birthday' ? { Age: ageFromBirthday(event.target.value) } : {}) }))}
+                      onChange={(event) => updateRecordField(setDraftRecord, header, event.target.value)}
                       placeholder={`Enter ${header.toLowerCase()}`}
                     />
                   )}
@@ -529,6 +571,51 @@ function ImportExportModule({
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setAddOpen(false)}>Cancel</button>
               <button className="pill" type="button" onClick={saveDraftRecord}>Save <ChevronRight /></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setEditOpen(false)}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Edit ${title}`} onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>Edit {title === 'Clients' ? 'Client' : title}</h2>
+                <p>Update the fields and save this record.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setEditOpen(false)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              {headers.map((header) => (
+                <label className="field-block" key={header}>
+                  <span>{header}</span>
+                  {Object.prototype.hasOwnProperty.call(fieldOptions, header) ? (
+                    <select
+                      className="lead-input"
+                      value={editRecord[header] ?? ''}
+                      onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
+                    >
+                      <option value="">{fieldOptions[header].length ? `Select ${header.toLowerCase()}` : `Add ${header.toLowerCase()} first`}</option>
+                      {fieldOptions[header].map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      className="lead-input"
+                      type={fieldTypes[header] ?? 'text'}
+                      value={editRecord[header] ?? ''}
+                      readOnly={header === 'Invoice' || (title === 'Clients' && header === 'Age')}
+                      max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
+                      onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
+                      placeholder={`Enter ${header.toLowerCase()}`}
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setEditOpen(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={saveEditRecord}>Save Changes <ChevronRight /></button>
             </div>
           </div>
         </div>
@@ -1491,8 +1578,14 @@ export function ClientsPage() {
         program: entry.Program ?? entry.program ?? entry.Service ?? entry.service ?? '',
         birthday: entry.Birthday ?? entry.birthday ?? '',
       })}
-      rowActions={(row) => (
-        <button className="row-link" type="button" onClick={() => setSelectedClient(row)}>View Profile</button>
+      rowActions={(row, openEditRecord) => (
+        <ActionMenu
+          label="Actions"
+          items={[
+            { label: 'View Profile', description: 'Open client details', onClick: () => setSelectedClient(row) },
+            { label: 'Edit Client', description: 'Update client fields', onClick: () => openEditRecord(row) },
+          ]}
+        />
       )}
     />
   );
