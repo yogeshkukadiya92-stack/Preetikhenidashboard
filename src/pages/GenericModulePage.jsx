@@ -45,12 +45,12 @@ function asImportRows(value) {
   return [];
 }
 
-export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, fieldTypes = {}, rowActions = null, filterPresets = [], viewPresets = [] }) {
+export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, fieldTypes = {}, rowActions = null, filterPresets = [], viewPresets = [], normalizeRows = (value) => value }) {
   const { branchKey, currentBranch } = useBranch();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRow, setSelectedRow] = useState(null);
   const storageKey = branchKey(`${title}:rows:v3`);
-  const [tableRows, setTableRows] = useState(() => loadSavedRows(storageKey, rows));
+  const [tableRows, setTableRows] = useState(() => normalizeRows(loadSavedRows(storageKey, rows)));
   const [actionMessage, setActionMessage] = useState('Ready.');
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');

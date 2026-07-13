@@ -119,6 +119,14 @@ function currentAppointmentSlot() {
   };
 }
 
+function normalizeAppointmentRows(rows = []) {
+  return rows.map((row) => {
+    if (!Array.isArray(row)) return row;
+    if (row.length >= 7) return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[6] ?? row[5] ?? 'Pending'];
+    return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[5] ?? 'Pending'];
+  });
+}
+
 function nextInvoiceNumber(rows = []) {
   const highest = rows.reduce((maximum, row) => {
     const invoice = Array.isArray(row) ? row[1] : row?.invoice ?? row?.Invoice ?? '';
@@ -988,7 +996,7 @@ function ClientProfile({ client, onBack }) {
 
   const allAppointments = useMemo(() => {
     const saved = loadSavedState(appointmentsStorageKey, loadSavedState('ayurflow:Appointments:rows:v2', []));
-    return saved.filter((row) => String(row[0] ?? '').toLowerCase().includes(clientName.toLowerCase()));
+    return normalizeAppointmentRows(saved).filter((row) => String(row[0] ?? '').toLowerCase().includes(clientName.toLowerCase()));
   }, [appointmentsStorageKey, clientName, refreshKey]);
 
   const allPayments = useMemo(() => {
@@ -1012,7 +1020,7 @@ function ClientProfile({ client, onBack }) {
     window.localStorage.setItem(key, JSON.stringify([[clientName, treatForm.service, treatForm.goal, treatForm.duration, treatForm.medicine, treatForm.dose, treatForm.timing, treatForm.status], ...current]));
     if (nextAppointment.enabled && nextAppointment.date && nextAppointment.time) {
       const appointments = loadSavedArray(appointmentsStorageKey, []);
-      const appointment = [clientName, nextAppointment.mobile, nextAppointment.date, nextAppointment.time, treatForm.service, '', nextAppointment.status];
+      const appointment = [clientName, nextAppointment.mobile, nextAppointment.date, nextAppointment.time, treatForm.service, nextAppointment.status];
       window.localStorage.setItem(appointmentsStorageKey, JSON.stringify([appointment, ...appointments]));
     }
     setRefreshKey((k) => k + 1);
@@ -1025,7 +1033,7 @@ function ClientProfile({ client, onBack }) {
 
   const saveAppointment = () => {
     const current = loadSavedArray(appointmentsStorageKey, []);
-    window.localStorage.setItem(appointmentsStorageKey, JSON.stringify([[clientName, apptForm.mobile, apptForm.date, apptForm.time, apptForm.type, '', apptForm.status], ...current]));
+    window.localStorage.setItem(appointmentsStorageKey, JSON.stringify([[clientName, apptForm.mobile, apptForm.date, apptForm.time, apptForm.type, apptForm.status], ...normalizeAppointmentRows(current)]));
     setRefreshKey((k) => k + 1);
     setApptModal(false);
     setApptForm({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' });
@@ -2862,9 +2870,6 @@ export function AppointmentsPage() {
   const [clientNames] = useState(() =>
     loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map((row) => Array.isArray(row) ? row[0] : row.name ?? row.Client ?? '').filter(Boolean)
   );
-  const [staffNames] = useState(() =>
-    loadSavedArray('ayurflow:Staff:rows:v2', staffRoles.map((member) => [member.name])).map((row) => row?.[0] ?? row?.name ?? '').filter(Boolean)
-  );
   return (
     <GenericModulePage
       title="Appointments"
@@ -2874,14 +2879,14 @@ export function AppointmentsPage() {
         { label: 'Confirmed', value: '0' },
         { label: 'Pending', value: '0' },
       ]}
-      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Staff', 'Status']}
+      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status']}
       rows={[]}
-      fieldOptions={{ Client: clientNames, Type: services, Staff: staffNames }}
+      fieldOptions={{ Client: clientNames, Type: services }}
       fieldTypes={{ Mobile: 'tel', Date: 'date', Time: 'time' }}
+      normalizeRows={normalizeAppointmentRows}
       filterPresets={[
         { label: 'Date wise', column: 'Date' },
         { label: 'Type wise', column: 'Type' },
-        { label: 'Staff wise', column: 'Staff' },
         { label: 'Mobile wise', column: 'Mobile' },
         { label: 'Client wise', column: 'Client' },
       ]}
@@ -2903,14 +2908,14 @@ export function AppointmentsPage() {
           {
             label: 'Confirm appointment',
             onClick: () => {
-              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 6 ? 'Confirmed' : cell) : item));
+              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 5 ? 'Confirmed' : cell) : item));
               setActionMessage(`${row[0]} appointment confirmed.`);
             },
           },
           {
             label: 'Check in client',
             onClick: () => {
-              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 6 ? 'Checked-in' : cell) : item));
+              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 5 ? 'Checked-in' : cell) : item));
               setActionMessage(`${row[0]} checked in and ready for consultation.`);
             },
           },
