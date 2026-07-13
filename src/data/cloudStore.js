@@ -67,19 +67,19 @@ export async function hydrateCloudState() {
   const rows = await request('/rest/v1/app_state?branch=eq.workspace&select=key,value');
   if (!Array.isArray(rows)) return 0;
   const pending = readPending();
+  const cloudKeys = new Set();
   rows.forEach((row) => {
-    if (shouldSync(row.key) && !Object.prototype.hasOwnProperty.call(pending, row.key)) originalSetItem.call(window.localStorage, row.key, JSON.stringify(row.value));
+    if (!shouldSync(row.key)) return;
+    cloudKeys.add(row.key);
+    if (!Object.prototype.hasOwnProperty.call(pending, row.key)) originalSetItem.call(window.localStorage, row.key, JSON.stringify(row.value));
   });
   const pendingEntries = Object.entries(pending).filter(([key]) => shouldSync(key));
   if (pendingEntries.length) await Promise.allSettled(pendingEntries.map(([key, value]) => syncCloudValue(key, value)));
-  if (!rows.length) {
-    const localEntries = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
-      .filter((key) => key && shouldSync(key))
-      .map((key) => [key, window.localStorage.getItem(key)]);
-    await Promise.all(localEntries.map(([key, value]) => syncCloudValue(key, value)));
-    return localEntries.length;
-  }
-  return rows.length;
+  const localEntries = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
+    .filter((key) => key && shouldSync(key) && !cloudKeys.has(key))
+    .map((key) => [key, window.localStorage.getItem(key)]);
+  if (localEntries.length) await Promise.all(localEntries.map(([key, value]) => syncCloudValue(key, value)));
+  return rows.length + localEntries.length;
 }
 
 export function installCloudSync() {
