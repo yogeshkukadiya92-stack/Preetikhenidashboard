@@ -83,6 +83,11 @@ export function loadLocalResponses(formId) {
   return responses.filter((response) => response.formId === formId);
 }
 
+export function loadAllLocalResponses() {
+  const responses = readJson(RESPONSES_KEY, []);
+  return Array.isArray(responses) ? responses : [];
+}
+
 export async function loadResponses(formId) {
   const localResponses = loadLocalResponses(formId);
   if (!apiBase) return { responses: localResponses, source: 'local' };

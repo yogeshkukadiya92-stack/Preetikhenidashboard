@@ -25,6 +25,7 @@ import {
   treatmentPlans,
   users,
 } from '../data/appConfig.js';
+import { loadAllLocalResponses, loadForms as loadSavedForms } from '../data/formStore.js';
 
 function downloadText(filename, content, mimeType = 'text/plain;charset=utf-8') {
   const blob = new Blob([content], { type: mimeType });
@@ -109,6 +110,66 @@ function getSavedServiceNames() {
   const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
   const savedNames = saved.map((row) => (Array.isArray(row) ? row[0] : row.Service ?? row.service)).filter(Boolean);
   return Array.from(new Set([...savedNames, ...services]));
+}
+
+function formatSubmittedDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toISOString().slice(0, 10);
+}
+
+function displayFormAnswer(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join(', ');
+  if (value && typeof value === 'object') return value.name ?? value.url ?? JSON.stringify(value);
+  return String(value ?? '').trim();
+}
+
+function findAnswerByLabel(response, form, candidates) {
+  const answers = response?.answers && typeof response.answers === 'object' ? response.answers : {};
+  const fields = Array.isArray(form?.fields) ? form.fields : [];
+  const byFieldLabel = fields.find((field) => {
+    const label = String(field.label ?? field.id ?? '').toLowerCase();
+    return candidates.some((candidate) => label.includes(candidate));
+  });
+  if (byFieldLabel && answers[byFieldLabel.id] !== undefined) return displayFormAnswer(answers[byFieldLabel.id]);
+  const byAnswerKey = Object.entries(answers).find(([key]) => {
+    const normalized = String(key).toLowerCase();
+    return candidates.some((candidate) => normalized.includes(candidate));
+  });
+  return byAnswerKey ? displayFormAnswer(byAnswerKey[1]) : '';
+}
+
+function appFormResponseRows() {
+  const savedForms = loadSavedForms();
+  const formById = new Map(savedForms.flatMap((form) => [[form.id, form], [form.slug, form]].filter(([key]) => key)));
+  return loadAllLocalResponses().map((response) => {
+    const form = formById.get(response.formId) ?? formById.get(response.formSlug);
+    const name = findAnswerByLabel(response, form, ['name', 'client', 'full']) || response.respondentEmail || 'App form user';
+    const phone = findAnswerByLabel(response, form, ['phone', 'mobile', 'contact', 'whatsapp']);
+    return [
+      name,
+      response.formTitle || form?.title || response.formSlug || response.formId || 'App Form',
+      formatSubmittedDate(response.submittedAt),
+      phone,
+      'App Form',
+      'Received',
+    ];
+  });
+}
+
+function normalizeOperationRow(tabId, columns, row) {
+  const source = Array.isArray(row)
+    ? row
+    : columns.map((column) => row?.[column] ?? row?.[column.toLowerCase()] ?? '');
+  if (tabId === 'forms' && source.length === 5) {
+    return [source[0] ?? '', source[1] ?? '', source[2] ?? '', source[3] ?? '', 'Google Form', source[4] ?? ''];
+  }
+  return columns.map((_, index) => source[index] ?? '');
+}
+
+function mergeFormInboxRows(rows, appRows) {
+  return mergeUniqueRows(rows, appRows);
 }
 
 function currentAppointmentSlot() {
@@ -1701,9 +1762,8 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
 
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const rawActiveRows = Array.isArray(rowsByTab[active.id]) ? rowsByTab[active.id] : active.rows;
-  const activeRows = rawActiveRows.map((row) => active.columns.map((column, index) => (
-    Array.isArray(row) ? (row[index] ?? '') : (row?.[column] ?? row?.[column.toLowerCase()] ?? '')
-  )));
+  const normalizedActiveRows = rawActiveRows.map((row) => normalizeOperationRow(active.id, active.columns, row));
+  const activeRows = active.id === 'forms' ? mergeFormInboxRows(normalizedActiveRows, appFormResponseRows()) : normalizedActiveRows;
   const medicineOptions = (Array.isArray(rowsByTab.medicines) ? rowsByTab.medicines : [])
     .map((row) => (Array.isArray(row) ? row[0] : row?.Medicine ?? row?.medicine ?? ''))
     .filter(Boolean);
@@ -2422,10 +2482,10 @@ const operationsTabs = [
     id: 'forms',
     label: 'Forms',
     singular: 'response',
-    title: 'Google Form Responses',
-    description: 'Only response entries from Google Forms are shown here. Import the responses and keep this as the live inbox.',
-    columns: ['Name', 'Form', 'Submitted', 'Phone', 'Status'],
-    rows: formResponses.map((response) => [response.name, response.form, response.submitted, response.phone, response.status]),
+    title: 'Form Responses',
+    description: 'App form submissions and imported Google Form responses are shown together in one live inbox.',
+    columns: ['Name', 'Form', 'Submitted', 'Phone', 'Source', 'Status'],
+    rows: formResponses.map((response) => [response.name, response.form, response.submitted, response.phone, 'Google Form', response.status]),
   },
   {
     id: 'treatments',
