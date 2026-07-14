@@ -4,7 +4,9 @@ const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim().repla
 const supabaseAnonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 const originalSetItem = window.Storage.prototype.setItem;
 let syncInstalled = false;
+let refreshInstalled = false;
 const PENDING_KEY = 'moms-pathshala:cloud-pending:v1';
+const REFRESH_INTERVAL_MS = 15_000;
 
 export const CLOUD_STORAGE_CONFIGURED = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -68,10 +70,16 @@ export async function hydrateCloudState() {
   if (!Array.isArray(rows)) return 0;
   const pending = readPending();
   const cloudKeys = new Set();
+  let changedKeys = 0;
   rows.forEach((row) => {
     if (!shouldSync(row.key)) return;
     cloudKeys.add(row.key);
-    if (!Object.prototype.hasOwnProperty.call(pending, row.key)) originalSetItem.call(window.localStorage, row.key, JSON.stringify(row.value));
+    if (Object.prototype.hasOwnProperty.call(pending, row.key)) return;
+    const cloudValue = JSON.stringify(row.value);
+    if (window.localStorage.getItem(row.key) !== cloudValue) {
+      originalSetItem.call(window.localStorage, row.key, cloudValue);
+      changedKeys += 1;
+    }
   });
   const pendingEntries = Object.entries(pending).filter(([key]) => shouldSync(key));
   if (pendingEntries.length) await Promise.allSettled(pendingEntries.map(([key, value]) => syncCloudValue(key, value)));
@@ -79,7 +87,7 @@ export async function hydrateCloudState() {
     .filter((key) => key && shouldSync(key) && !cloudKeys.has(key))
     .map((key) => [key, window.localStorage.getItem(key)]);
   if (localEntries.length) await Promise.all(localEntries.map(([key, value]) => syncCloudValue(key, value)));
-  return rows.length + localEntries.length;
+  return changedKeys;
 }
 
 export function installCloudSync() {
@@ -92,4 +100,16 @@ export function installCloudSync() {
       syncCloudValue(String(key), String(value)).catch(() => {});
     }
   };
+}
+
+export function installCloudRefresh() {
+  if (refreshInstalled || !CLOUD_STORAGE_CONFIGURED) return;
+  refreshInstalled = true;
+  window.setInterval(() => {
+    hydrateCloudState()
+      .then((changedKeys) => {
+        if (changedKeys > 0) window.location.reload();
+      })
+      .catch(() => {});
+  }, REFRESH_INTERVAL_MS);
 }
