@@ -48,19 +48,26 @@ export function getAuthSession() {
 export async function verifyCredentials(email, password) {
   if (!AUTH_CONFIGURED) return false;
   if (String(email).trim().toLowerCase() !== ADMIN_EMAIL) return false;
-  if (supabaseConfigured) {
-    const response = await fetchWithTimeout(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: { apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: String(email).trim(), password: String(password) }),
-    });
-    if (!response.ok) return false;
-    const session = await response.json();
-    window.sessionStorage.setItem(SUPABASE_SESSION_KEY, JSON.stringify(session));
-    return Boolean(session.access_token);
+  if (configuredPasswordHash) {
+    const passwordHash = await sha256(String(password));
+    if (passwordHash === configuredPasswordHash) return true;
   }
-  const passwordHash = await sha256(String(password));
-  return passwordHash === configuredPasswordHash;
+  if (supabaseConfigured) {
+    try {
+      const response = await fetchWithTimeout(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: String(email).trim(), password: String(password) }),
+      });
+      if (!response.ok) return false;
+      const session = await response.json();
+      window.sessionStorage.setItem(SUPABASE_SESSION_KEY, JSON.stringify(session));
+      return Boolean(session.access_token);
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 export function createAuthSession(remember = false) {

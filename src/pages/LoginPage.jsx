@@ -48,7 +48,11 @@ export function LoginPage() {
       const valid = await verifyCredentials(email, password);
       if (valid) {
         createAuthSession(remember);
-        await hydrateCloudState().catch(() => {});
+        hydrateCloudState()
+          .then((changedKeys) => {
+            if (changedKeys > 0) window.location.reload();
+          })
+          .catch(() => {});
         navigate(destination, { replace: true });
         return;
       }
