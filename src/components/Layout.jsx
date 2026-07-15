@@ -93,7 +93,7 @@ export function Layout() {
     else if (term.includes('inventory') || term.includes('stock') || term.includes('medicine') || term.includes('oil')) navigate('/operations?tab=inventory');
     else if (term.includes('whatsapp') || term.includes('message') || term.includes('email') || term.includes('sms') || term.includes('template')) navigate('/operations?tab=communication');
     else if (term.includes('portal') || term.includes('mobile') || term.includes('app')) navigate('/operations?tab=portal');
-    else if (term.includes('setting') || term.includes('branch') || term.includes('tax')) navigate('/settings');
+    else if (term.includes('setting') || term.includes('workspace') || term.includes('tax')) navigate('/settings');
     else if (term.includes('report') || term.includes('analytics')) navigate('/reports');
     else if (term.includes('pay') || term.includes('invoice') || term.includes('receipt')) navigate('/finance?tab=payments');
     else if (term.includes('client')) navigate('/clients');
@@ -117,7 +117,7 @@ export function Layout() {
             <div>
               <h1>Mom's Pathshala</h1>
               <p>Learning, care, and growth.</p>
-              <p className="subtle">Branch: {currentBranch}</p>
+              <p className="subtle">Shared cloud workspace</p>
             </div>
           </div>
           <button
@@ -210,7 +210,7 @@ export function Layout() {
                   <p>{notificationSummary.pendingPayments} payment(s) need collection review.</p>
                 </>
               ) : (
-                <p>No pending alerts for {currentBranch}.</p>
+                <p>No pending alerts in the shared workspace.</p>
               )}
               <button className="row-link" type="button" onClick={() => { setNotificationsOpen(false); navigate('/crm'); }}>Open CRM</button>
             </div>

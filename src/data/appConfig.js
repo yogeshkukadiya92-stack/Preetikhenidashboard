@@ -21,7 +21,7 @@ export const navItems = [
   { path: '/reports', label: 'Reports', section: 'Finance & Reports' },
   { path: '/users', label: 'Users', section: 'Administration' },
   { path: '/integrations', label: 'Integrations', section: 'Administration' },
-  { path: '/branches', label: 'Branches', section: 'Administration' },
+  { path: '/branches', label: 'Workspace', section: 'Administration' },
   { path: '/settings', label: 'Settings', section: 'Administration' },
 ];
 

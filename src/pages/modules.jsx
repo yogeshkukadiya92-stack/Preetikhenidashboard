@@ -709,7 +709,7 @@ function ImportExportModule({
 
 export function CRMPage() {
   const navigate = useNavigate();
-  const { branchKey, currentBranch } = useBranch();
+  const { branchKey } = useBranch();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('leads');
   const [manualLeads, setManualLeads] = useState(() => loadSavedArray(branchKey('crm:leads:v4')));
@@ -898,7 +898,7 @@ export function CRMPage() {
         <div>
           <h1>CRM</h1>
           <p>Track leads, follow-ups, and conversion activity without showing upload tools until you need them.</p>
-          <p className="subtle">Current branch: {currentBranch}</p>
+          <p className="subtle">Shared cloud workspace</p>
         </div>
         <div className="module-stats">
           <div className="mini-stat"><span>Total leads</span><strong>{leadRows.length}</strong></div>
@@ -1658,7 +1658,7 @@ export function PaymentsPage() {
 }
 
 export function UsersPage() {
-  const { branchKey, currentBranch } = useBranch();
+  const { branchKey } = useBranch();
   const [people, setPeople] = useState(() => loadSavedArray(branchKey('users:rows:v3'), users));
   const hasMountedPeople = useRef(false);
   const [uploadName, setUploadName] = useState('No file selected');
@@ -1742,7 +1742,7 @@ export function UsersPage() {
         <div>
           <h1>Users</h1>
           <p>Bulk upload staff members, export the team list, and import user data from CSV or JSON.</p>
-          <p className="subtle">Current branch: {currentBranch}</p>
+          <p className="subtle">Shared cloud workspace</p>
         </div>
         <div className="module-stats">
           <div className="mini-stat">
@@ -2772,7 +2772,7 @@ const settingsTabs = [
     id: 'clinic',
     label: 'Clinic',
     singular: 'setting',
-    description: 'Clinic profile, branches, services, invoice, tax, notifications, and payment modes.',
+    description: 'Clinic profile, shared workspace, services, invoice, tax, notifications, and payment modes.',
     columns: ['Setting', 'Area', 'Value', 'Status'],
     rows: settingsItems.map((item) => [item.setting, item.area, item.value, item.status]),
   },
@@ -3180,17 +3180,12 @@ export function ServicesPage() {
       title="Services"
       description="Maintain the service catalog used by appointment booking, treatment plans, and future scheduling."
       stats={[
-        { label: 'Services', value: services.length },
-        { label: 'Popular', value: '4 core' },
+        { label: 'Saved Services', value: '0' },
+        { label: 'Service Options', value: services.length },
         { label: 'Status', value: 'Editable' },
       ]}
       columns={['Service', 'Category', 'Duration', 'Status']}
-      rows={services.map((service) => [
-        service,
-        service === 'Consultation' || service === 'Follow-up' ? 'General' : 'Clinic',
-        service === 'Panchakarma' ? '14 days' : '30 min',
-        'Active',
-      ])}
+      rows={[]}
       rowActions={(row, setSelectedRow, setActionMessage, setTableRows) => (
         <ActionMenu compact label={`Actions for ${row[0] || 'service'}`} items={[
           { label: 'View service', onClick: () => { setSelectedRow(row[0]); setActionMessage(`${row[0]} selected in Services.`); } },
@@ -4164,14 +4159,14 @@ export function SettingsPage() {
 }
 
 export function ReportsPage() {
-  const { branchKey, currentBranch } = useBranch();
+  const { branchKey } = useBranch();
   const [activeReport, setActiveReport] = useState('appointments');
   const [financeSubTab, setFinanceSubTab] = useState('payments');
 
   const today = new Date().toISOString().slice(0, 10);
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  // Read current branch data first and keep legacy fallbacks for existing installs.
+  // Read shared workspace data first and keep legacy fallbacks for existing installs.
   const opsTabs = loadSavedState(branchKey('Operations:tabs:v3'), loadSavedState('ayurflow:Operations:tabs:v3', {}));
   const finTabs = loadSavedState(branchKey('Finance:tabs:v3'), loadSavedState('ayurflow:Finance:tabs:v3', {}));
 
@@ -4386,7 +4381,7 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
         <div>
           <h1>Reports</h1>
           <p>Generate and export detailed reports — Treatment, Appointments, Finance, Forms, and Inventory.</p>
-          <p className="subtle">Current branch: {currentBranch}</p>
+          <p className="subtle">Shared cloud workspace</p>
         </div>
         <div className="module-stats">
           {stats.map((s) => (
@@ -4622,91 +4617,53 @@ export function IntegrationsPage() {
 }
 
 export function BranchesPage() {
-  const { branches, currentBranch, setCurrentBranch, addBranch, renameBranch, deleteBranch } = useBranch();
-  const [branchName, setBranchName] = useState('');
-  const [message, setMessage] = useState('Create a branch to keep data separate.');
-
-  const createBranch = () => {
-    const ok = addBranch(branchName);
-    if (!ok) {
-      setMessage('Please enter a branch name.');
-      return;
-    }
-    setMessage(`Branch "${branchName.trim()}" created and activated.`);
-    setBranchName('');
-  };
+  const navigate = useNavigate();
+  const { currentBranch } = useBranch();
 
   return (
     <section className="module-page">
       <div className="module-hero">
         <div>
-          <h1>Branches</h1>
-          <p>Create and switch branches so each location keeps its own data, leads, users, and uploads separate.</p>
-          <p className="subtle">Current branch: {currentBranch}</p>
+          <h1>Shared Workspace</h1>
+          <p>All records now use one PostgreSQL-backed workspace so every device sees the same live data.</p>
+          <p className="subtle">Signed-in account: shreeayurved09@gmail.com</p>
         </div>
         <div className="module-stats">
-          <div className="mini-stat"><span>Branches</span><strong>{branches.length}</strong></div>
-          <div className="mini-stat"><span>Active</span><strong>{currentBranch}</strong></div>
-          <div className="mini-stat"><span>Status</span><strong>{message}</strong></div>
+          <div className="mini-stat"><span>Mode</span><strong>Live Cloud</strong></div>
+          <div className="mini-stat"><span>Workspace</span><strong>{currentBranch}</strong></div>
+          <div className="mini-stat"><span>Scope</span><strong>Single</strong></div>
         </div>
       </div>
 
-      <Card title="Create Branch" subtitle="Each branch gets its own stored data.">
+      <Card title="Cloud Data Scope" subtitle="Workspace separation is disabled for this live installation.">
+        <div className="action-note">
+          <strong>Single source of truth.</strong> Clients, appointments, payments, forms, users, and reports are saved under the same shared workspace from every browser and device.
+        </div>
         <div className="sheet-actions">
-          <input className="lead-input" value={branchName} onChange={(event) => setBranchName(event.target.value)} placeholder="Enter branch name" />
-          <button className="pill" type="button" onClick={createBranch}>Create Branch <ChevronRight /></button>
+          <button className="pill primary-action" type="button" onClick={() => navigate('/clients')}>Open Clients <ChevronRight /></button>
+          <button className="pill" type="button" onClick={() => navigate('/appointments')}>Open Appointments <ChevronRight /></button>
+          <button className="pill" type="button" onClick={() => navigate('/reports')}>Open Reports <ChevronRight /></button>
         </div>
       </Card>
 
-      <Card title="Branch List" subtitle="Switching branches updates the whole app data scope.">
+      <Card title="Live Sync Checklist" subtitle="Use this screen to confirm the app is running in live-only shared workspace mode.">
         <div className="table adaptive-table" style={{ '--table-columns': 2 }}>
           <div className="table-head">
-            <div>Branch</div>
+            <div>Area</div>
             <div>Status</div>
             <div />
           </div>
-          {branches.map((branch) => {
-            const active = branch === currentBranch;
-            return (
-              <div className="data-row" key={branch}>
-                <div>{branch}</div>
-                <div><StatusPill tone={active ? 'st-ok' : 'st-warning'}>{active ? 'Active' : 'Saved'}</StatusPill></div>
-                <div>
-                  <ActionMenu compact label={`Actions for ${branch}`} items={[
-                    {
-                      label: active ? 'Current branch' : 'Activate branch',
-                      description: active ? 'This branch is already active' : 'Switch the entire app to this branch',
-                      disabled: active,
-                      onClick: () => { setCurrentBranch(branch); setMessage(`${branch} activated.`); },
-                    },
-                    {
-                      label: 'Rename branch',
-                      onClick: () => {
-                        const next = window.prompt('Rename branch', branch);
-                        if (!next) return;
-                        const ok = renameBranch(branch, next);
-                        setMessage(ok ? `Renamed to ${next.trim()}.` : 'Rename failed.');
-                      },
-                    },
-                    {
-                      label: 'Delete branch',
-                      description: 'Remove it from the branch list',
-                      danger: true,
-                      onClick: () => {
-                        if (branches.length === 1) {
-                          setMessage('At least one branch must remain.');
-                          return;
-                        }
-                        if (!window.confirm(`Delete branch "${branch}"? Its branch data stays in storage but will no longer be selected.`)) return;
-                        deleteBranch(branch);
-                        setMessage(`${branch} removed from branch list.`);
-                      },
-                    },
-                  ]} />
-                </div>
-              </div>
-            );
-          })}
+          {[
+            ['Authentication', 'Single admin account'],
+            ['Database', 'PostgreSQL live sync'],
+            ['Workspace', 'Shared across devices'],
+          ].map(([area, status]) => (
+            <div className="data-row" key={area}>
+              <div>{area}</div>
+              <div><StatusPill tone="st-ok">{status}</StatusPill></div>
+              <div />
+            </div>
+          ))}
         </div>
       </Card>
     </section>

@@ -24,7 +24,7 @@ function KpiIcon({ accent }) {
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { branches, currentBranch, setCurrentBranch } = useBranch();
+  const { currentBranch } = useBranch();
   const [datePreset, setDatePreset] = useState('7 Days');
   const [moreInsightsOpen, setMoreInsightsOpen] = useState(false);
   const liveData = loadLiveDashboardData(currentBranch);
@@ -91,14 +91,10 @@ export function DashboardPage() {
             ))}
           </div>
         </div>
-        <label className="branch-select">
-          <span className="control-label">Branch</span>
-          <select value={currentBranch} onChange={(event) => setCurrentBranch(event.target.value)}>
-            {branches.map((branch) => (
-              <option value={branch} key={branch}>{branch}</option>
-            ))}
-          </select>
-        </label>
+        <div className="branch-select">
+          <span className="control-label">Workspace</span>
+          <strong>{currentBranch}</strong>
+        </div>
       </section>
 
       <section className="kpis">
@@ -301,22 +297,6 @@ function buildLeadSourcePerformance(leads) {
     .map(([label, count]) => ({ label, count, percent: Math.round((count / maxCount) * 100) }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
-}
-
-function buildBranchComparison(branches, currentBranch) {
-  return branches.map((branch) => {
-    const data = loadLiveDashboardData(branch);
-    const revenue = data.payments
-      .filter((payment) => String(payment.status ?? '').toLowerCase() === 'paid')
-      .reduce((sum, payment) => sum + parseLiveAmount(payment.amount), 0);
-    return {
-      name: branch,
-      selected: branch === currentBranch,
-      leads: data.leads.length,
-      appointments: data.appointments.length,
-      revenue,
-    };
-  });
 }
 
 function pickRowValue(row, index, keys = []) {

@@ -511,7 +511,7 @@ export function FormRenderer({ form, mode = 'public', onSubmitted }) {
       <div className="public-form-state success-state">
         <strong>Response submitted</strong>
         <p>{form.confirmationMessage}</p>
-        {result.warning && <p className="field-error">Saved in this browser. Remote delivery needs attention.</p>}
+        {result.warning && <p className="field-error">Saved to the shared workspace. External delivery needs attention.</p>}
         {form.allowMultiple && (
           <button className="pill" type="button" onClick={() => { setAnswers({}); setRespondentEmail(''); setErrors({}); setResult(null); setCurrentPage(0); }}>Submit another response</button>
         )}
@@ -826,7 +826,7 @@ export function FormsPage() {
     setDraftForm(savedForm);
     if (status === 'Published') {
       const result = await publishForm(savedForm);
-      setMessage(result.warning ? 'Published locally. Remote API sync failed.' : `Published. Public link: ${getPublicFormUrl(savedForm)}`);
+      setMessage(result.warning ? 'Published to the shared workspace. External form API needs attention.' : `Published. Public link: ${getPublicFormUrl(savedForm)}`);
     } else {
       setMessage('Draft saved.');
     }
@@ -883,7 +883,7 @@ export function FormsPage() {
     setView('responses');
     const result = await loadResponses(form.id);
     setResponses(result.responses);
-    setMessage(result.warning ? 'Showing local responses. Remote API could not be reached.' : `${result.responses.length} response(s) loaded.`);
+    setMessage(result.warning ? 'Showing responses from the shared workspace. External form API could not be reached.' : `${result.responses.length} response(s) loaded.`);
     setResponsesLoading(false);
   };
 

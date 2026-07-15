@@ -107,7 +107,7 @@ function nextInvoice(rows = []) {
 export function ClientJourneyPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { branchKey, currentBranch } = useBranch();
+  const { branchKey } = useBranch();
   const clientsKey = branchKey('ayurflow-clients:rows:v3');
   const appointmentsKey = branchKey('Appointments:rows:v3');
   const paymentsKey = branchKey('ayurflow-payments:rows:v3');
@@ -344,7 +344,7 @@ export function ClientJourneyPage() {
   return (
     <section className="module-page journey-page">
       <div className="module-hero compact-hero">
-        <div><h1>Client Journey</h1><p>Run the complete reception-to-payment workflow from one workspace.</p><p className="subtle">Current branch: {currentBranch}</p></div>
+        <div><h1>Client Journey</h1><p>Run the complete reception-to-payment workflow from one workspace.</p><p className="subtle">Shared cloud workspace</p></div>
         <div className="module-stats"><div className="mini-stat"><span>Registered</span><strong>{names.length}</strong></div><div className="mini-stat"><span>Active Journeys</span><strong>{Object.keys(journeys).length}</strong></div><div className="mini-stat"><span>Selected Stage</span><strong>{selectedClient ? nextAction() : 'Select client'}</strong></div></div>
       </div>
 

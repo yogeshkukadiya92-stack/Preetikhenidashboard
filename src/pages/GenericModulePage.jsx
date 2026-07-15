@@ -46,7 +46,7 @@ function asImportRows(value) {
 }
 
 export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, fieldTypes = {}, rowActions = null, filterPresets = [], viewPresets = [], normalizeRows = (value) => value }) {
-  const { branchKey, currentBranch } = useBranch();
+  const { branchKey } = useBranch();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRow, setSelectedRow] = useState(null);
   const storageKey = branchKey(`${title}:rows:v3`);
@@ -215,7 +215,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
         <div>
           <h1>{title}</h1>
           <p>{description}</p>
-          <p className="subtle">Current branch: {currentBranch}</p>
+          <p className="subtle">Shared cloud workspace</p>
         </div>
         <div className="module-stats">
           {stats.map((stat) => (
