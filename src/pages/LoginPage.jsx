@@ -42,26 +42,31 @@ export function LoginPage() {
       return;
     }
 
-    setSubmitting(true);
-    setError('');
-    const valid = await verifyCredentials(email, password);
-    if (valid) {
-      createAuthSession(remember);
-      await hydrateCloudState().catch(() => {});
-      navigate(destination, { replace: true });
-      return;
-    }
+    try {
+      setSubmitting(true);
+      setError('');
+      const valid = await verifyCredentials(email, password);
+      if (valid) {
+        createAuthSession(remember);
+        hydrateCloudState().catch(() => {});
+        navigate(destination, { replace: true });
+        return;
+      }
 
-    const nextAttempts = attempts + 1;
-    setAttempts(nextAttempts);
-    setPassword('');
-    setSubmitting(false);
-    if (nextAttempts >= MAX_ATTEMPTS) {
-      setLockUntil(Date.now() + LOCK_DURATION_MS);
-      setAttempts(0);
-      setError('Too many attempts. Try again in 30 seconds.');
-    } else {
-      setError(`Email or password is incorrect. ${MAX_ATTEMPTS - nextAttempts} attempt(s) remaining.`);
+      const nextAttempts = attempts + 1;
+      setAttempts(nextAttempts);
+      setPassword('');
+      if (nextAttempts >= MAX_ATTEMPTS) {
+        setLockUntil(Date.now() + LOCK_DURATION_MS);
+        setAttempts(0);
+        setError('Too many attempts. Try again in 30 seconds.');
+      } else {
+        setError(`Email or password is incorrect. ${MAX_ATTEMPTS - nextAttempts} attempt(s) remaining.`);
+      }
+    } catch {
+      setError('Sign in could not be completed. Check the connection and try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 

@@ -7,6 +7,7 @@ let syncInstalled = false;
 let refreshInstalled = false;
 const PENDING_KEY = 'moms-pathshala:cloud-pending:v1';
 const REFRESH_INTERVAL_MS = 15_000;
+const CLOUD_REQUEST_TIMEOUT_MS = 10_000;
 
 export const CLOUD_STORAGE_CONFIGURED = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -36,11 +37,21 @@ function clearPending(key, syncedValue) {
   writePending(pending);
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = CLOUD_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 async function request(path, options = {}) {
   const accessToken = await getValidSupabaseAccessToken();
   if (!CLOUD_STORAGE_CONFIGURED) return null;
   const bearerToken = accessToken || supabaseAnonKey;
-  const response = await fetch(`${supabaseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${supabaseUrl}${path}`, {
     ...options,
     headers: {
       apikey: supabaseAnonKey,

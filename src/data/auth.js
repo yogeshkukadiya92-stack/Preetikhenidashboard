@@ -4,6 +4,7 @@ const configuredEmail = String(import.meta.env.VITE_ADMIN_EMAIL ?? '').trim().to
 const configuredPasswordHash = String(import.meta.env.VITE_ADMIN_PASSWORD_SHA256 ?? '').trim().toLowerCase();
 const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim().replace(/\/$/, '');
 const supabaseAnonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
+const AUTH_REQUEST_TIMEOUT_MS = 10_000;
 
 export const ADMIN_EMAIL = configuredEmail;
 const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
@@ -13,6 +14,16 @@ async function sha256(value) {
   const bytes = new TextEncoder().encode(value);
   const digest = await window.crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = AUTH_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 function readSession(storage) {
@@ -38,7 +49,7 @@ export async function verifyCredentials(email, password) {
   if (!AUTH_CONFIGURED) return false;
   if (String(email).trim().toLowerCase() !== ADMIN_EMAIL) return false;
   if (supabaseConfigured) {
-    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+    const response = await fetchWithTimeout(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
       method: 'POST',
       headers: { apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: String(email).trim(), password: String(password) }),
@@ -84,7 +95,7 @@ export async function getValidSupabaseAccessToken() {
     const session = JSON.parse(raw);
     if (session.access_token && Number(session.expires_at ?? 0) * 1000 > Date.now() + 60_000) return session.access_token;
     if (!session.refresh_token || !supabaseConfigured) return session.access_token ?? '';
-    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+    const response = await fetchWithTimeout(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
       method: 'POST',
       headers: { apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: session.refresh_token }),
