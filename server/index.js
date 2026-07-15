@@ -93,7 +93,9 @@ app.use((error, _request, response, _next) => {
   response.status(500).json({ error: 'Internal server error.' });
 });
 
-await ensureSchema();
+ensureSchema().catch((error) => {
+  console.error('PostgreSQL schema initialization failed:', error);
+});
 
 app.listen(port, () => {
   console.log(`Mom's Pathshala server listening on port ${port}`);
