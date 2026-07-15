@@ -94,10 +94,6 @@ export async function hydrateCloudState() {
   });
   const pendingEntries = Object.entries(pending).filter(([key]) => shouldSync(key));
   if (pendingEntries.length) await Promise.allSettled(pendingEntries.map(([key, value]) => syncCloudValue(key, value)));
-  const localEntries = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
-    .filter((key) => key && shouldSync(key) && !cloudKeys.has(key))
-    .map((key) => [key, window.localStorage.getItem(key)]);
-  if (localEntries.length) await Promise.all(localEntries.map(([key, value]) => syncCloudValue(key, value)));
   return changedKeys;
 }
 

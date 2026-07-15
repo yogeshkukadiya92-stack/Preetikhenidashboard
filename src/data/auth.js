@@ -1,6 +1,6 @@
 const SESSION_KEY = 'moms-pathshala:auth-session:v1';
 const LEGACY_SUPABASE_SESSION_KEY = 'moms-pathshala:supabase-session:v1';
-const configuredEmail = String(import.meta.env.VITE_ADMIN_EMAIL ?? '').trim().toLowerCase();
+const configuredEmail = String(import.meta.env.VITE_ADMIN_EMAIL ?? 'shreeayurved09@gmail.com').trim().toLowerCase();
 const configuredPasswordHash = String(import.meta.env.VITE_ADMIN_PASSWORD_SHA256 ?? '').trim().toLowerCase();
 
 export const ADMIN_EMAIL = configuredEmail;

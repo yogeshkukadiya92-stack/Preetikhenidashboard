@@ -9,6 +9,7 @@ const rootDir = path.resolve(__dirname, '..');
 const distDir = path.join(rootDir, 'dist');
 const port = Number(process.env.PORT ?? 3000);
 const databaseUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '';
+const WORKSPACE_BRANCH = 'shreeayurved09@gmail.com';
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
@@ -38,6 +39,14 @@ async function ensureSchema() {
       primary key (branch, key)
     )
   `);
+  await db.query(
+    `insert into app_state (branch, key, value, updated_at)
+     select $1, key, value, updated_at
+     from app_state
+     where branch = 'workspace'
+     on conflict (branch, key) do nothing`,
+    [WORKSPACE_BRANCH],
+  );
 }
 
 function asyncHandler(handler) {
@@ -56,10 +65,9 @@ app.get('/api/health', asyncHandler(async (_request, response) => {
 app.get('/api/app-state', asyncHandler(async (request, response) => {
   const db = getPool();
   if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
-  const branch = String(request.query.branch ?? 'workspace');
   const result = await db.query(
     'select key, value, updated_at from app_state where branch = $1 order by key',
-    [branch],
+    [WORKSPACE_BRANCH],
   );
   response.json(result.rows);
 }));
@@ -67,7 +75,6 @@ app.get('/api/app-state', asyncHandler(async (request, response) => {
 app.put('/api/app-state/:key', asyncHandler(async (request, response) => {
   const db = getPool();
   if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
-  const branch = String(request.body?.branch ?? 'workspace');
   const key = String(request.params.key ?? '').trim();
   if (!key) return response.status(400).json({ error: 'State key is required.' });
   const value = request.body?.value;
@@ -77,7 +84,7 @@ app.put('/api/app-state/:key', asyncHandler(async (request, response) => {
      values ($1, $2, $3::jsonb, now())
      on conflict (branch, key)
      do update set value = excluded.value, updated_at = now()`,
-    [branch, key, JSON.stringify(value)],
+    [WORKSPACE_BRANCH, key, JSON.stringify(value)],
   );
   response.status(204).end();
 }));
