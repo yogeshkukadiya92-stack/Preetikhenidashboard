@@ -63,6 +63,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const [uploadName, setUploadName] = useState('No file selected');
   const importInputRef = useRef(null);
   const handledAddAction = useRef('');
+  const hasMountedRows = useRef(false);
   const activeViewPredicate = viewPresets.find((preset) => preset.id === activeView)?.match ?? null;
   const activeViewLabel = viewPresets.find((preset) => preset.id === activeView)?.label ?? 'All';
 
@@ -78,6 +79,10 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   }, []);
 
   useEffect(() => {
+    if (!hasMountedRows.current) {
+      hasMountedRows.current = true;
+      return;
+    }
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(tableRows));
     } catch {

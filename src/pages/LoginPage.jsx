@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ADMIN_EMAIL, AUTH_CONFIGURED, createAuthSession, getAuthSession, verifyCredentials } from '../data/auth.js';
-import { hydrateCloudState } from '../data/cloudStore.js';
+import { hydrateCloudState, pauseCloudSync } from '../data/cloudStore.js';
 
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30_000;
@@ -48,6 +48,7 @@ export function LoginPage() {
       const valid = await verifyCredentials(email, password);
       if (valid) {
         createAuthSession(remember);
+        pauseCloudSync();
         hydrateCloudState()
           .then((changedKeys) => {
             if (changedKeys > 0) window.location.reload();

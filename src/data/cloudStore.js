@@ -5,9 +5,11 @@ const supabaseAnonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').tri
 const originalSetItem = window.Storage.prototype.setItem;
 let syncInstalled = false;
 let refreshInstalled = false;
+let syncPausedUntil = 0;
 const PENDING_KEY = 'moms-pathshala:cloud-pending:v1';
 const REFRESH_INTERVAL_MS = 15_000;
 const CLOUD_REQUEST_TIMEOUT_MS = 10_000;
+const LOGIN_HYDRATION_PAUSE_MS = CLOUD_REQUEST_TIMEOUT_MS + 2_000;
 
 export const CLOUD_STORAGE_CONFIGURED = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -35,6 +37,14 @@ function clearPending(key, syncedValue) {
   if (pending[key] !== syncedValue) return;
   delete pending[key];
   writePending(pending);
+}
+
+function cloudSyncPaused() {
+  return Date.now() < syncPausedUntil;
+}
+
+export function pauseCloudSync(durationMs = LOGIN_HYDRATION_PAUSE_MS) {
+  syncPausedUntil = Math.max(syncPausedUntil, Date.now() + durationMs);
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = CLOUD_REQUEST_TIMEOUT_MS) {
@@ -106,7 +116,7 @@ export function installCloudSync() {
   syncInstalled = true;
   window.Storage.prototype.setItem = function cloudSyncedSetItem(key, value) {
     originalSetItem.call(this, key, value);
-    if (this === window.localStorage && shouldSync(String(key))) {
+    if (this === window.localStorage && shouldSync(String(key)) && !cloudSyncPaused()) {
       queuePending(String(key), String(value));
       syncCloudValue(String(key), String(value)).catch(() => {});
     }

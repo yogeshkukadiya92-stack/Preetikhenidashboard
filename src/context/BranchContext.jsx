@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 const BranchContext = createContext(null);
 const BRANCHES_KEY = 'moms-pathshala:branches:v1';
@@ -24,6 +24,8 @@ function loadSavedValue(key, fallback) {
 }
 
 export function BranchProvider({ children }) {
+  const hasMountedBranches = useRef(false);
+  const hasMountedCurrentBranch = useRef(false);
   const [branches, setBranches] = useState(() => {
     const saved = loadSavedArray(BRANCHES_KEY, []);
     return saved.length ? saved : ['Main Branch'];
@@ -37,12 +39,20 @@ export function BranchProvider({ children }) {
   }, [branches, currentBranch]);
 
   useEffect(() => {
+    if (!hasMountedBranches.current) {
+      hasMountedBranches.current = true;
+      return;
+    }
     try {
       window.localStorage.setItem(BRANCHES_KEY, JSON.stringify(branches));
     } catch {}
   }, [branches]);
 
   useEffect(() => {
+    if (!hasMountedCurrentBranch.current) {
+      hasMountedCurrentBranch.current = true;
+      return;
+    }
     try {
       window.localStorage.setItem(CURRENT_BRANCH_KEY, JSON.stringify(currentBranch));
     } catch {}

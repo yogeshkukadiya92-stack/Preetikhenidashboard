@@ -266,8 +266,13 @@ function ImportExportModule({
   const [activeFilter, setActiveFilter] = useState(filterPresets[0]?.column ?? '');
   const bannerFileInputRef = useRef(null);
   const handledAddRecordAction = useRef('');
+  const hasMountedRows = useRef(false);
 
   useEffect(() => {
+    if (!hasMountedRows.current) {
+      hasMountedRows.current = true;
+      return;
+    }
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(rows));
     } catch {
@@ -717,6 +722,7 @@ export function CRMPage() {
   const [dropActive, setDropActive] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const hasMountedLeads = useRef(false);
   const [leadForm, setLeadForm] = useState({
     name: '',
     source: 'Website',
@@ -760,6 +766,10 @@ export function CRMPage() {
   };
 
   useEffect(() => {
+    if (!hasMountedLeads.current) {
+      hasMountedLeads.current = true;
+      return;
+    }
     try {
       window.localStorage.setItem(branchKey('crm:leads:v4'), JSON.stringify(manualLeads));
     } catch {
@@ -1119,8 +1129,13 @@ function ClientProfile({ client, onBack }) {
     const savedPayments = loadSavedArray(paymentsStorageKey, loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []));
     return { invoice: nextInvoiceNumber(savedPayments), amount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) };
   });
+  const hasMountedTreatmentTemplates = useRef(false);
 
   useEffect(() => {
+    if (!hasMountedTreatmentTemplates.current) {
+      hasMountedTreatmentTemplates.current = true;
+      return;
+    }
     window.localStorage.setItem(treatmentTemplatesKey, JSON.stringify(treatTemplates));
   }, [treatTemplates, treatmentTemplatesKey]);
 
@@ -1645,6 +1660,7 @@ export function PaymentsPage() {
 export function UsersPage() {
   const { branchKey, currentBranch } = useBranch();
   const [people, setPeople] = useState(() => loadSavedArray(branchKey('users:rows:v3'), users));
+  const hasMountedPeople = useRef(false);
   const [uploadName, setUploadName] = useState('No file selected');
   const [importPreview, setImportPreview] = useState([]);
   const [statusMessage, setStatusMessage] = useState('Ready to import or export users.');
@@ -1653,6 +1669,10 @@ export function UsersPage() {
   const [activeTab, setActiveTab] = useState('team');
 
   useEffect(() => {
+    if (!hasMountedPeople.current) {
+      hasMountedPeople.current = true;
+      return;
+    }
     try {
       window.localStorage.setItem(branchKey('users:rows:v3'), JSON.stringify(people));
     } catch {
@@ -3243,20 +3263,40 @@ export function TreatmentPlansPage() {
   const [dietForm, setDietForm] = useState(blankDietPlan);
   const [dietTemplateName, setDietTemplateName] = useState('');
   const [editingDietIndex, setEditingDietIndex] = useState(null);
+  const hasMountedTreatmentPlans = useRef(false);
+  const hasMountedPlanTemplates = useRef(false);
+  const hasMountedDietPlans = useRef(false);
+  const hasMountedDietTemplates = useRef(false);
 
   useEffect(() => {
+    if (!hasMountedTreatmentPlans.current) {
+      hasMountedTreatmentPlans.current = true;
+      return;
+    }
     try { window.localStorage.setItem(PLANS_KEY, JSON.stringify(plans)); } catch {}
   }, [plans]);
 
   useEffect(() => {
+    if (!hasMountedPlanTemplates.current) {
+      hasMountedPlanTemplates.current = true;
+      return;
+    }
     try { window.localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates)); } catch {}
   }, [templates]);
 
   useEffect(() => {
+    if (!hasMountedDietPlans.current) {
+      hasMountedDietPlans.current = true;
+      return;
+    }
     try { window.localStorage.setItem(DIET_PLANS_KEY, JSON.stringify(dietPlans)); } catch {}
   }, [dietPlans, DIET_PLANS_KEY]);
 
   useEffect(() => {
+    if (!hasMountedDietTemplates.current) {
+      hasMountedDietTemplates.current = true;
+      return;
+    }
     try { window.localStorage.setItem(DIET_TEMPLATES_KEY, JSON.stringify(dietTemplates)); } catch {}
   }, [dietTemplates, DIET_TEMPLATES_KEY]);
 
