@@ -47,7 +47,10 @@ function asyncHandler(handler) {
 }
 
 app.get('/api/health', asyncHandler(async (_request, response) => {
-  response.json({ ok: true, database: Boolean(getPool()) });
+  const db = getPool();
+  if (!db) return response.json({ ok: true, database: false });
+  await db.query('select 1');
+  response.json({ ok: true, database: true });
 }));
 
 app.get('/api/app-state', asyncHandler(async (request, response) => {
