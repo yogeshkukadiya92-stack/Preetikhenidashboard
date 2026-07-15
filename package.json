@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "vite --config ./vite.config.js --configLoader runner",
     "build": "vite build --config ./vite.config.js --configLoader runner",
-    "preview": "vite preview --config ./vite.config.js --configLoader runner"
+    "preview": "vite preview --config ./vite.config.js --configLoader runner",
+    "start": "node server/index.js"
   },
   "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.22.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.2"
