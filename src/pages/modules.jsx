@@ -180,6 +180,23 @@ function currentAppointmentSlot() {
   };
 }
 
+function todayIsoDate() {
+  return currentAppointmentSlot().date;
+}
+
+function normalizeDateInput(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const localMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (localMatch) {
+    return `${localMatch[3]}-${String(localMatch[2]).padStart(2, '0')}-${String(localMatch[1]).padStart(2, '0')}`;
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function normalizeAppointmentRows(rows = []) {
   return rows.map((row) => {
     if (!Array.isArray(row)) return row;
@@ -195,6 +212,41 @@ function normalizePhoneNumber(value) {
 function recordPhone(row, rowToValues) {
   const values = rowToValues(row);
   return normalizePhoneNumber(values.Mobile ?? values.Phone ?? values['Mobile Number'] ?? values['Phone Number']);
+}
+
+function savedClientName(row) {
+  if (Array.isArray(row)) return row.length >= 7 ? row[1] ?? '' : row[0] ?? '';
+  return row?.name ?? row?.Client ?? row?.client ?? '';
+}
+
+function normalizeClientId(value) {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function clientIdFromRow(row, rowToValues) {
+  const values = rowToValues(row);
+  return normalizeClientId(values['Client ID'] ?? values.ClientId ?? values.clientId ?? values.ID);
+}
+
+function nextClientId(rows = [], rowToValues = (row) => row) {
+  const highest = rows.reduce((maximum, row) => {
+    const match = clientIdFromRow(row, rowToValues).match(/(\d+)$/);
+    return match ? Math.max(maximum, Number(match[1])) : maximum;
+  }, 0);
+  return `CL-${String(highest + 1).padStart(4, '0')}`;
+}
+
+function assignMissingClientIds(rows, rowToValues) {
+  let nextNumber = rows.reduce((maximum, row) => {
+    const match = clientIdFromRow(row, rowToValues).match(/(\d+)$/);
+    return match ? Math.max(maximum, Number(match[1])) : maximum;
+  }, 0) + 1;
+  return rows.map((row) => {
+    if (clientIdFromRow(row, rowToValues)) return row;
+    const clientId = `CL-${String(nextNumber).padStart(4, '0')}`;
+    nextNumber += 1;
+    return { ...row, clientId };
+  });
 }
 
 function nextInvoiceNumber(rows = []) {
@@ -244,13 +296,17 @@ function ImportExportModule({
   fieldOptions = {},
   fieldTypes = {},
   createDefaultRecord = null,
+  renderSummary = null,
 }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { branchKey } = useBranch();
   const legacyStorageKey = `ayurflow:${filenameBase}:rows:v3`;
   const storageKey = branchKey(`${filenameBase}:rows:v3`);
-  const [rows, setRows] = useState(() => loadSavedArray(storageKey, loadSavedArray(legacyStorageKey, seedRows)));
+  const [rows, setRows] = useState(() => {
+    const parsedRows = loadSavedArray(storageKey, loadSavedArray(legacyStorageKey, seedRows)).map((row) => parseRow(row));
+    return title === 'Clients' ? assignMissingClientIds(parsedRows, rowToValues) : parsedRows;
+  });
   const [preview, setPreview] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
   const [message, setMessage] = useState('Ready to import or export data.');
@@ -260,6 +316,7 @@ function ImportExportModule({
   const [editOpen, setEditOpen] = useState(false);
   const [editIndex, setEditIndex] = useState(-1);
   const [editRecord, setEditRecord] = useState(() => Object.fromEntries(headers.map((header) => [header, ''])));
+  const [draftMatchedIndex, setDraftMatchedIndex] = useState(-1);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
@@ -283,6 +340,7 @@ function ImportExportModule({
   const openAddRecord = () => {
     const defaults = typeof createDefaultRecord === 'function' ? createDefaultRecord(rows) : {};
     setDraftRecord(Object.fromEntries(headers.map((header) => [header, defaults[header] ?? (header === 'Client' ? (searchParams.get('client') ?? '') : header === 'Mobile' ? (searchParams.get('mobile') ?? '') : '')])));
+    setDraftMatchedIndex(-1);
     setAddOpen(true);
     setMessage(`Add ${title.toLowerCase()} record opened.`);
   };
@@ -316,6 +374,10 @@ function ImportExportModule({
     if (!isClientModule || !phone) return false;
     return list.some((row) => recordPhone(row, rowToValues) === phone);
   };
+  const clientIdExists = (clientId, list = rows) => {
+    if (!isClientModule || !clientId) return false;
+    return list.some((row) => clientIdFromRow(row, rowToValues) === clientId);
+  };
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -333,12 +395,20 @@ function ImportExportModule({
       setMessage('Import failed. Please upload a valid CSV or JSON file.');
       return;
     }
-    const normalized = asImportRows(parsed)
+    const normalizedRows = asImportRows(parsed)
       .map((row) => (Array.isArray(row) ? normalize(Object.fromEntries(headers.map((header, index) => [header, row[index] ?? '']))) : normalize(row)))
       .filter((row) => Object.values(row).some(Boolean));
+    const normalized = isClientModule ? assignMissingClientIds([...rows, ...normalizedRows], rowToValues).slice(rows.length) : normalizedRows;
     const seenPhones = new Set(rows.map((row) => recordPhone(row, rowToValues)).filter(Boolean));
+    const seenClientIds = new Set(rows.map((row) => clientIdFromRow(row, rowToValues)).filter(Boolean));
     let skippedDuplicates = 0;
     const uniqueRows = isClientModule ? normalized.filter((row) => {
+      const clientId = clientIdFromRow(row, rowToValues);
+      if (clientId && seenClientIds.has(clientId)) {
+        skippedDuplicates += 1;
+        return false;
+      }
+      if (clientId) seenClientIds.add(clientId);
       const phone = recordPhone(row, rowToValues);
       if (!phone) return true;
       if (seenPhones.has(phone)) {
@@ -384,9 +454,22 @@ function ImportExportModule({
   const visibleRows = customRows ?? rows.map((row) => row);
 
   const updateRecordField = (setter, header, value) => {
+    if (isClientModule && header === 'Client ID' && setter === setDraftRecord) {
+      const clientId = normalizeClientId(value);
+      const matchIndex = rows.findIndex((row) => clientIdFromRow(row, rowToValues) === clientId);
+      if (clientId && matchIndex !== -1) {
+        setDraftMatchedIndex(matchIndex);
+        setDraftRecord({ ...rowToValues(rows[matchIndex]), 'Client ID': clientId });
+        setMessage(`Existing client ${clientId} loaded. Edit details and save changes.`);
+        return;
+      }
+      setDraftMatchedIndex(-1);
+      setDraftRecord((current) => ({ ...current, [header]: clientId }));
+      return;
+    }
     setter((current) => ({
       ...current,
-      [header]: value,
+      [header]: isClientModule && header === 'Client ID' ? normalizeClientId(value) : value,
       ...(title === 'Clients' && header === 'Birthday' ? { Age: ageFromBirthday(value) } : {}),
     }));
   };
@@ -397,14 +480,33 @@ function ImportExportModule({
       setMessage('Please fill at least one field before saving.');
       return;
     }
-    const clientPhone = recordPhone(normalized, rowToValues);
+    const recordToSave = isClientModule && !clientIdFromRow(normalized, rowToValues)
+      ? { ...normalized, clientId: nextClientId(rows, rowToValues) }
+      : normalized;
+    const clientPhone = recordPhone(recordToSave, rowToValues);
+    const clientId = clientIdFromRow(recordToSave, rowToValues);
+    if (isClientModule && clientId && draftMatchedIndex !== -1) {
+      if (clientPhone && rows.some((row, index) => index !== draftMatchedIndex && recordPhone(row, rowToValues) === clientPhone)) {
+        setMessage('This mobile number already exists. Client was not updated.');
+        return;
+      }
+      setRows((current) => current.map((row, index) => (index === draftMatchedIndex ? recordToSave : row)));
+      setAddOpen(false);
+      setDraftMatchedIndex(-1);
+      setMessage(`${rowToCsvValues(recordToSave)[0] || clientId} updated from client ID.`);
+      return;
+    }
+    if (isClientModule && clientIdExists(clientId)) {
+      setMessage('This Client ID already exists. Enter the ID to load and edit that client.');
+      return;
+    }
     if (clientPhoneExists(clientPhone)) {
       setMessage('This mobile number already exists. Client was not added again.');
       return;
     }
-    setRows((current) => [normalized, ...current]);
+    setRows((current) => [recordToSave, ...current]);
     setAddOpen(false);
-    setMessage(`${rowToCsvValues(normalized)[0] || title} added.`);
+    setMessage(`${rowToCsvValues(recordToSave)[0] || title} added.`);
   };
 
   const openEditRecord = (row) => {
@@ -427,6 +529,11 @@ function ImportExportModule({
       return;
     }
     const clientPhone = recordPhone(normalized, rowToValues);
+    const clientId = clientIdFromRow(normalized, rowToValues);
+    if (isClientModule && clientId && rows.some((row, index) => index !== editIndex && clientIdFromRow(row, rowToValues) === clientId)) {
+      setMessage('This Client ID already exists. Client was not updated.');
+      return;
+    }
     if (isClientModule && clientPhone && rows.some((row, index) => index !== editIndex && recordPhone(row, rowToValues) === clientPhone)) {
       setMessage('This mobile number already exists. Client was not updated.');
       return;
@@ -492,6 +599,8 @@ function ImportExportModule({
       <input ref={bannerFileInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
 
       {extraTopCard}
+
+      {typeof renderSummary === 'function' && renderSummary(rows, rowToValues)}
 
       {filterPresets.length > 0 && filterOpen && (
         <Card title="Filters" className="compact-action-card">
@@ -1096,6 +1205,7 @@ export function CRMPage() {
 function ClientProfile({ client, onBack }) {
   const { branchKey } = useBranch();
   const clientName = client.name ?? '';
+  const clientId = normalizeClientId(client.clientId);
   const appointmentsStorageKey = branchKey('Appointments:rows:v3');
   const paymentsStorageKey = branchKey('ayurflow-payments:rows:v3');
   const [activeTab, setActiveTab] = useState('overview');
@@ -1277,7 +1387,7 @@ function ClientProfile({ client, onBack }) {
           <div className="client-avatar">{clientName.charAt(0).toUpperCase()}</div>
           <div>
             <h1>{clientName}</h1>
-            <p>{client.service || client.program || 'No service'} · Mobile: {client.mobile || '—'} · Age: {client.age || '—'}</p>
+            <p>{clientId || 'No ID'} · {client.service || client.program || 'No service'} · Mobile: {client.mobile || '—'} · Age: {client.age || '—'}</p>
           </div>
           <ActionMenu label="Actions" items={[
             { label: 'Add treatment plan', description: `Create a plan for ${clientName}`, onClick: () => setTreatModal(true) },
@@ -1301,7 +1411,7 @@ function ClientProfile({ client, onBack }) {
       {activeTab === 'overview' && (
         <Card title="Client Details">
           <div className="detail-grid">
-            {[['Client', client.name], ['Mobile', client.mobile], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Service', client.service || client.program]].map(([label, value]) => (
+            {[['Client ID', clientId], ['Client', client.name], ['Mobile', client.mobile], ['Visit Date', client.visitDate], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Service', client.service || client.program]].map(([label, value]) => (
               <div className="mini-stat" key={label}>
                 <span>{label}</span>
                 <strong>{value || '—'}</strong>
@@ -1558,6 +1668,52 @@ function ClientProfile({ client, onBack }) {
   );
 }
 
+function ClientMonthlySummary({ rows, rowToValues }) {
+  const values = rows.map((row) => rowToValues(row));
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const today = todayIsoDate();
+  const monthRows = values.filter((row) => normalizeDateInput(row['Visit Date'])?.startsWith(monthKey));
+  const todayRows = values.filter((row) => normalizeDateInput(row['Visit Date']) === today);
+  const serviceCounts = monthRows.reduce((counts, row) => {
+    const service = String(row.Service ?? '').trim() || 'Not specified';
+    counts[service] = (counts[service] ?? 0) + 1;
+    return counts;
+  }, {});
+  const serviceEntries = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1]);
+  const latestRows = [...values]
+    .filter((row) => normalizeDateInput(row['Visit Date']))
+    .sort((a, b) => normalizeDateInput(b['Visit Date']).localeCompare(normalizeDateInput(a['Visit Date'])))
+    .slice(0, 5);
+
+  return (
+    <Card title="Monthly Patient Summary" subtitle="Visit date, new patients, and disease/service wise count in one view.">
+      <div className="client-summary-grid">
+        <div className="mini-stat"><span>This Month Patients</span><strong>{monthRows.length}</strong></div>
+        <div className="mini-stat"><span>New Today</span><strong>{todayRows.length}</strong></div>
+        <div className="mini-stat"><span>Disease / Service Types</span><strong>{serviceEntries.length}</strong></div>
+      </div>
+      <div className="client-summary-split">
+        <div className="summary-panel">
+          <strong>Disease / Service Wise</strong>
+          {serviceEntries.length ? serviceEntries.map(([service, count]) => (
+            <div className="summary-line" key={service}><span>{service}</span><strong>{count}</strong></div>
+          )) : <p className="subtle">No visits recorded for this month yet.</p>}
+        </div>
+        <div className="summary-panel">
+          <strong>Latest Visits</strong>
+          {latestRows.length ? latestRows.map((row) => (
+            <div className="summary-line" key={`${row['Client ID']}-${row.Client}-${row['Visit Date']}`}>
+              <span>{row['Visit Date']} · {row.Client || 'Client'}</span>
+              <strong>{row.Service || '-'}</strong>
+            </div>
+          )) : <p className="subtle">Add Visit Date in client entry to show this list.</p>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function ClientsPage() {
   const [selectedClient, setSelectedClient] = useState(null);
 
@@ -1574,39 +1730,65 @@ export function ClientsPage() {
         { label: 'Treatment Plans', value: '0' },
         { label: 'Services', value: getSavedServiceNames().length },
       ]}
-      headers={['Client', 'Mobile', 'Birthday', 'Age', 'Address', 'Service']}
+      headers={['Client ID', 'Client', 'Mobile', 'Visit Date', 'Birthday', 'Age', 'Address', 'Service']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
       fieldOptions={{ Service: getSavedServiceNames() }}
-      fieldTypes={{ Mobile: 'tel', Age: 'number', Birthday: 'date' }}
+      fieldTypes={{ Mobile: 'tel', Age: 'number', Birthday: 'date', 'Visit Date': 'date' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
+        { label: 'ID wise', column: 'Client ID' },
         { label: 'Mobile wise', column: 'Mobile' },
+        { label: 'Visit date wise', column: 'Visit Date' },
         { label: 'Age wise', column: 'Age' },
         { label: 'Service wise', column: 'Service' },
         { label: 'Address wise', column: 'Address' },
         { label: 'Birthday wise', column: 'Birthday' },
       ]}
       rowToValues={(row) => ({
+        'Client ID': row.clientId,
         Client: row.name,
         Mobile: row.mobile,
+        'Visit Date': row.visitDate,
         Birthday: row.birthday,
         Age: row.age,
         Address: row.address,
         Service: row.service || row.program,
       })}
       parseRow={(entry) => {
-        const birthday = entry.Birthday ?? entry.birthday ?? '';
+        const source = Array.isArray(entry)
+          ? {
+              'Client ID': entry.length >= 7 ? entry[0] : '',
+              Client: entry.length >= 7 ? entry[1] : entry[0],
+              Mobile: entry.length >= 7 ? entry[2] : entry[1],
+              'Visit Date': entry.length >= 8 ? entry[3] : '',
+              Birthday: entry.length >= 8 ? entry[4] : entry.length >= 7 ? entry[3] : entry[2],
+              Age: entry.length >= 8 ? entry[5] : entry.length >= 7 ? entry[4] : entry[3],
+              Address: entry.length >= 8 ? entry[6] : entry.length >= 7 ? entry[5] : entry[4],
+              Service: entry.length >= 8 ? entry[7] : entry.length >= 7 ? entry[6] : entry[5],
+            }
+          : entry;
+        const birthday = source.Birthday ?? source.birthday ?? '';
+        const visitDate = normalizeDateInput(source['Visit Date'] ?? source.visitDate ?? source.VisitDate ?? source.createdAt ?? source.date) || todayIsoDate();
+        const clientId = normalizeClientId(source['Client ID'] ?? source.clientId ?? source.ClientId ?? source.ID ?? source.id);
         return {
-          name: entry.Client ?? entry.client ?? entry.name ?? '',
-          mobile: entry.Mobile ?? entry.mobile ?? entry.Phone ?? entry.phone ?? '',
-          age: ageFromBirthday(birthday) || entry.Age || entry.age || '',
-          address: entry.Address ?? entry.address ?? '',
-          service: entry.Service ?? entry.service ?? entry.Program ?? entry.program ?? '',
-          program: entry.Program ?? entry.program ?? entry.Service ?? entry.service ?? '',
+          clientId,
+          name: source.Client ?? source.client ?? source.name ?? '',
+          mobile: source.Mobile ?? source.mobile ?? source.Phone ?? source.phone ?? '',
+          visitDate,
+          age: ageFromBirthday(birthday) || source.Age || source.age || '',
+          address: source.Address ?? source.address ?? '',
+          service: source.Service ?? source.service ?? source.Program ?? source.program ?? '',
+          program: source.Program ?? source.program ?? source.Service ?? source.service ?? '',
           birthday,
         };
       }}
+      createDefaultRecord={(currentRows) => ({ 'Client ID': nextClientId(currentRows, (row) => ({
+        'Client ID': row.clientId,
+        Client: row.name,
+        Mobile: row.mobile,
+      })), 'Visit Date': todayIsoDate() })}
+      renderSummary={(rows, rowToValues) => <ClientMonthlySummary rows={rows} rowToValues={rowToValues} />}
       rowActions={(row, openEditRecord) => (
         <ActionMenu
           label="Actions"
@@ -1623,7 +1805,7 @@ export function ClientsPage() {
 export function PaymentsPage() {
   const { branchKey } = useBranch();
   const [clientNames] = useState(() =>
-    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map((row) => Array.isArray(row) ? row[0] : row.name ?? row.Client ?? '').filter(Boolean)
+    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map(savedClientName).filter(Boolean)
   );
   return (
     <ImportExportModule
@@ -1911,6 +2093,11 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editIndex, setEditIndex] = useState(null);
+  const treatmentTemplatesKey = branchKey('treatment-templates:v2');
+  const legacyTreatmentTemplatesKey = 'ayurflow:treatment-templates:v1';
+  const [treatmentTemplates, setTreatmentTemplates] = useState(() => loadSavedArray(treatmentTemplatesKey, loadSavedArray(legacyTreatmentTemplatesKey, [])));
+  const [selectedTreatmentTemplate, setSelectedTreatmentTemplate] = useState('');
+  const [treatmentTemplateName, setTreatmentTemplateName] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
@@ -1952,7 +2139,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const clientOptions = Array.from(new Set(loadSavedArray(
     branchKey('ayurflow-clients:rows:v3'),
     loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients),
-  ).map((row) => (Array.isArray(row) ? row[0] : row?.name ?? row?.Client ?? row?.client ?? '')).filter(Boolean)));
+  ).map(savedClientName).filter(Boolean)));
   const treatmentServiceIndex = active.columns.indexOf('Service');
   const treatmentMedicineIndex = active.columns.indexOf('Medicine');
 
@@ -2008,6 +2195,15 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     }
   }, [fixedMedicineByService, fixedMedicineStorageKey]);
 
+  useEffect(() => {
+    if (title !== 'Operations') return;
+    try {
+      window.localStorage.setItem(treatmentTemplatesKey, JSON.stringify(treatmentTemplates));
+    } catch {
+      setMessage('Treatment templates could not be saved.');
+    }
+  }, [title, treatmentTemplates, treatmentTemplatesKey]);
+
   const filteredRows = activeRows.filter((row) => {
     if (!filterText) return true;
     if (!activeFilter) return row.join(' ').toLowerCase().includes(filterText.toLowerCase());
@@ -2056,6 +2252,76 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       return { medicine, dose, timing, schedule };
     });
 
+  const templateMedicineRows = (template) => {
+    const medicines = String(template?.medicine ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+    const doses = String(template?.dose ?? '').split(',').map((item) => item.trim());
+    const timings = String(template?.timing ?? '').split(',').map((item) => item.trim());
+    return medicines.length
+      ? medicines.map((medicine, index) => ({
+          medicine,
+          dose: doses[index] ?? doses[0] ?? '',
+          timing: timings[index] ?? timings[0] ?? '',
+          schedule: template?.schedule ?? 'Daily',
+        }))
+      : [{ medicine: '', dose: '', timing: '', schedule: template?.schedule ?? 'Daily' }];
+  };
+
+  const applyTreatmentTemplate = (indexValue, targetSetter = setDraftRow) => {
+    setSelectedTreatmentTemplate(indexValue);
+    if (indexValue === '') return;
+    const template = treatmentTemplates[Number(indexValue)];
+    if (!template) return;
+    setTreatmentTemplateName(template.name ?? '');
+    const rows = templateMedicineRows(template);
+    setRxDraft(rows);
+    targetSetter((current) => active.columns.map((column, index) => {
+      if (column === 'Service') return template.service ?? current[index] ?? '';
+      if (column === 'Medicine') return template.medicine ?? current[index] ?? '';
+      if (column === 'Dose') return rows.map((row) => row.dose).filter(Boolean).join(', ') || template.dose || current[index] || '';
+      if (column === 'Timing') return rows.map((row) => row.timing).filter(Boolean).join(', ') || template.timing || current[index] || '';
+      if (column === 'Goal') return template.goal ?? current[index] ?? '';
+      if (column === 'Duration') return template.duration ?? current[index] ?? '';
+      if (column === 'Status') return template.status ?? current[index] ?? 'Active';
+      return current[index] ?? '';
+    }));
+    setMessage(`${template.name} template applied.`);
+  };
+
+  const saveTreatmentTemplateFromRow = (sourceRow) => {
+    const name = treatmentTemplateName.trim();
+    if (!name) {
+      setMessage('Enter a template name before saving.');
+      return;
+    }
+    const medicines = rxDraft.filter((item) => item.medicine.trim());
+    const template = {
+      name,
+      service: sourceRow[active.columns.indexOf('Service')] ?? '',
+      goal: sourceRow[active.columns.indexOf('Goal')] ?? '',
+      duration: sourceRow[active.columns.indexOf('Duration')] ?? '',
+      medicine: medicines.length ? medicines.map((item) => item.medicine).join(', ') : sourceRow[active.columns.indexOf('Medicine')] ?? '',
+      dose: medicines.length ? medicines.map((item) => item.dose).join(', ') : sourceRow[active.columns.indexOf('Dose')] ?? '',
+      timing: medicines.length ? medicines.map((item) => item.timing).join(', ') : sourceRow[active.columns.indexOf('Timing')] ?? '',
+      schedule: medicines[0]?.schedule ?? 'Daily',
+      status: sourceRow[active.columns.indexOf('Status')] ?? 'Active',
+      updatedAt: new Date().toISOString(),
+    };
+    setTreatmentTemplates((current) => {
+      const existingIndex = current.findIndex((item) => String(item.name ?? '').toLowerCase() === name.toLowerCase());
+      return existingIndex === -1 ? [template, ...current] : current.map((item, index) => (index === existingIndex ? template : item));
+    });
+    setMessage(`${name} template saved.`);
+  };
+
+  const deleteSelectedTreatmentTemplate = () => {
+    if (selectedTreatmentTemplate === '') return;
+    const template = treatmentTemplates[Number(selectedTreatmentTemplate)];
+    setTreatmentTemplates((current) => current.filter((_, index) => index !== Number(selectedTreatmentTemplate)));
+    setSelectedTreatmentTemplate('');
+    setTreatmentTemplateName('');
+    setMessage(`${template?.name ?? 'Template'} deleted.`);
+  };
+
   const updateRxDraft = (index, field, value) => {
     setRxDraft((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
   };
@@ -2091,6 +2357,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     if (treatmentServiceIndex !== -1) {
       setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === treatmentServiceIndex ? service : cell)));
     }
+    setAddOpen(true);
   };
 
   const handleServiceChange = (index, value, setter) => {
@@ -2122,6 +2389,8 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       setRxDraft([{ medicine: defaults.medicine, dose: defaults.dose, timing: defaults.timing, schedule: defaults.schedule }]);
     }
     setDraftRow(nextDraft);
+    setSelectedTreatmentTemplate('');
+    setTreatmentTemplateName('');
     setAddOpen(true);
     setMessage(`New ${active.singular ?? active.label} form opened.`);
   };
@@ -2364,6 +2633,26 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
 
       {active.id === 'treatments' && (
         <Card title="Saved Treatment Presets" subtitle="Tap a service to reuse its saved medicine, dose, and timing defaults.">
+          {treatmentTemplates.length > 0 && (
+            <>
+              <div className="quick-preset-row">
+                {treatmentTemplates.map((template, index) => (
+                  <button
+                    key={`${template.name}-${index}`}
+                    type="button"
+                    className="pill"
+                    onClick={() => {
+                      openAddForActive();
+                      applyTreatmentTemplate(String(index));
+                    }}
+                  >
+                    {template.name}
+                  </button>
+                ))}
+              </div>
+              <div className="section-divider" />
+            </>
+          )}
           <div className="filter-pills">
             {Object.keys(fixedMedicineByService).length ? Object.keys(fixedMedicineByService).map((service) => (
               <button key={service} type="button" className="sheet-tab filter-pill" onClick={() => applyPreset(service)}>
@@ -2433,10 +2722,31 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
             <div className="modal-head">
               <div>
                 <h2>Add {active.label}</h2>
-                <p>Fill the fields and save the new record.</p>
+                <p>Select a saved template or create a new one from this treatment.</p>
               </div>
               <button className="icon-btn" type="button" onClick={() => setAddOpen(false)} aria-label="Close modal">x</button>
             </div>
+            {active.id === 'treatments' && (
+              <div className="modal-body">
+                <div className="treatment-template-tools">
+                  <label className="field-block">
+                    <span>Use Template</span>
+                    <select className="lead-input" value={selectedTreatmentTemplate} onChange={(event) => applyTreatmentTemplate(event.target.value, setDraftRow)}>
+                      <option value="">{treatmentTemplates.length ? 'Select template to auto-fill...' : 'No templates saved yet'}</option>
+                      {treatmentTemplates.map((template, index) => <option value={index} key={`${template.name}-${index}`}>{template.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="field-block">
+                    <span>Template Name</span>
+                    <input className="lead-input" value={treatmentTemplateName} onChange={(event) => setTreatmentTemplateName(event.target.value)} placeholder="e.g. Weight Loss - 30 Days" />
+                  </label>
+                  <div className="template-actions">
+                    <button className="pill" type="button" onClick={() => saveTreatmentTemplateFromRow(draftRow)} disabled={!treatmentTemplateName.trim()}>Save Template</button>
+                    {selectedTreatmentTemplate !== '' && <button className="pill danger-action" type="button" onClick={deleteSelectedTreatmentTemplate}>Delete</button>}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="modal-body detail-grid">
               {active.columns.map((column, index) => (
                 <label className="field-block" key={column}>
@@ -2496,15 +2806,28 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
             <div className="modal-head">
               <div>
                 <h2>Edit {active.label}</h2>
-                <p>Update the selected record and save changes.</p>
+                <p>Update the selected record, or save these values as a reusable template.</p>
               </div>
               <button className="icon-btn" type="button" onClick={() => setEditOpen(false)} aria-label="Close modal">x</button>
             </div>
             {active.id === 'treatments' && (
-              <div className="modal-body" style={{ paddingTop: 0 }}>
-                <div className="mini-stat">
-                  <span>Tip</span>
-                  <strong>Select a service first. Medicine rows, dose, timing, and schedule can all be reused from presets.</strong>
+              <div className="modal-body">
+                <div className="treatment-template-tools">
+                  <label className="field-block">
+                    <span>Use Template</span>
+                    <select className="lead-input" value={selectedTreatmentTemplate} onChange={(event) => applyTreatmentTemplate(event.target.value, setEditRow)}>
+                      <option value="">{treatmentTemplates.length ? 'Select template to auto-fill...' : 'No templates saved yet'}</option>
+                      {treatmentTemplates.map((template, index) => <option value={index} key={`${template.name}-${index}`}>{template.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="field-block">
+                    <span>Template Name</span>
+                    <input className="lead-input" value={treatmentTemplateName} onChange={(event) => setTreatmentTemplateName(event.target.value)} placeholder="e.g. Follow-up Virechan" />
+                  </label>
+                  <div className="template-actions">
+                    <button className="pill" type="button" onClick={() => saveTreatmentTemplateFromRow(editRow)} disabled={!treatmentTemplateName.trim()}>Save Template</button>
+                    {selectedTreatmentTemplate !== '' && <button className="pill danger-action" type="button" onClick={deleteSelectedTreatmentTemplate}>Delete</button>}
+                  </div>
                 </div>
               </div>
             )}
@@ -3103,7 +3426,7 @@ export function AppointmentsPage() {
   const { branchKey } = useBranch();
   const navigate = useNavigate();
   const [clientNames] = useState(() =>
-    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map((row) => Array.isArray(row) ? row[0] : row.name ?? row.Client ?? '').filter(Boolean)
+    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map(savedClientName).filter(Boolean)
   );
   return (
     <GenericModulePage
@@ -3214,7 +3537,7 @@ export function TreatmentPlansPage() {
   const DIET_TEMPLATES_KEY = branchKey('diet-templates:v1');
 
   const [clientNames] = useState(() =>
-    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map((row) => (Array.isArray(row) ? row[0] : row.name ?? row.Client ?? row.client ?? '')).filter(Boolean)
+    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map(savedClientName).filter(Boolean)
   );
   const [serviceOptions] = useState(() => {
     const saved = loadSavedArray('ayurflow:Services:rows:v2', []);

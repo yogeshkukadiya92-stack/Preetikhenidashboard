@@ -12,12 +12,17 @@ function loadValue(key, fallback) {
 }
 
 function clientName(row) {
-  return Array.isArray(row) ? row[0] : row?.name ?? row?.Client ?? row?.client ?? '';
+  return Array.isArray(row) ? (row.length >= 7 ? row[1] : row[0]) : row?.name ?? row?.Client ?? row?.client ?? '';
 }
 
 function clientMobile(row) {
-  if (Array.isArray(row)) return row[1] ?? '';
+  if (Array.isArray(row)) return row.length >= 7 ? row[2] ?? '' : row[1] ?? '';
   return row?.mobile ?? row?.Mobile ?? row?.phone ?? row?.Phone ?? '';
+}
+
+function clientId(row) {
+  if (Array.isArray(row)) return row.length >= 7 ? row[0] ?? '' : '';
+  return row?.clientId ?? row?.['Client ID'] ?? row?.ClientId ?? row?.ID ?? row?.id ?? '';
 }
 
 function normalizePhoneNumber(value) {
@@ -157,9 +162,25 @@ export function ClientJourneyPage() {
     window.localStorage.setItem(consultationTemplatesKey, JSON.stringify(consultationTemplates));
   }, [consultationTemplates, consultationTemplatesKey]);
 
-  const names = useMemo(() => Array.from(new Set(clients.map(clientName).filter(Boolean))), [clients]);
-  const selectedClientRecord = useMemo(() => clients.find((row) => clientName(row).toLowerCase() === selectedClient.toLowerCase()), [clients, selectedClient]);
-  const visibleNames = names.filter((name) => name.toLowerCase().includes(search.toLowerCase()));
+  const clientRecords = useMemo(() => {
+    const seen = new Set();
+    return clients.filter((row) => {
+      const name = clientName(row);
+      if (!name) return false;
+      const key = `${clientId(row) || name}`.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [clients]);
+  const selectedClientRecord = useMemo(() => clients.find((row) => (
+    clientName(row).toLowerCase() === selectedClient.toLowerCase()
+    || clientId(row).toLowerCase() === selectedClient.toLowerCase()
+  )), [clients, selectedClient]);
+  const visibleClients = clientRecords.filter((row) => {
+    const haystack = [clientId(row), clientName(row), clientMobile(row)].join(' ').toLowerCase();
+    return haystack.includes(search.toLowerCase());
+  });
   const journey = journeys[selectedClient] ?? {};
   const hasAppointment = appointments.some((row) => String(row?.[0] ?? row?.Client ?? '').toLowerCase() === selectedClient.toLowerCase());
   const hasPayment = payments.some((row) => String(row?.[0] ?? row?.Client ?? '').toLowerCase() === selectedClient.toLowerCase());
@@ -345,16 +366,20 @@ export function ClientJourneyPage() {
     <section className="module-page journey-page">
       <div className="module-hero compact-hero">
         <div><h1>Client Journey</h1><p>Run the complete reception-to-payment workflow from one workspace.</p><p className="subtle">Shared cloud workspace</p></div>
-        <div className="module-stats"><div className="mini-stat"><span>Registered</span><strong>{names.length}</strong></div><div className="mini-stat"><span>Active Journeys</span><strong>{Object.keys(journeys).length}</strong></div><div className="mini-stat"><span>Selected Stage</span><strong>{selectedClient ? nextAction() : 'Select client'}</strong></div></div>
+        <div className="module-stats"><div className="mini-stat"><span>Registered</span><strong>{clientRecords.length}</strong></div><div className="mini-stat"><span>Active Journeys</span><strong>{Object.keys(journeys).length}</strong></div><div className="mini-stat"><span>Selected Stage</span><strong>{selectedClient ? nextAction() : 'Select client'}</strong></div></div>
       </div>
 
       <div className="journey-layout">
         <Card title="Reception Desk" subtitle="Search an existing client or register a new walk-in." action={<button className="pill primary-action" type="button" onClick={() => navigate('/clients?action=add')}>+ Register Client</button>}>
-          <input className="lead-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search client by name..." />
+          <input className="lead-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search client by ID, name, or mobile..." />
           <div className="journey-client-list">
-            {visibleNames.length ? visibleNames.map((name) => (
-              <button className={`journey-client ${selectedClient === name ? 'active' : ''}`} type="button" key={name} onClick={() => setSelectedClient(name)}><strong>{name}</strong><span>{journeys[name] ? 'Journey in progress' : 'Ready for check-in'}</span></button>
-            )) : <div className="empty-state compact-empty"><strong>No clients found.</strong><p>Register the client before booking an appointment.</p></div>}
+            {visibleClients.length ? visibleClients.map((row) => {
+              const name = clientName(row);
+              const id = clientId(row);
+              return (
+                <button className={`journey-client ${selectedClient === name ? 'active' : ''}`} type="button" key={id || name} onClick={() => setSelectedClient(name)}><strong>{id ? `${id} · ${name}` : name}</strong><span>{journeys[name] ? 'Journey in progress' : 'Ready for check-in'}</span></button>
+              );
+            }) : <div className="empty-state compact-empty"><strong>No clients found.</strong><p>Register the client before booking an appointment.</p></div>}
           </div>
         </Card>
 
