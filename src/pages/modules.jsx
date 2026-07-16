@@ -641,7 +641,7 @@ function ImportExportModule({
             {filteredRows.length ? (
               filteredRows.map((row, index) => (
                 <div className="data-row" key={index}>
-                  {headers.map((header) => <div key={header}>{rowToValues(row)[header]}</div>)}
+                  {headers.map((header) => <div data-label={header} key={header}>{rowToValues(row)[header]}</div>)}
                   <div>{rowActions ? rowActions(row, openEditRecord) : defaultRowAction(row)}</div>
                 </div>
               ))
@@ -773,7 +773,7 @@ function ImportExportModule({
               </div>
               {preview.map((row, index) => (
                 <div className="data-row" key={index}>
-                  {headers.map((header) => <div key={header}>{rowToValues(row)[header]}</div>)}
+                  {headers.map((header) => <div data-label={header} key={header}>{rowToValues(row)[header]}</div>)}
                   <div>{rowActions ? rowActions(row) : defaultRowAction(row)}</div>
                 </div>
               ))}
@@ -1716,6 +1716,9 @@ function ClientMonthlySummary({ rows, rowToValues }) {
 
 export function ClientsPage() {
   const [selectedClient, setSelectedClient] = useState(null);
+  const { branchKey } = useBranch();
+  const savedClientRows = loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients));
+  const savedTreatmentRows = loadSavedArray(TREATMENT_PLANS_KEY, []);
 
   if (selectedClient) {
     return <ClientProfile client={selectedClient} onBack={() => setSelectedClient(null)} />;
@@ -1726,8 +1729,8 @@ export function ClientsPage() {
       title="Clients"
       description="View active client profiles, treatment progress, and upcoming visit timelines."
       stats={[
-        { label: 'Active Clients', value: '0' },
-        { label: 'Treatment Plans', value: '0' },
+        { label: 'Active Clients', value: String(savedClientRows.length) },
+        { label: 'Treatment Plans', value: String(savedTreatmentRows.length) },
         { label: 'Services', value: getSavedServiceNames().length },
       ]}
       headers={['Client ID', 'Client', 'Mobile', 'Visit Date', 'Birthday', 'Age', 'Address', 'Service']}
@@ -2677,7 +2680,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
           {filteredRows.length ? (
             filteredRows.map((row, index) => (
               <div className="data-row" key={`${active.id}-${index}`}>
-                {row.map((cell, cellIndex) => <div key={`${active.columns[cellIndex]}-${index}`}>{cell}</div>)}
+                {row.map((cell, cellIndex) => <div data-label={active.columns[cellIndex]} key={`${active.columns[cellIndex]}-${index}`}>{cell}</div>)}
                 <div><button className="row-link" type="button" onClick={() => openEdit(row)}>Open</button></div>
               </div>
             ))
@@ -2951,7 +2954,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
               {previewRows.length ? (
                 previewRows.map((row, index) => (
                   <div className="data-row" key={index}>
-                    {row.map((cell, cellIndex) => <div key={`${active.columns[cellIndex]}-${index}`}>{cell}</div>)}
+                    {row.map((cell, cellIndex) => <div data-label={active.columns[cellIndex]} key={`${active.columns[cellIndex]}-${index}`}>{cell}</div>)}
                     <div />
                   </div>
                 ))
@@ -4773,7 +4776,7 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
             </div>
             {currentReport.rows.length ? currentReport.rows.map((row, i) => (
               <div className="data-row" key={i}>
-                {row.map((cell, j) => <div key={j}>{cell}</div>)}
+                {row.map((cell, j) => <div data-label={columns[j]} key={j}>{cell}</div>)}
                 <div />
               </div>
             )) : (

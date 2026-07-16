@@ -61,9 +61,9 @@ export function DashboardPage() {
     <>
       <section className="dashboard-primary-workflow" aria-labelledby="client-journey-title">
         <div className="workflow-copy">
-          <span className="workflow-label">Primary workflow</span>
-          <h1 id="client-journey-title">Client Journey</h1>
-          <p>Reception thi appointment, form, consultation, treatment ane payment sudhi nu complete workflow ekaj jagya par chalavo.</p>
+          <span className="workflow-label">Today&apos;s work</span>
+          <h1 id="client-journey-title">Client Journey Command Center</h1>
+          <p>Reception, appointment, form, consultation, treatment ane payment ekaj focused flow ma complete karo.</p>
         </div>
         <div className="workflow-summary" aria-label="Client journey summary">
           <span><strong>{clients.length}</strong> Registered clients</span>
@@ -117,7 +117,7 @@ export function DashboardPage() {
       </section>
 
       <section className="dashboard-action-strip" aria-label="Dashboard actions">
-        <p className="command-message">Daily entry work mate Actions vapro. Detailed reports More insights ma available che.</p>
+        <p className="command-message">Fast entry actions are grouped here; analytics stay behind More insights so daily work stays clean.</p>
         <div className="sheet-actions toolbar-actions">
           <ActionMenu label="Actions" items={quickActions} />
           <button className="pill" type="button" onClick={() => setMoreInsightsOpen(true)}>More insights <ChevronRight /></button>

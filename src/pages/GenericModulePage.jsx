@@ -280,7 +280,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
           {filteredRows.length ? (
             filteredRows.map((row, index) => (
               <div className="data-row" key={index}>
-                {row.map((cell, cellIndex) => <div key={`${columns[cellIndex]}-${index}`}>{cell}</div>)}
+                {row.map((cell, cellIndex) => <div data-label={columns[cellIndex]} key={`${columns[cellIndex]}-${index}`}>{cell}</div>)}
                 <div>
                   {rowActions ? rowActions(row, setSelectedRow, setActionMessage, setTableRows) : (
                     <button className="row-link" type="button" onClick={() => setSelectedRow(row[0])}>View</button>
@@ -371,7 +371,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
               </div>
               {previewRows.map((row, index) => (
                 <div className="data-row" key={index}>
-                  {row.map((cell, cellIndex) => <div key={`${columns[cellIndex]}-${index}`}>{cell}</div>)}
+                  {row.map((cell, cellIndex) => <div data-label={columns[cellIndex]} key={`${columns[cellIndex]}-${index}`}>{cell}</div>)}
                   <div>
                     {rowActions ? rowActions(row, setSelectedRow, setActionMessage) : null}
                   </div>
