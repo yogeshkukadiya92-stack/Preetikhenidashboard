@@ -326,6 +326,12 @@ function ImportExportModule({
   const isClientModule = title === 'Clients';
   const displayTitle = patientDisplayLabel(title);
   const displayHeader = (header) => (isClientModule || header === 'Client' ? patientDisplayLabel(header) : header);
+  const tableGridTemplate = isClientModule
+    ? 'minmax(84px, 0.72fr) minmax(122px, 1fr) minmax(112px, 0.95fr) minmax(112px, 0.92fr) minmax(112px, 0.92fr) minmax(58px, 0.48fr) minmax(126px, 1.05fr) minmax(112px, 0.95fr)'
+    : undefined;
+  const tableStyle = tableGridTemplate
+    ? { '--table-columns': headers.length, '--table-template': tableGridTemplate }
+    : { '--table-columns': headers.length };
   const legacyStorageKey = `ayurflow:${filenameBase}:rows:v3`;
   const storageKey = branchKey(`${filenameBase}:rows:v3`);
   const [rows, setRows] = useState(() => {
@@ -715,7 +721,7 @@ function ImportExportModule({
 
       <div className="grid single-module-grid">
         <Card title={`Current ${displayTitle}`} subtitle={message} action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {displayTitle}</button>{selectedCount > 0 && <button className="pill danger-action" type="button" onClick={deleteSelectedRecords}>Delete selected ({selectedCount})</button>}<button className="pill" type="button" onClick={() => bannerFileInputRef.current?.click()}>Import</button><button className="pill" type="button" onClick={exportCsv}>Export</button><ActionMenu label="Actions" items={moduleActions} /></div>}>
-          <div className="table adaptive-table selectable-table" style={{ '--table-columns': headers.length }}>
+          <div className="table adaptive-table selectable-table" style={tableStyle}>
             <div className="table-head">
               <div className="select-cell">
                 <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisibleRows} aria-label={`Select all visible ${displayTitle.toLowerCase()}`} />
@@ -772,7 +778,7 @@ function ImportExportModule({
                       className="lead-input"
                       type={fieldTypes[header] ?? 'text'}
                       value={draftRecord[header] ?? ''}
-                      readOnly={header === 'Invoice' || (title === 'Clients' && header === 'Age')}
+                      readOnly={header === 'Invoice'}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
                       onChange={(event) => updateRecordField(setDraftRecord, header, event.target.value)}
                       placeholder={`Enter ${displayHeader(header).toLowerCase()}`}
@@ -817,7 +823,7 @@ function ImportExportModule({
                       className="lead-input"
                       type={fieldTypes[header] ?? 'text'}
                       value={editRecord[header] ?? ''}
-                      readOnly={header === 'Invoice' || (title === 'Clients' && header === 'Age')}
+                      readOnly={header === 'Invoice'}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
                       onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
                       placeholder={`Enter ${displayHeader(header).toLowerCase()}`}

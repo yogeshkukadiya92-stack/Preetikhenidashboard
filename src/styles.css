@@ -839,11 +839,11 @@ textarea:focus-visible,
 .data-table .table-head, .data-table .data-row { grid-template-columns: 1.1fr 0.9fr 0.9fr 0.7fr 0.8fr 0.2fr; }
 .adaptive-table > .table-head,
 .adaptive-table > .data-row {
-  grid-template-columns: repeat(var(--table-columns, 5), minmax(112px, 1fr)) minmax(44px, auto);
+  grid-template-columns: var(--table-template, repeat(var(--table-columns, 5), minmax(112px, 1fr))) minmax(44px, auto);
 }
 .selectable-table > .table-head,
 .selectable-table > .data-row {
-  grid-template-columns: minmax(38px, 44px) repeat(var(--table-columns, 5), minmax(112px, 1fr)) minmax(44px, auto);
+  grid-template-columns: minmax(38px, 44px) var(--table-template, repeat(var(--table-columns, 5), minmax(112px, 1fr))) minmax(44px, auto);
 }
 .select-cell {
   display: flex;
