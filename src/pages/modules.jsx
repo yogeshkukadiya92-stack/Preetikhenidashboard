@@ -74,6 +74,28 @@ function loadSavedObject(key, fallback = {}) {
 
 const TREATMENT_PLANS_KEY = 'ayurflow:Treatment Plans:rows:v2';
 
+function patientDisplayLabel(label) {
+  if (label === 'Client') return 'Patient Name';
+  if (label === 'Clients') return 'Patients';
+  if (label === 'Client ID') return 'Patient ID';
+  return label;
+}
+
+function patientDisplayText(text) {
+  return String(text)
+    .replaceAll('Clients', 'Patients')
+    .replaceAll('Client ID', 'Patient ID')
+    .replaceAll('client ID', 'patient ID')
+    .replaceAll('client profile', 'patient profile')
+    .replaceAll('client details', 'patient details')
+    .replaceAll('client fields', 'patient fields')
+    .replaceAll('client treatment', 'patient treatment')
+    .replaceAll('client-side', 'patient-side')
+    .replaceAll('client plan', 'patient plan')
+    .replaceAll('client', 'patient')
+    .replaceAll('Client', 'Patient');
+}
+
 function treatmentPlanToOperationRow(row) {
   if (!Array.isArray(row)) return [];
   return [row[0] ?? '', row[1] ?? '', row[4] ?? '', row[5] ?? '', row[6] ?? '', row[2] ?? '', row[3] ?? '', row[7] ?? ''];
@@ -301,11 +323,14 @@ function ImportExportModule({
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { branchKey } = useBranch();
+  const isClientModule = title === 'Clients';
+  const displayTitle = patientDisplayLabel(title);
+  const displayHeader = (header) => (isClientModule || header === 'Client' ? patientDisplayLabel(header) : header);
   const legacyStorageKey = `ayurflow:${filenameBase}:rows:v3`;
   const storageKey = branchKey(`${filenameBase}:rows:v3`);
   const [rows, setRows] = useState(() => {
     const parsedRows = loadSavedArray(storageKey, loadSavedArray(legacyStorageKey, seedRows)).map((row) => parseRow(row));
-    return title === 'Clients' ? assignMissingClientIds(parsedRows, rowToValues) : parsedRows;
+    return isClientModule ? assignMissingClientIds(parsedRows, rowToValues) : parsedRows;
   });
   const [preview, setPreview] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
@@ -318,6 +343,7 @@ function ImportExportModule({
   const [editRecord, setEditRecord] = useState(() => Object.fromEntries(headers.map((header) => [header, ''])));
   const [draftMatchedIndex, setDraftMatchedIndex] = useState(-1);
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const [selectedRowIndexes, setSelectedRowIndexes] = useState(() => new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [activeFilter, setActiveFilter] = useState(filterPresets[0]?.column ?? '');
@@ -342,7 +368,7 @@ function ImportExportModule({
     setDraftRecord(Object.fromEntries(headers.map((header) => [header, defaults[header] ?? (header === 'Client' ? (searchParams.get('client') ?? '') : header === 'Mobile' ? (searchParams.get('mobile') ?? '') : '')])));
     setDraftMatchedIndex(-1);
     setAddOpen(true);
-    setMessage(`Add ${title.toLowerCase()} record opened.`);
+    setMessage(`Add ${displayTitle.toLowerCase()} record opened.`);
   };
 
   useEffect(() => {
@@ -369,7 +395,6 @@ function ImportExportModule({
   };
 
   const normalize = (entry) => parseRow(entry);
-  const isClientModule = title === 'Clients';
   const clientPhoneExists = (phone, list = rows) => {
     if (!isClientModule || !phone) return false;
     return list.some((row) => recordPhone(row, rowToValues) === phone);
@@ -440,7 +465,7 @@ function ImportExportModule({
         return false;
       });
       if (duplicate) {
-        setMessage('This mobile number already exists. Duplicate client was not imported.');
+        setMessage('This mobile number already exists. Duplicate patient was not imported.');
         return;
       }
     }
@@ -452,6 +477,17 @@ function ImportExportModule({
   };
 
   const visibleRows = customRows ?? rows.map((row) => row);
+  const selectedCount = selectedRowIndexes.size;
+  const filteredRows = visibleRows.filter((row) => {
+    if (!filterText) return true;
+    const mapped = rowToValues(row);
+    if (!activeFilter) {
+      return Object.values(mapped).join(' ').toLowerCase().includes(filterText.toLowerCase());
+    }
+    return String(mapped[activeFilter] ?? '').toLowerCase().includes(filterText.toLowerCase());
+  });
+  const visibleRowIndexes = filteredRows.map((row) => rows.indexOf(row)).filter((index) => index !== -1);
+  const allVisibleSelected = visibleRowIndexes.length > 0 && visibleRowIndexes.every((index) => selectedRowIndexes.has(index));
 
   const updateRecordField = (setter, header, value) => {
     if (isClientModule && header === 'Client ID' && setter === setDraftRecord) {
@@ -460,7 +496,7 @@ function ImportExportModule({
       if (clientId && matchIndex !== -1) {
         setDraftMatchedIndex(matchIndex);
         setDraftRecord({ ...rowToValues(rows[matchIndex]), 'Client ID': clientId });
-        setMessage(`Existing client ${clientId} loaded. Edit details and save changes.`);
+        setMessage(`Existing patient ${clientId} loaded. Edit details and save changes.`);
         return;
       }
       setDraftMatchedIndex(-1);
@@ -487,24 +523,25 @@ function ImportExportModule({
     const clientId = clientIdFromRow(recordToSave, rowToValues);
     if (isClientModule && clientId && draftMatchedIndex !== -1) {
       if (clientPhone && rows.some((row, index) => index !== draftMatchedIndex && recordPhone(row, rowToValues) === clientPhone)) {
-        setMessage('This mobile number already exists. Client was not updated.');
+        setMessage('This mobile number already exists. Patient was not updated.');
         return;
       }
       setRows((current) => current.map((row, index) => (index === draftMatchedIndex ? recordToSave : row)));
       setAddOpen(false);
       setDraftMatchedIndex(-1);
-      setMessage(`${rowToCsvValues(recordToSave)[0] || clientId} updated from client ID.`);
+      setMessage(`${rowToCsvValues(recordToSave)[0] || clientId} updated from patient ID.`);
       return;
     }
     if (isClientModule && clientIdExists(clientId)) {
-      setMessage('This Client ID already exists. Enter the ID to load and edit that client.');
+      setMessage('This Patient ID already exists. Enter the ID to load and edit that patient.');
       return;
     }
     if (clientPhoneExists(clientPhone)) {
-      setMessage('This mobile number already exists. Client was not added again.');
+      setMessage('This mobile number already exists. Patient was not added again.');
       return;
     }
     setRows((current) => [recordToSave, ...current]);
+    setSelectedRowIndexes(new Set());
     setAddOpen(false);
     setMessage(`${rowToCsvValues(recordToSave)[0] || title} added.`);
   };
@@ -531,27 +568,66 @@ function ImportExportModule({
     const clientPhone = recordPhone(normalized, rowToValues);
     const clientId = clientIdFromRow(normalized, rowToValues);
     if (isClientModule && clientId && rows.some((row, index) => index !== editIndex && clientIdFromRow(row, rowToValues) === clientId)) {
-      setMessage('This Client ID already exists. Client was not updated.');
+      setMessage('This Patient ID already exists. Patient was not updated.');
       return;
     }
     if (isClientModule && clientPhone && rows.some((row, index) => index !== editIndex && recordPhone(row, rowToValues) === clientPhone)) {
-      setMessage('This mobile number already exists. Client was not updated.');
+      setMessage('This mobile number already exists. Patient was not updated.');
       return;
     }
     setRows((current) => current.map((row, index) => (index === editIndex ? normalized : row)));
+    setSelectedRowIndexes(new Set());
     setEditOpen(false);
     setEditIndex(-1);
     setMessage(`${rowToCsvValues(normalized)[0] || title} updated.`);
   };
 
-  const filteredRows = visibleRows.filter((row) => {
-    if (!filterText) return true;
-    const mapped = rowToValues(row);
-    if (!activeFilter) {
-      return Object.values(mapped).join(' ').toLowerCase().includes(filterText.toLowerCase());
+  const toggleRowSelection = (rowIndex) => {
+    if (rowIndex === -1) return;
+    setSelectedRowIndexes((current) => {
+      const next = new Set(current);
+      if (next.has(rowIndex)) next.delete(rowIndex);
+      else next.add(rowIndex);
+      return next;
+    });
+  };
+
+  const toggleAllVisibleRows = () => {
+    setSelectedRowIndexes((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) visibleRowIndexes.forEach((index) => next.delete(index));
+      else visibleRowIndexes.forEach((index) => next.add(index));
+      return next;
+    });
+  };
+
+  const deleteRowsByIndexes = (indexes, label = 'record') => {
+    const uniqueIndexes = Array.from(new Set(indexes)).filter((index) => index >= 0);
+    if (!uniqueIndexes.length) {
+      setMessage('Select at least one record to delete.');
+      return;
     }
-    return String(mapped[activeFilter] ?? '').toLowerCase().includes(filterText.toLowerCase());
-  });
+    const count = uniqueIndexes.length;
+    const confirmed = window.confirm(`Delete ${count} ${count === 1 ? label : `${label}s`}? This cannot be undone.`);
+    if (!confirmed) return;
+    const deleteSet = new Set(uniqueIndexes);
+    setRows((current) => current.filter((_, index) => !deleteSet.has(index)));
+    setSelectedRowIndexes(new Set());
+    setSelectedRecord(null);
+    setEditOpen(false);
+    setEditIndex(-1);
+    setMessage(`${count} ${count === 1 ? label : `${label}s`} deleted.`);
+  };
+
+  const deleteRecord = (row) => {
+    const index = rows.indexOf(row);
+    deleteRowsByIndexes([index], isClientModule ? 'patient' : 'record');
+  };
+
+  const deleteSelectedRecords = () => {
+    deleteRowsByIndexes(Array.from(selectedRowIndexes), isClientModule ? 'patient' : 'record');
+  };
+
   const openRecord = (row) => {
     setSelectedRecord(row);
     setMessage(`${rowToCsvValues(row)[0]} selected.`);
@@ -564,12 +640,18 @@ function ImportExportModule({
   };
 
   const defaultRowAction = (row) => (
-    <button className="row-link" type="button" onClick={() => openRecord(row)}>
-      View
-    </button>
+    <ActionMenu
+      compact
+      label={`Actions for ${rowToCsvValues(row)[0] || 'record'}`}
+      items={[
+        { label: 'View', description: 'Open record details', onClick: () => openRecord(row) },
+        { label: 'Delete', description: 'Remove this record', danger: true, onClick: () => deleteRecord(row) },
+      ]}
+    />
   );
   const moduleActions = [
-    { label: `Add ${title}`, description: 'Create a new record', onClick: openAddRecord },
+    { label: `Add ${displayTitle}`, description: 'Create a new record', onClick: openAddRecord },
+    { label: 'Delete selected', description: selectedCount ? `${selectedCount} selected` : 'Select rows first', disabled: !selectedCount, danger: true, onClick: deleteSelectedRecords },
     { label: 'Download template', description: 'Blank CSV format', onClick: downloadTemplate },
     { label: 'Import CSV/JSON', description: 'Upload records', onClick: () => bannerFileInputRef.current?.click() },
     { label: 'Export CSV', description: 'Download current records', onClick: exportCsv },
@@ -583,8 +665,8 @@ function ImportExportModule({
     <section className="module-page">
       <div className="module-hero">
         <div>
-          <h1>{title}</h1>
-          <p>{description}</p>
+          <h1>{displayTitle}</h1>
+          <p>{isClientModule ? patientDisplayText(description) : description}</p>
         </div>
         <div className="module-stats">
           {stats.map((stat) => (
@@ -625,31 +707,37 @@ function ImportExportModule({
               className="lead-input compact-filter"
               value={filterText}
               onChange={(event) => setFilterText(event.target.value)}
-              placeholder={activeFilter ? `Search by ${activeFilter.toLowerCase()}...` : `Filter ${title.toLowerCase()}...`}
+              placeholder={activeFilter ? `Search by ${displayHeader(activeFilter).toLowerCase()}...` : `Filter ${displayTitle.toLowerCase()}...`}
             />
           </div>
         </Card>
       )}
 
       <div className="grid single-module-grid">
-        <Card title={`Current ${title}`} subtitle={message} action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {title}</button><button className="pill" type="button" onClick={() => bannerFileInputRef.current?.click()}>Import</button><button className="pill" type="button" onClick={exportCsv}>Export</button><ActionMenu label="Actions" items={moduleActions} /></div>}>
-          <div className="table adaptive-table" style={{ '--table-columns': headers.length }}>
+        <Card title={`Current ${displayTitle}`} subtitle={message} action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {displayTitle}</button>{selectedCount > 0 && <button className="pill danger-action" type="button" onClick={deleteSelectedRecords}>Delete selected ({selectedCount})</button>}<button className="pill" type="button" onClick={() => bannerFileInputRef.current?.click()}>Import</button><button className="pill" type="button" onClick={exportCsv}>Export</button><ActionMenu label="Actions" items={moduleActions} /></div>}>
+          <div className="table adaptive-table selectable-table" style={{ '--table-columns': headers.length }}>
             <div className="table-head">
-              {headers.map((header) => <div key={header}>{header}</div>)}
+              <div className="select-cell">
+                <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisibleRows} aria-label={`Select all visible ${displayTitle.toLowerCase()}`} />
+              </div>
+              {headers.map((header) => <div key={header}>{displayHeader(header)}</div>)}
               <div />
             </div>
             {filteredRows.length ? (
               filteredRows.map((row, index) => (
                 <div className="data-row" key={index}>
-                  {headers.map((header) => <div data-label={header} key={header}>{rowToValues(row)[header]}</div>)}
-                  <div>{rowActions ? rowActions(row, openEditRecord) : defaultRowAction(row)}</div>
+                  <div className="select-cell" data-label="">
+                    <input type="checkbox" checked={selectedRowIndexes.has(rows.indexOf(row))} onChange={() => toggleRowSelection(rows.indexOf(row))} aria-label={`Select ${rowToCsvValues(row)[0] || 'record'}`} />
+                  </div>
+                  {headers.map((header) => <div data-label={displayHeader(header)} key={header}>{rowToValues(row)[header]}</div>)}
+                  <div>{rowActions ? rowActions(row, openEditRecord, deleteRecord) : defaultRowAction(row)}</div>
                 </div>
               ))
             ) : (
               <div className="empty-state compact-empty table-empty">
                 <strong>No records yet.</strong>
                 <p>Add a record or import a file to start using this module.</p>
-                <button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {title}</button>
+                <button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {displayTitle}</button>
               </div>
             )}
           </div>
@@ -658,10 +746,10 @@ function ImportExportModule({
 
       {addOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setAddOpen(false)}>
-          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Add ${title}`} onClick={(event) => event.stopPropagation()}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Add ${displayTitle}`} onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
               <div>
-                <h2>Add {title}</h2>
+                <h2>Add {displayTitle}</h2>
                 <p>Fill the fields and save this record.</p>
               </div>
               <button className="icon-btn" type="button" onClick={() => setAddOpen(false)} aria-label="Close modal">x</button>
@@ -669,14 +757,14 @@ function ImportExportModule({
             <div className="modal-body detail-grid">
               {headers.map((header) => (
                 <label className="field-block" key={header}>
-                  <span>{header}</span>
+                  <span>{displayHeader(header)}</span>
                   {Object.prototype.hasOwnProperty.call(fieldOptions, header) ? (
                     <select
                       className="lead-input"
                       value={draftRecord[header] ?? ''}
                       onChange={(event) => setDraftRecord((current) => ({ ...current, [header]: event.target.value }))}
                     >
-                      <option value="">{fieldOptions[header].length ? `Select ${header.toLowerCase()}` : `Add ${header.toLowerCase()} first`}</option>
+                      <option value="">{fieldOptions[header].length ? `Select ${displayHeader(header).toLowerCase()}` : `Add ${displayHeader(header).toLowerCase()} first`}</option>
                       {fieldOptions[header].map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
                     </select>
                   ) : (
@@ -687,7 +775,7 @@ function ImportExportModule({
                       readOnly={header === 'Invoice' || (title === 'Clients' && header === 'Age')}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
                       onChange={(event) => updateRecordField(setDraftRecord, header, event.target.value)}
-                      placeholder={`Enter ${header.toLowerCase()}`}
+                      placeholder={`Enter ${displayHeader(header).toLowerCase()}`}
                     />
                   )}
                 </label>
@@ -703,10 +791,10 @@ function ImportExportModule({
 
       {editOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setEditOpen(false)}>
-          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Edit ${title}`} onClick={(event) => event.stopPropagation()}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Edit ${displayTitle}`} onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
               <div>
-                <h2>Edit {title === 'Clients' ? 'Client' : title}</h2>
+                <h2>Edit {title === 'Clients' ? 'Patient' : displayTitle}</h2>
                 <p>Update the fields and save this record.</p>
               </div>
               <button className="icon-btn" type="button" onClick={() => setEditOpen(false)} aria-label="Close modal">x</button>
@@ -714,14 +802,14 @@ function ImportExportModule({
             <div className="modal-body detail-grid">
               {headers.map((header) => (
                 <label className="field-block" key={header}>
-                  <span>{header}</span>
+                  <span>{displayHeader(header)}</span>
                   {Object.prototype.hasOwnProperty.call(fieldOptions, header) ? (
                     <select
                       className="lead-input"
                       value={editRecord[header] ?? ''}
                       onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
                     >
-                      <option value="">{fieldOptions[header].length ? `Select ${header.toLowerCase()}` : `Add ${header.toLowerCase()} first`}</option>
+                      <option value="">{fieldOptions[header].length ? `Select ${displayHeader(header).toLowerCase()}` : `Add ${displayHeader(header).toLowerCase()} first`}</option>
                       {fieldOptions[header].map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
                     </select>
                   ) : (
@@ -732,7 +820,7 @@ function ImportExportModule({
                       readOnly={header === 'Invoice' || (title === 'Clients' && header === 'Age')}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
                       onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
-                      placeholder={`Enter ${header.toLowerCase()}`}
+                      placeholder={`Enter ${displayHeader(header).toLowerCase()}`}
                     />
                   )}
                 </label>
@@ -748,7 +836,7 @@ function ImportExportModule({
 
       {modalOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalOpen(false)}>
-          <div className="modal-shell" role="dialog" aria-modal="true" aria-label={`${title} import preview`} onClick={(event) => event.stopPropagation()}>
+          <div className="modal-shell" role="dialog" aria-modal="true" aria-label={`${displayTitle} import preview`} onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
               <div>
                 <h2>Import Preview</h2>
@@ -768,12 +856,12 @@ function ImportExportModule({
             </div>
             <div className="modal-table adaptive-table" style={{ '--table-columns': headers.length }}>
               <div className="table-head">
-                {headers.map((header) => <div key={header}>{header}</div>)}
+                {headers.map((header) => <div key={header}>{displayHeader(header)}</div>)}
                 <div />
               </div>
               {preview.map((row, index) => (
                 <div className="data-row" key={index}>
-                  {headers.map((header) => <div data-label={header} key={header}>{rowToValues(row)[header]}</div>)}
+                  {headers.map((header) => <div data-label={displayHeader(header)} key={header}>{rowToValues(row)[header]}</div>)}
                   <div>{rowActions ? rowActions(row) : defaultRowAction(row)}</div>
                 </div>
               ))}
@@ -788,10 +876,10 @@ function ImportExportModule({
 
       {selectedRecord && (
         <div className="modal-backdrop" role="presentation" onClick={() => setSelectedRecord(null)}>
-          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`${title} options`} onClick={(event) => event.stopPropagation()}>
+          <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`${displayTitle} options`} onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
               <div>
-                <h2>{title === 'Clients' ? 'Client Options' : `${title} Options`}</h2>
+                <h2>{title === 'Clients' ? 'Patient Options' : `${displayTitle} Options`}</h2>
                 <p>{rowToCsvValues(selectedRecord)[0]} selected.</p>
               </div>
               <button className="icon-btn" type="button" onClick={() => setSelectedRecord(null)} aria-label="Close modal">x</button>
@@ -799,7 +887,7 @@ function ImportExportModule({
             <div className="modal-body detail-grid">
               {headers.map((header) => (
                 <div className="mini-stat" key={header}>
-                  <span>{header}</span>
+                  <span>{displayHeader(header)}</span>
                   <strong>{rowToValues(selectedRecord)[header]}</strong>
                 </div>
               ))}
@@ -808,6 +896,7 @@ function ImportExportModule({
               <button className="pill" type="button" onClick={() => openClientAction('/appointments', 'Book Appointment')}>Book Appointment <ChevronRight /></button>
               <button className="pill" type="button" onClick={() => openClientAction('/payments', 'Add Payment')}>Add Payment <ChevronRight /></button>
               <button className="pill" type="button" onClick={() => openClientAction('/treatments', 'Treatment Plan')}>Treatment Plan <ChevronRight /></button>
+              <button className="pill danger-action" type="button" onClick={() => deleteRecord(selectedRecord)}>Delete <ChevronRight /></button>
             </div>
           </div>
         </div>
@@ -1409,9 +1498,9 @@ function ClientProfile({ client, onBack }) {
       </div>
 
       {activeTab === 'overview' && (
-        <Card title="Client Details">
+        <Card title="Patient Details">
           <div className="detail-grid">
-            {[['Client ID', clientId], ['Client', client.name], ['Mobile', client.mobile], ['Visit Date', client.visitDate], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Service', client.service || client.program]].map(([label, value]) => (
+            {[['Patient ID', clientId], ['Patient Name', client.name], ['Mobile', client.mobile], ['Visit Date', client.visitDate], ['Birthday', client.birthday], ['Age', client.age], ['Address', client.address], ['Service', client.service || client.program]].map(([label, value]) => (
               <div className="mini-stat" key={label}>
                 <span>{label}</span>
                 <strong>{value || '—'}</strong>
@@ -1507,7 +1596,7 @@ function ClientProfile({ client, onBack }) {
         <div className="modal-backdrop" role="presentation" onClick={() => setTreatModal(false)}>
           <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Add Treatment Plan" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <div><h2>Add Treatment Plan</h2><p>For {clientName}</p></div>
+              <div><h2>Add Treatment Plan</h2><p>For patient: {clientName}</p></div>
               <button className="icon-btn" type="button" onClick={() => setTreatModal(false)} aria-label="Close modal">x</button>
             </div>
             <div className="modal-body detail-grid">
@@ -1593,7 +1682,7 @@ function ClientProfile({ client, onBack }) {
         <div className="modal-backdrop" role="presentation" onClick={() => setApptModal(false)}>
           <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Book Appointment" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <div><h2>Book Appointment</h2><p>For {clientName}</p></div>
+              <div><h2>Book Appointment</h2><p>For patient: {clientName}</p></div>
               <button className="icon-btn" type="button" onClick={() => setApptModal(false)} aria-label="Close modal">x</button>
             </div>
             <div className="modal-body detail-grid">
@@ -1634,7 +1723,7 @@ function ClientProfile({ client, onBack }) {
         <div className="modal-backdrop" role="presentation" onClick={() => setPayModal(false)}>
           <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label="Add Payment" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <div><h2>Add Payment</h2><p>For {clientName}</p></div>
+              <div><h2>Add Payment</h2><p>For patient: {clientName}</p></div>
               <button className="icon-btn" type="button" onClick={() => setPayModal(false)} aria-label="Close modal">x</button>
             </div>
             <div className="modal-body detail-grid">
@@ -1704,10 +1793,10 @@ function ClientMonthlySummary({ rows, rowToValues }) {
           <strong>Latest Visits</strong>
           {latestRows.length ? latestRows.map((row) => (
             <div className="summary-line" key={`${row['Client ID']}-${row.Client}-${row['Visit Date']}`}>
-              <span>{row['Visit Date']} · {row.Client || 'Client'}</span>
+              <span>{row['Visit Date']} · {row.Client || 'Patient'}</span>
               <strong>{row.Service || '-'}</strong>
             </div>
-          )) : <p className="subtle">Add Visit Date in client entry to show this list.</p>}
+          )) : <p className="subtle">Add Visit Date in patient entry to show this list.</p>}
         </div>
       </div>
     </Card>
@@ -1727,9 +1816,9 @@ export function ClientsPage() {
   return (
     <ImportExportModule
       title="Clients"
-      description="View active client profiles, treatment progress, and upcoming visit timelines."
+      description="View active patient profiles, treatment progress, and upcoming visit timelines."
       stats={[
-        { label: 'Active Clients', value: String(savedClientRows.length) },
+        { label: 'Active Patients', value: String(savedClientRows.length) },
         { label: 'Treatment Plans', value: String(savedTreatmentRows.length) },
         { label: 'Services', value: getSavedServiceNames().length },
       ]}
@@ -1792,12 +1881,13 @@ export function ClientsPage() {
         Mobile: row.mobile,
       })), 'Visit Date': todayIsoDate() })}
       renderSummary={(rows, rowToValues) => <ClientMonthlySummary rows={rows} rowToValues={rowToValues} />}
-      rowActions={(row, openEditRecord) => (
+      rowActions={(row, openEditRecord, deleteRecord) => (
         <ActionMenu
           label="Actions"
           items={[
-            { label: 'View Profile', description: 'Open client details', onClick: () => setSelectedClient(row) },
-            { label: 'Edit Client', description: 'Update client fields', onClick: () => openEditRecord(row) },
+            { label: 'View Profile', description: 'Open patient details', onClick: () => setSelectedClient(row) },
+            { label: 'Edit Patient', description: 'Update patient fields', onClick: () => openEditRecord(row) },
+            { label: 'Delete Patient', description: 'Remove this patient record', danger: true, onClick: () => deleteRecord(row) },
           ]}
         />
       )}
@@ -2145,6 +2235,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   ).map(savedClientName).filter(Boolean)));
   const treatmentServiceIndex = active.columns.indexOf('Service');
   const treatmentMedicineIndex = active.columns.indexOf('Medicine');
+  const displayColumn = (column) => (column === 'Client' ? 'Patient Name' : column);
 
   const optionsForColumn = (column) => {
     if (active.id === 'treatments' && column === 'Medicine') return medicineOptions;
@@ -2625,7 +2716,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
                     setFilterText('');
                   }}
                 >
-                  {column}
+                  {displayColumn(column)}
                 </button>
               ))}
             </div>
@@ -2674,13 +2765,13 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       <Card title={active.title ?? active.label} subtitle={active.description}>
         <div className="data-table adaptive-table" style={{ '--table-columns': active.columns.length }}>
           <div className="table-head">
-            {active.columns.map((column) => <div key={column}>{column}</div>)}
+            {active.columns.map((column) => <div key={column}>{displayColumn(column)}</div>)}
             <div />
           </div>
           {filteredRows.length ? (
             filteredRows.map((row, index) => (
               <div className="data-row" key={`${active.id}-${index}`}>
-                {row.map((cell, cellIndex) => <div data-label={active.columns[cellIndex]} key={`${active.columns[cellIndex]}-${index}`}>{cell}</div>)}
+                {row.map((cell, cellIndex) => <div data-label={displayColumn(active.columns[cellIndex])} key={`${active.columns[cellIndex]}-${index}`}>{cell}</div>)}
                 <div><button className="row-link" type="button" onClick={() => openEdit(row)}>Open</button></div>
               </div>
             ))
@@ -2753,14 +2844,14 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
             <div className="modal-body detail-grid">
               {active.columns.map((column, index) => (
                 <label className="field-block" key={column}>
-                  <span>{column}</span>
+                  <span>{displayColumn(column)}</span>
                   {isTreatmentClient(column) ? (
                     <>
                       <input
                         className="lead-input"
                         value={draftRow[index] ?? ''}
                         onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
-                        placeholder={clientOptions.length ? 'Search or select client' : 'Add a client first'}
+                        placeholder={clientOptions.length ? 'Search or select patient' : 'Add a patient first'}
                         list="treatment-client-options-add"
                         autoComplete="off"
                       />
@@ -2781,7 +2872,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
                         else setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? value : cell)));
                       }}
                     >
-                      {!isMedicineColumn && <option value="">{optionsForColumn(column).length ? `Select ${column.toLowerCase()}` : `Add ${column.toLowerCase()} first`}</option>}
+                      {!isMedicineColumn && <option value="">{optionsForColumn(column).length ? `Select ${displayColumn(column).toLowerCase()}` : `Add ${displayColumn(column).toLowerCase()} first`}</option>}
                       {optionsForColumn(column).map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
                     </select>
                   ) : (
@@ -2789,7 +2880,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
                       className="lead-input"
                       value={draftRow[index] ?? ''}
                       onChange={(event) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
-                      placeholder={`Enter ${column.toLowerCase()}`}
+                      placeholder={`Enter ${displayColumn(column).toLowerCase()}`}
                     />
                   )}
                 </label>
@@ -2886,14 +2977,14 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
             <div className="modal-body detail-grid">
               {active.columns.map((column, index) => (
                 <label className="field-block" key={column}>
-                  <span>{column}</span>
+                  <span>{displayColumn(column)}</span>
                   {isTreatmentClient(column) ? (
                     <>
                       <input
                         className="lead-input"
                         value={editRow[index] ?? ''}
                         onChange={(event) => setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
-                        placeholder={clientOptions.length ? 'Search or select client' : 'Add a client first'}
+                        placeholder={clientOptions.length ? 'Search or select patient' : 'Add a patient first'}
                         list="treatment-client-options-edit"
                         autoComplete="off"
                       />
@@ -2914,7 +3005,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
                         else setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? value : cell)));
                       }}
                     >
-                      {!isMedicineColumn && <option value="">{optionsForColumn(column).length ? `Select ${column.toLowerCase()}` : `Add ${column.toLowerCase()} first`}</option>}
+                      {!isMedicineColumn && <option value="">{optionsForColumn(column).length ? `Select ${displayColumn(column).toLowerCase()}` : `Add ${displayColumn(column).toLowerCase()} first`}</option>}
                       {optionsForColumn(column).map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
                     </select>
                   ) : (
@@ -2922,7 +3013,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
                       className="lead-input"
                       value={editRow[index] ?? ''}
                       onChange={(event) => setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? event.target.value : cell)))}
-                      placeholder={`Enter ${column.toLowerCase()}`}
+                      placeholder={`Enter ${displayColumn(column).toLowerCase()}`}
                     />
                   )}
                 </label>
@@ -2991,7 +3082,7 @@ const operationsTabs = [
     id: 'treatments',
     label: 'Treatment',
     singular: 'plan',
-    description: 'Client journeys, goals, services, medicine, dosage, timing, and therapy progress.',
+    description: 'Patient journeys, goals, services, medicine, dosage, timing, and therapy progress.',
     columns: ['Client', 'Service', 'Medicine', 'Dose', 'Timing', 'Goal', 'Duration', 'Status'],
     rows: treatmentPlans.map((plan) => [plan.client, plan.service, '', '', '', plan.goal, plan.duration, plan.status]),
   },
@@ -3047,7 +3138,7 @@ const operationsTabs = [
     id: 'portal',
     label: 'Portal',
     singular: 'portal feature',
-    description: 'Client-side booking, forms, invoices, and progress uploads.',
+    description: 'Patient-side booking, forms, invoices, and progress uploads.',
     columns: ['Feature', 'Owner', 'Mode', 'Status'],
     rows: portalFeatures.map((item) => [item.feature, item.owner, item.mode, item.status]),
   },
@@ -3232,7 +3323,7 @@ function LegacyFormsPage() {
           </div>
         </div>
         <button className="pill" type="button" style={{ marginBottom: 16 }} onClick={() => setView('list')}>← Back to Forms</button>
-        <Card title="Form Preview" subtitle="This is how the form appears to a client.">
+        <Card title="Form Preview" subtitle="This is how the form appears to a patient.">
           {submitted ? (
             <div className="empty-state">
               <strong>Form submitted!</strong>
@@ -3303,7 +3394,7 @@ function LegacyFormsPage() {
               <input className="lead-input" value={fTitle} onChange={(e) => setFTitle(e.target.value)} placeholder="e.g. Patient Intake Form, Assessment Form" />
             </label>
             <label className="field-block">
-              <span className="subtle">Description (shown to client)</span>
+              <span className="subtle">Description (shown to patient)</span>
               <input className="lead-input" value={fDesc} onChange={(e) => setFDesc(e.target.value)} placeholder="Brief note shown above the form" />
             </label>
             <label className="field-block" style={{ maxWidth: 200 }}>
@@ -3474,13 +3565,13 @@ export function AppointmentsPage() {
             },
           },
           {
-            label: 'Check in client',
+            label: 'Check in patient',
             onClick: () => {
               setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 5 ? 'Checked-in' : cell) : item));
               setActionMessage(`${row[0]} checked in and ready for consultation.`);
             },
           },
-          { label: 'Open client journey', onClick: () => navigate(`/journey?client=${encodeURIComponent(row[0])}`) },
+          { label: 'Open patient journey', onClick: () => navigate(`/journey?client=${encodeURIComponent(row[0])}`) },
           {
             label: 'Send WhatsApp reminder',
             onClick: () => {
@@ -3793,7 +3884,7 @@ export function TreatmentPlansPage() {
 
   const buildDietPlanPrintHtml = (plan) => {
     const mealRows = (plan.meals ?? []).map((meal) => `<tr><td>${escapeHtml(meal.time)}</td><td>${escapeHtml(meal.meal)}</td><td>${escapeHtml(meal.food)}</td><td>${escapeHtml(meal.notes)}</td></tr>`).join('');
-    return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(plan.client || 'Diet Plan')}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#163f33}h1{margin:0 0 8px}p{margin:4px 0 12px;color:#4f6f65;white-space:pre-wrap}.toolbar{display:flex;gap:10px;margin-bottom:20px}.toolbar button{border:1px solid #bcd4cc;background:#087c68;color:#fff;border-radius:8px;padding:10px 14px;font-weight:700}.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:20px 0}.box{border:1px solid #d6e4df;border-radius:8px;padding:10px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #d6e4df;padding:10px;text-align:left;vertical-align:top;white-space:pre-wrap}th{background:#eaf5f1}@page{margin:16mm}@media print{.toolbar{display:none}body{margin:0;color:#163f33}thead th{background:#eaf5f1!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><h1>Diet Plan</h1><p>Mom's Pathshala</p><div class="meta"><div class="box"><strong>Client</strong><br>${escapeHtml(plan.client)}</div><div class="box"><strong>Service</strong><br>${escapeHtml(plan.service)}</div><div class="box"><strong>Goal</strong><br>${escapeHtml(plan.goal)}</div><div class="box"><strong>Duration</strong><br>${escapeHtml(plan.duration)}</div><div class="box"><strong>Calories</strong><br>${escapeHtml(plan.calories)}</div><div class="box"><strong>Water</strong><br>${escapeHtml(plan.water)}</div></div><h2>Meal Schedule</h2><table><thead><tr><th>Time</th><th>Meal</th><th>Food</th><th>Notes</th></tr></thead><tbody>${mealRows || '<tr><td colspan="4">No meals added.</td></tr>'}</tbody></table><h2>Instructions</h2><p>${escapeHtml(plan.instructions)}</p><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},500)});<\/script></body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(plan.client || 'Diet Plan')}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#163f33}h1{margin:0 0 8px}p{margin:4px 0 12px;color:#4f6f65;white-space:pre-wrap}.toolbar{display:flex;gap:10px;margin-bottom:20px}.toolbar button{border:1px solid #bcd4cc;background:#087c68;color:#fff;border-radius:8px;padding:10px 14px;font-weight:700}.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:20px 0}.box{border:1px solid #d6e4df;border-radius:8px;padding:10px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #d6e4df;padding:10px;text-align:left;vertical-align:top;white-space:pre-wrap}th{background:#eaf5f1}@page{margin:16mm}@media print{.toolbar{display:none}body{margin:0;color:#163f33}thead th{background:#eaf5f1!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><h1>Diet Plan</h1><p>Mom's Pathshala</p><div class="meta"><div class="box"><strong>Patient Name</strong><br>${escapeHtml(plan.client)}</div><div class="box"><strong>Service</strong><br>${escapeHtml(plan.service)}</div><div class="box"><strong>Goal</strong><br>${escapeHtml(plan.goal)}</div><div class="box"><strong>Duration</strong><br>${escapeHtml(plan.duration)}</div><div class="box"><strong>Calories</strong><br>${escapeHtml(plan.calories)}</div><div class="box"><strong>Water</strong><br>${escapeHtml(plan.water)}</div></div><h2>Meal Schedule</h2><table><thead><tr><th>Time</th><th>Meal</th><th>Food</th><th>Notes</th></tr></thead><tbody>${mealRows || '<tr><td colspan="4">No meals added.</td></tr>'}</tbody></table><h2>Instructions</h2><p>${escapeHtml(plan.instructions)}</p><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},500)});<\/script></body></html>`;
   };
 
   const openDietPdf = (plan) => {
@@ -3813,16 +3904,16 @@ export function TreatmentPlansPage() {
     window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer');
   };
 
-  const PLAN_COLS = ['Client', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing', 'Status'];
+  const PLAN_COLS = ['Patient Name', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing', 'Status'];
   const TMPL_COLS = ['Template Name', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing'];
-  const DIET_COLS = ['Client', 'Service', 'Goal', 'Duration', 'Meals', 'Calories', 'Water'];
+  const DIET_COLS = ['Patient Name', 'Service', 'Goal', 'Duration', 'Meals', 'Calories', 'Water'];
 
   return (
     <section className="module-page">
       <div className="module-hero">
         <div>
           <h1>Treatment Plans</h1>
-          <p>Track client treatment journeys, goals, therapy schedules, and consultant notes.</p>
+          <p>Track patient treatment journeys, goals, therapy schedules, and consultant notes.</p>
         </div>
         <div className="module-stats">
           <div className="mini-stat"><span>Active</span><strong>{plans.filter((r) => (r[7] ?? r[4]) === 'Active').length}</strong></div>
@@ -3838,7 +3929,7 @@ export function TreatmentPlansPage() {
       </div>
 
       {activeTab === 'plans' && (
-        <Card title="Treatment Plans" subtitle="All client treatment records." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openNewPlan}>+ Add Treatment Plan</button><ActionMenu label="Actions" items={[{ label: 'Add treatment plan', description: 'Create a new client plan', onClick: openNewPlan }]} /></div>}>
+        <Card title="Treatment Plans" subtitle="All patient treatment records." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openNewPlan}>+ Add Treatment Plan</button><ActionMenu label="Actions" items={[{ label: 'Add treatment plan', description: 'Create a new patient plan', onClick: openNewPlan }]} /></div>}>
             <div className="table adaptive-table" style={{ '--table-columns': PLAN_COLS.length }}>
               <div className="table-head">
                 {PLAN_COLS.map((h) => <div key={h}>{h}</div>)}
@@ -3863,7 +3954,7 @@ export function TreatmentPlansPage() {
       )}
 
       {activeTab === 'diet' && (
-        <Card title="Diet Plans" subtitle="Create time-wise meal plans for nutrition, fat loss, and muscle gain clients." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openNewDietPlan}>+ Add Diet Plan</button><ActionMenu label="Actions" items={[{ label: 'Add diet plan', description: 'Build a meal schedule', onClick: openNewDietPlan }]} /></div>}>
+        <Card title="Diet Plans" subtitle="Create time-wise meal plans for nutrition, fat loss, and muscle gain patients." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openNewDietPlan}>+ Add Diet Plan</button><ActionMenu label="Actions" items={[{ label: 'Add diet plan', description: 'Build a meal schedule', onClick: openNewDietPlan }]} /></div>}>
           <div className="table adaptive-table" style={{ '--table-columns': DIET_COLS.length }}>
             <div className="table-head">
               {DIET_COLS.map((h) => <div key={h}>{h}</div>)}
@@ -3943,8 +4034,8 @@ export function TreatmentPlansPage() {
                 </label>
               )}
               <label className="field-block">
-                <span>Client</span>
-                <input className="lead-input" list="treatment-client-options" value={planForm.client} onChange={(e) => setPlanForm((f) => ({ ...f, client: e.target.value }))} placeholder={clientNames.length ? 'Search or select client...' : 'Client name'} />
+                <span>Patient Name</span>
+                <input className="lead-input" list="treatment-client-options" value={planForm.client} onChange={(e) => setPlanForm((f) => ({ ...f, client: e.target.value }))} placeholder={clientNames.length ? 'Search or select patient...' : 'Patient name'} />
                 <datalist id="treatment-client-options">{clientNames.map((name) => <option key={name} value={name} />)}</datalist>
               </label>
               <label className="field-block">
@@ -4057,7 +4148,7 @@ export function TreatmentPlansPage() {
                 <button className="pill" type="button" onClick={() => applyDietPreset('muscleGain')}>Muscle Gain</button>
                 <button className="pill" type="button" onClick={() => applyDietPreset('nutrition')}>Nutrition</button>
               </div>
-              <label className="field-block"><span>Client</span><input className="lead-input" list="diet-client-options" value={dietForm.client} onChange={(e) => setDietForm((f) => ({ ...f, client: e.target.value }))} placeholder={clientNames.length ? 'Search or select client...' : 'Client name'} /><datalist id="diet-client-options">{clientNames.map((name) => <option key={name} value={name} />)}</datalist></label>
+              <label className="field-block"><span>Patient Name</span><input className="lead-input" list="diet-client-options" value={dietForm.client} onChange={(e) => setDietForm((f) => ({ ...f, client: e.target.value }))} placeholder={clientNames.length ? 'Search or select patient...' : 'Patient name'} /><datalist id="diet-client-options">{clientNames.map((name) => <option key={name} value={name} />)}</datalist></label>
               <label className="field-block"><span>Service</span><select className="lead-input" value={dietForm.service} onChange={(e) => setDietForm((f) => ({ ...f, service: e.target.value }))}>{serviceOptions.map((service) => <option key={service}>{service}</option>)}</select></label>
               <label className="field-block"><span>Goal</span><input className="lead-input" value={dietForm.goal} onChange={(e) => setDietForm((f) => ({ ...f, goal: e.target.value }))} /></label>
               <label className="field-block"><span>Duration</span><input className="lead-input" value={dietForm.duration} onChange={(e) => setDietForm((f) => ({ ...f, duration: e.target.value }))} /></label>
@@ -4460,8 +4551,8 @@ export function CommunicationPage() {
 export function ClientPortalPage() {
   return (
     <GenericModulePage
-      title="Client Portal"
-      description="Preview client-side access for appointment booking, forms, payment history, invoices, diet plan, and progress uploads."
+      title="Patient Portal"
+      description="Preview patient-side access for appointment booking, forms, payment history, invoices, diet plan, and progress uploads."
       stats={[
         { label: 'Enabled', value: portalFeatures.filter((item) => item.status === 'Enabled').length },
         { label: 'Planned', value: portalFeatures.filter((item) => item.status === 'Planned').length },
@@ -4550,9 +4641,9 @@ export function ReportsPage() {
 
   // Report map
   const reportMap = {
-    treatments: { id: 'treatments', title: 'Treatment Report', columns: ['Client', 'Service', 'Goal', 'Duration', 'Status'], rows: treatmentRows },
-    appointments: { id: 'appointments', title: 'Appointment Report', columns: ['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status'], rows: appointmentRows },
-    finance_payments: { id: 'payments', title: 'Payments Report', columns: ['Client', 'Invoice', 'Amount', 'Status', 'Paid On'], rows: paymentRows },
+    treatments: { id: 'treatments', title: 'Treatment Report', columns: ['Patient Name', 'Service', 'Goal', 'Duration', 'Status'], rows: treatmentRows },
+    appointments: { id: 'appointments', title: 'Appointment Report', columns: ['Patient Name', 'Mobile', 'Date', 'Time', 'Type', 'Status'], rows: appointmentRows },
+    finance_payments: { id: 'payments', title: 'Payments Report', columns: ['Patient Name', 'Invoice', 'Amount', 'Status', 'Paid On'], rows: paymentRows },
     finance_accounts: { id: 'accounts', title: 'Accounts Report', columns: ['Item', 'Type', 'Amount', 'Mode', 'Status'], rows: accountRows },
     finance_summary: { id: 'revenue-summary', title: 'Revenue & Business Summary', columns: ['Category', 'Details', 'Amount'], rows: summaryRows },
     forms: { id: 'forms', title: 'Form Responses Report', columns: ['Name', 'Form', 'Submitted', 'Phone', 'Status'], rows: formRows },
@@ -4963,10 +5054,10 @@ export function BranchesPage() {
 
       <Card title="Cloud Data Scope" subtitle="Workspace separation is disabled for this live installation.">
         <div className="action-note">
-          <strong>Single source of truth.</strong> Clients, appointments, payments, forms, users, and reports are saved under the same shared workspace from every browser and device.
+          <strong>Single source of truth.</strong> Patients, appointments, payments, forms, users, and reports are saved under the same shared workspace from every browser and device.
         </div>
         <div className="sheet-actions">
-          <button className="pill primary-action" type="button" onClick={() => navigate('/clients')}>Open Clients <ChevronRight /></button>
+          <button className="pill primary-action" type="button" onClick={() => navigate('/clients')}>Open Patients <ChevronRight /></button>
           <button className="pill" type="button" onClick={() => navigate('/appointments')}>Open Appointments <ChevronRight /></button>
           <button className="pill" type="button" onClick={() => navigate('/reports')}>Open Reports <ChevronRight /></button>
         </div>

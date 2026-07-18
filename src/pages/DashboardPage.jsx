@@ -48,7 +48,7 @@ export function DashboardPage() {
   };
   const quickActions = [
     ['Add Lead', '/crm?action=add', 'Create new enquiry'],
-    ['Add Client', '/clients?action=add', 'Create client profile'],
+    ['Add Patient', '/clients?action=add', 'Create patient profile'],
     ['Book Appointment', '/appointments?action=add', 'Schedule visit'],
     ['Send Form', '/operations?tab=forms', 'Open forms'],
     ['Create Invoice', '/finance?tab=payments&action=add', 'Prepare bill'],
@@ -62,16 +62,16 @@ export function DashboardPage() {
       <section className="dashboard-primary-workflow" aria-labelledby="client-journey-title">
         <div className="workflow-copy">
           <span className="workflow-label">Today&apos;s work</span>
-          <h1 id="client-journey-title">Client Journey Command Center</h1>
+          <h1 id="client-journey-title">Patient Journey Command Center</h1>
           <p>Reception, appointment, form, consultation, treatment ane payment ekaj focused flow ma complete karo.</p>
         </div>
-        <div className="workflow-summary" aria-label="Client journey summary">
-          <span><strong>{clients.length}</strong> Registered clients</span>
+        <div className="workflow-summary" aria-label="Patient journey summary">
+          <span><strong>{clients.length}</strong> Registered patients</span>
           <span><strong>{todaySchedule.length}</strong> Today&apos;s visits</span>
           <span><strong>{actionQueue.length}</strong> Pending actions</span>
         </div>
         <button className="workflow-primary-action" type="button" onClick={() => navigate('/journey')}>
-          Open Client Journey <ChevronRight />
+          Open Patient Journey <ChevronRight />
         </button>
       </section>
 
@@ -164,7 +164,7 @@ export function DashboardPage() {
           ) : (
             <div className="empty-state compact-empty">
               <strong>No appointments today.</strong>
-              <p>Client Journey mathi check-in karo athva appointment book karo.</p>
+              <p>Patient Journey mathi check-in karo athva appointment book karo.</p>
             </div>
           )}
           <button className="footer-action button-reset" type="button" onClick={() => navigate('/appointments')}>
@@ -232,7 +232,7 @@ export function DashboardPage() {
                 <AlertList
                   rows={reminders}
                   emptyTitle="No reminders due."
-                  emptyCopy="Add birthdays in client profiles."
+                  emptyCopy="Add birthdays in patient profiles."
                   route="/clients"
                 />
               </Card>
@@ -431,7 +431,7 @@ function buildClientReminders(clients) {
       const dueIn = Math.ceil((next - new Date().setHours(0, 0, 0, 0)) / 86400000);
       if (dueIn < 0 || dueIn > 30) return;
       rows.push({
-        title: `${label}: ${name || 'Unnamed client'}`,
+        title: `${label}: ${name || 'Unnamed patient'}`,
         note: dueIn === 0 ? 'Today' : `In ${dueIn} day${dueIn === 1 ? '' : 's'}`,
         tone: dueIn <= 7 ? 'warm' : 'cool',
       });
@@ -455,7 +455,7 @@ function buildActionQueue(tasks, leads, payments, lowStockAlerts = [], reminders
     .slice(0, 2)
     .map((payment) => ({
       title: `Collect ${payment.invoice || 'pending invoice'}`,
-      note: `${payment.client || 'Client'} · ${payment.amount || 'Amount pending'}`,
+      note: `${payment.client || 'Patient'} · ${payment.amount || 'Amount pending'}`,
       route: '/payments',
       tone: 'hot',
     }));
@@ -560,7 +560,7 @@ function ModuleTable({ type, rows = [] }) {
           </>
         ) : (
           <>
-            <div>Client</div><div>Invoice #</div><div>Amount</div><div>Status</div><div>Paid On</div><div />
+            <div>Patient Name</div><div>Invoice #</div><div>Amount</div><div>Status</div><div>Paid On</div><div />
           </>
         )}
       </div>

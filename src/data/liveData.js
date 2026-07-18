@@ -67,7 +67,7 @@ export function loadLiveDashboardData(branch) {
     revenueSeries: buildRevenueSeries(payments),
     todaySchedule: todaysAppointments.slice(0, 5).map((row) => ({
       time: row[3] || 'Time pending',
-      name: row[0] || 'Unnamed client',
+      name: row[0] || 'Unnamed patient',
       note: row[4] || 'Appointment',
       status: row[6] || row[5] || 'Pending',
       tone: String(row[6] ?? row[5] ?? '').toLowerCase().includes('confirm') ? 'good' : 'warn',

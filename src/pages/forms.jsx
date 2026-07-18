@@ -54,8 +54,8 @@ const OPTION_PRESETS = [
 ];
 const FORM_TEMPLATES = [
   {
-    name: 'Client Intake',
-    title: 'Client Intake Form',
+    name: 'Patient Intake',
+    title: 'Patient Intake Form',
     description: 'Basic client registration and first visit details.',
     fields: [
       ['text', 'Full name', { required: true, placeholder: 'Enter full name', width: 'half' }],
@@ -72,7 +72,7 @@ const FORM_TEMPLATES = [
     title: 'Health Assessment Form',
     description: 'Symptoms, history, lifestyle, and vitals before consultation.',
     fields: [
-      ['text', 'Client name', { required: true, width: 'half' }],
+      ['text', 'Patient name', { required: true, width: 'half' }],
       ['phone', 'Mobile number', { required: true, width: 'half' }],
       ['multiselect', 'Current symptoms', { options: ['Acidity', 'Bloating', 'Constipation', 'Fatigue', 'Hair fall', 'Joint pain', 'Stress', 'Weight gain'] }],
       ['textarea', 'Medical history', { placeholder: 'Diabetes, BP, thyroid, surgery, allergy...' }],
@@ -87,7 +87,7 @@ const FORM_TEMPLATES = [
     title: 'Treatment Consent Form',
     description: 'Consent and declaration before starting treatment.',
     fields: [
-      ['text', 'Client name', { required: true, width: 'half' }],
+      ['text', 'Patient name', { required: true, width: 'half' }],
       ['phone', 'Mobile number', { required: true, width: 'half' }],
       ['paragraph', 'Consent note', { label: 'I understand the suggested treatment, diet, lifestyle guidance, and follow-up process.' }],
       ['checkbox', 'Consent confirmation', { required: true, placeholder: 'I agree to start treatment.' }],
@@ -100,7 +100,7 @@ const FORM_TEMPLATES = [
     title: 'Follow-up Assessment Form',
     description: 'Progress review before the next consultation.',
     fields: [
-      ['text', 'Client name', { required: true, width: 'half' }],
+      ['text', 'Patient name', { required: true, width: 'half' }],
       ['phone', 'Mobile number', { required: true, width: 'half' }],
       ['number', 'Current weight', { width: 'half' }],
       ['yesno', 'Medicine taken regularly?', { required: true, width: 'half' }],

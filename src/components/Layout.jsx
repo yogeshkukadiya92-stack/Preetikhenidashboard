@@ -33,7 +33,7 @@ const iconByPath = {
   '/medicines': FileIcon,
 };
 
-const sectionOrder = ['Overview', 'Clients & CRM', 'Care Programs', 'Operations', 'Finance & Reports', 'Administration'];
+const sectionOrder = ['Overview', 'Patients & CRM', 'Care Programs', 'Operations', 'Finance & Reports', 'Administration'];
 
 function getCurrentDateRange() {
   const today = new Date();
@@ -96,7 +96,7 @@ export function Layout() {
     else if (term.includes('setting') || term.includes('workspace') || term.includes('tax')) navigate('/settings');
     else if (term.includes('report') || term.includes('analytics')) navigate('/reports');
     else if (term.includes('pay') || term.includes('invoice') || term.includes('receipt')) navigate('/finance?tab=payments');
-    else if (term.includes('client')) navigate('/clients');
+    else if (term.includes('client') || term.includes('patient')) navigate('/clients');
     else if (term.includes('appoint') || term.includes('schedule')) navigate('/appointments');
     else if (term.includes('form')) navigate('/operations?tab=forms');
     else navigate('/crm');
@@ -190,7 +190,7 @@ export function Layout() {
         <header className="topbar">
           <form className="search" onSubmit={handleSearch}>
             <SearchIcon />
-            <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search leads, clients, stock, payments..." aria-label="Search" />
+            <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search leads, patients, stock, payments..." aria-label="Search" />
             <button className="kbd" type="submit">Go</button>
           </form>
           <button className="date-pill" type="button" onClick={() => setDateRange((current) => (current === getCurrentDateRange() ? new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : getCurrentDateRange()))}>

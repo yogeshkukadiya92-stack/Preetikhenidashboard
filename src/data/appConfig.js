@@ -1,10 +1,10 @@
 export const navItems = [
   { path: '/', label: 'Dashboard', section: 'Overview' },
-  { path: '/crm', label: 'CRM', section: 'Clients & CRM' },
-  { path: '/clients', label: 'Clients', section: 'Clients & CRM' },
-  { path: '/journey', label: 'Client Journey', section: 'Clients & CRM' },
-  { path: '/appointments', label: 'Appointments', section: 'Clients & CRM' },
-  { path: '/forms', label: 'Forms', section: 'Clients & CRM' },
+  { path: '/crm', label: 'CRM', section: 'Patients & CRM' },
+  { path: '/clients', label: 'Patients', section: 'Patients & CRM' },
+  { path: '/journey', label: 'Patient Journey', section: 'Patients & CRM' },
+  { path: '/appointments', label: 'Appointments', section: 'Patients & CRM' },
+  { path: '/forms', label: 'Forms', section: 'Patients & CRM' },
   { path: '/services', label: 'Services', section: 'Care Programs' },
   { path: '/treatments', label: 'Treatments', section: 'Care Programs' },
   { path: '/packages', label: 'Packages', section: 'Care Programs' },
@@ -14,7 +14,7 @@ export const navItems = [
   { path: '/medicines', label: 'Medicines', section: 'Operations' },
   { path: '/inventory', label: 'Inventory', section: 'Operations' },
   { path: '/communication', label: 'Communication', section: 'Operations' },
-  { path: '/client-portal', label: 'Client Portal', section: 'Operations' },
+  { path: '/client-portal', label: 'Patient Portal', section: 'Operations' },
   { path: '/finance', label: 'Finance', section: 'Finance & Reports' },
   { path: '/payments', label: 'Payments', section: 'Finance & Reports' },
   { path: '/accounts', label: 'Accounts', section: 'Finance & Reports' },
@@ -39,7 +39,7 @@ export const integrations = [
     name: 'WhatsApp Business',
     type: 'Messaging',
     status: 'Available',
-    description: 'Send follow-up reminders and missed-appointment alerts to leads and clients.',
+    description: 'Send follow-up reminders and missed-appointment alerts to leads and patients.',
     lastSync: 'Ready to connect',
     primaryAction: 'Connect Channel',
   },
@@ -53,7 +53,7 @@ export const integrations = [
   },
 ];
 
-export const sheetTabs = ['Leads', 'Clients', 'Appointments', 'Payments', 'Reports'];
+export const sheetTabs = ['Leads', 'Patients', 'Appointments', 'Payments', 'Reports'];
 export const syncPreviewRows = [];
 
 export const kpis = [
