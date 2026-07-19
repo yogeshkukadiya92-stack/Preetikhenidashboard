@@ -880,6 +880,12 @@ textarea:focus-visible,
 .data-row > div {
   min-width: 0;
   overflow-wrap: anywhere;
+  justify-self: stretch;
+  text-align: left;
+}
+.selectable-table > .table-head > div:not(.select-cell),
+.selectable-table > .data-row > div:not(.select-cell) {
+  padding-inline: 0;
 }
 .adaptive-table > .table-head > div:first-child,
 .adaptive-table > .data-row > div:first-child {

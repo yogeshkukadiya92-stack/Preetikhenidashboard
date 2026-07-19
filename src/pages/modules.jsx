@@ -327,7 +327,7 @@ function ImportExportModule({
   const displayTitle = patientDisplayLabel(title);
   const displayHeader = (header) => (isClientModule || header === 'Client' ? patientDisplayLabel(header) : header);
   const tableGridTemplate = isClientModule
-    ? 'minmax(84px, 0.72fr) minmax(122px, 1fr) minmax(112px, 0.95fr) minmax(112px, 0.92fr) minmax(112px, 0.92fr) minmax(58px, 0.48fr) minmax(126px, 1.05fr) minmax(112px, 0.95fr)'
+    ? '104px 140px 132px 132px 132px 72px 160px 140px'
     : undefined;
   const tableStyle = tableGridTemplate
     ? { '--table-columns': headers.length, '--table-template': tableGridTemplate }
