@@ -6,6 +6,17 @@ import { loadLiveDashboardData } from '../data/liveData.js';
 import { useBranch } from '../context/BranchContext.jsx';
 import { ADMIN_EMAIL, clearAuthSession } from '../data/auth.js';
 
+function parsePaymentAmount(value) {
+  const numeric = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function hasPendingPayment(payment) {
+  const explicitPending = payment?.pendingAmount ?? payment?.['Pending Amount'];
+  if (explicitPending !== undefined && explicitPending !== '') return parsePaymentAmount(explicitPending) > 0;
+  return String(payment?.status ?? '').toLowerCase() !== 'paid';
+}
+
 const iconByPath = {
   '/': HomeIcon,
   '/crm': UsersIcon,
@@ -75,7 +86,7 @@ export function Layout() {
       const liveData = loadLiveDashboardData(currentBranch);
       setNotificationSummary({
         followUps: liveData.leads.filter((lead) => String(lead.status ?? '').toLowerCase().includes('follow')).length,
-        pendingPayments: liveData.payments.filter((payment) => String(payment.status ?? '').toLowerCase() !== 'paid').length,
+        pendingPayments: liveData.payments.filter(hasPendingPayment).length,
       });
     }
     setNotificationsOpen((current) => !current);

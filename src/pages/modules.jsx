@@ -74,6 +74,64 @@ function loadSavedObject(key, fallback = {}) {
 
 const TREATMENT_PLANS_KEY = 'ayurflow:Treatment Plans:rows:v2';
 
+function parseMoney(value) {
+  const numeric = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function formatMoneyValue(value) {
+  const amount = parseMoney(value);
+  if (!amount) return '';
+  return String(amount);
+}
+
+function calculatePendingAmount(totalAmount, paidAmount, status) {
+  const total = parseMoney(totalAmount);
+  const paid = parseMoney(paidAmount);
+  const normalizedStatus = String(status ?? '').toLowerCase();
+  if (normalizedStatus === 'paid') return 0;
+  if (normalizedStatus === 'pending' && !paid) return total;
+  return Math.max(total - paid, 0);
+}
+
+function normalizePaymentRecord(entry) {
+  const source = Array.isArray(entry)
+    ? (entry.length >= 7 ? {
+      client: entry[0],
+      invoice: entry[1],
+      amount: entry[2],
+      paidAmount: entry[3],
+      pendingAmount: entry[4],
+      status: entry[5],
+      paidOn: entry[6],
+    } : {
+      client: entry[0],
+      invoice: entry[1],
+      amount: entry[2],
+      status: entry[3],
+      paidOn: entry[4],
+      paidAmount: entry[5],
+      pendingAmount: entry[6],
+    })
+    : (entry ?? {});
+  const status = source.Status ?? source.status ?? 'Paid';
+  const totalAmount = source['Total Amount'] ?? source.totalAmount ?? source.Amount ?? source.amount ?? '';
+  const paidAmount = source['Paid Amount'] ?? source.paidAmount ?? (String(status).toLowerCase() === 'paid' ? totalAmount : '');
+  const sourcePendingAmount = source['Pending Amount'] ?? source.pendingAmount;
+  const pendingAmount = sourcePendingAmount !== undefined && sourcePendingAmount !== ''
+    ? sourcePendingAmount
+    : calculatePendingAmount(totalAmount, paidAmount, status);
+  return {
+    client: source.Client ?? source.client ?? '',
+    invoice: source.Invoice ?? source.invoice ?? '',
+    amount: formatMoneyValue(totalAmount),
+    paidAmount: formatMoneyValue(paidAmount),
+    pendingAmount: formatMoneyValue(pendingAmount),
+    status,
+    paidOn: source['Paid On'] ?? source.paidOn ?? '',
+  };
+}
+
 function patientDisplayLabel(label) {
   if (label === 'Client') return 'Patient Name';
   if (label === 'Clients') return 'Patients';
@@ -324,6 +382,7 @@ function ImportExportModule({
   const [searchParams, setSearchParams] = useSearchParams();
   const { branchKey } = useBranch();
   const isClientModule = title === 'Clients';
+  const isPaymentsModule = title === 'Payments';
   const displayTitle = patientDisplayLabel(title);
   const displayHeader = (header) => (isClientModule || header === 'Client' ? patientDisplayLabel(header) : header);
   const tableGridTemplate = isClientModule
@@ -509,11 +568,19 @@ function ImportExportModule({
       setDraftRecord((current) => ({ ...current, [header]: clientId }));
       return;
     }
-    setter((current) => ({
-      ...current,
-      [header]: isClientModule && header === 'Client ID' ? normalizeClientId(value) : value,
-      ...(title === 'Clients' && header === 'Birthday' ? { Age: ageFromBirthday(value) } : {}),
-    }));
+    setter((current) => {
+      const next = {
+        ...current,
+        [header]: isClientModule && header === 'Client ID' ? normalizeClientId(value) : value,
+        ...(title === 'Clients' && header === 'Birthday' ? { Age: ageFromBirthday(value) } : {}),
+      };
+      if (isPaymentsModule && ['Total Amount', 'Paid Amount', 'Status'].includes(header)) {
+        if (next.Status === 'Paid') next['Paid Amount'] = next['Total Amount'];
+        if (next.Status === 'Pending') next['Paid Amount'] = '';
+        next['Pending Amount'] = calculatePendingAmount(next['Total Amount'], next['Paid Amount'], next.Status);
+      }
+      return next;
+    });
   };
 
   const saveDraftRecord = () => {
@@ -645,6 +712,22 @@ function ImportExportModule({
     navigate(path);
   };
 
+  const displayStats = isPaymentsModule ? [
+    {
+      label: 'Total',
+      value: `₹${rows.reduce((sum, row) => sum + parseMoney(rowToValues(row)['Total Amount']), 0).toLocaleString('en-IN')}`,
+    },
+    {
+      label: 'Paid',
+      value: `₹${rows.reduce((sum, row) => sum + parseMoney(rowToValues(row)['Paid Amount']), 0).toLocaleString('en-IN')}`,
+    },
+    {
+      label: 'Pending',
+      value: `₹${rows.reduce((sum, row) => sum + parseMoney(rowToValues(row)['Pending Amount']), 0).toLocaleString('en-IN')}`,
+    },
+    { label: 'Invoices', value: rows.length },
+  ] : stats;
+
   const defaultRowAction = (row) => (
     <ActionMenu
       compact
@@ -675,7 +758,7 @@ function ImportExportModule({
           <p>{isClientModule ? patientDisplayText(description) : description}</p>
         </div>
         <div className="module-stats">
-          {stats.map((stat) => (
+          {displayStats.map((stat) => (
             <div className="mini-stat" key={stat.label}>
               <span>{stat.label}</span>
               <strong>{stat.value}</strong>
@@ -768,7 +851,7 @@ function ImportExportModule({
                     <select
                       className="lead-input"
                       value={draftRecord[header] ?? ''}
-                      onChange={(event) => setDraftRecord((current) => ({ ...current, [header]: event.target.value }))}
+                      onChange={(event) => updateRecordField(setDraftRecord, header, event.target.value)}
                     >
                       <option value="">{fieldOptions[header].length ? `Select ${displayHeader(header).toLowerCase()}` : `Add ${displayHeader(header).toLowerCase()} first`}</option>
                       {fieldOptions[header].map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
@@ -778,7 +861,7 @@ function ImportExportModule({
                       className="lead-input"
                       type={fieldTypes[header] ?? 'text'}
                       value={draftRecord[header] ?? ''}
-                      readOnly={header === 'Invoice'}
+                      readOnly={header === 'Invoice' || (isPaymentsModule && header === 'Pending Amount')}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
                       onChange={(event) => updateRecordField(setDraftRecord, header, event.target.value)}
                       placeholder={`Enter ${displayHeader(header).toLowerCase()}`}
@@ -823,7 +906,7 @@ function ImportExportModule({
                       className="lead-input"
                       type={fieldTypes[header] ?? 'text'}
                       value={editRecord[header] ?? ''}
-                      readOnly={header === 'Invoice'}
+                      readOnly={header === 'Invoice' || (isPaymentsModule && header === 'Pending Amount')}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
                       onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
                       placeholder={`Enter ${displayHeader(header).toLowerCase()}`}
@@ -1332,7 +1415,7 @@ function ClientProfile({ client, onBack }) {
   const [apptForm, setApptForm] = useState(() => ({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' }));
   const [payForm, setPayForm] = useState(() => {
     const savedPayments = loadSavedArray(paymentsStorageKey, loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []));
-    return { invoice: nextInvoiceNumber(savedPayments), amount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) };
+    return { invoice: nextInvoiceNumber(savedPayments), amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) };
   });
   const hasMountedTreatmentTemplates = useRef(false);
 
@@ -1427,7 +1510,7 @@ function ClientProfile({ client, onBack }) {
 
   const allPayments = useMemo(() => {
     const saved = loadSavedState(paymentsStorageKey, loadSavedState('ayurflow:ayurflow-payments:rows:v3', []));
-    return saved.filter((row) => String(row.client ?? '').toLowerCase().includes(clientName.toLowerCase()));
+    return saved.map(normalizePaymentRecord).filter((row) => String(row.client ?? '').toLowerCase().includes(clientName.toLowerCase()));
   }, [clientName, paymentsStorageKey, refreshKey]);
 
   const saveTreatment = () => {
@@ -1467,11 +1550,11 @@ function ClientProfile({ client, onBack }) {
 
   const savePayment = () => {
     const current = loadSavedArray(paymentsStorageKey, []);
-    const updatedPayments = [{ client: clientName, invoice: payForm.invoice, amount: payForm.amount, status: payForm.status, paidOn: payForm.paidOn }, ...current];
+    const updatedPayments = [normalizePaymentRecord({ client: clientName, ...payForm }), ...current];
     window.localStorage.setItem(paymentsStorageKey, JSON.stringify(updatedPayments));
     setRefreshKey((k) => k + 1);
     setPayModal(false);
-    setPayForm({ invoice: nextInvoiceNumber(updatedPayments), amount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
+    setPayForm({ invoice: nextInvoiceNumber(updatedPayments), amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
   };
 
   return (
@@ -1575,15 +1658,17 @@ function ClientProfile({ client, onBack }) {
 
       {activeTab === 'payments' && (
         <Card title="Payments" subtitle={`Payments linked to ${clientName}`}>
-          <div className="table adaptive-table" style={{ '--table-columns': 4 }}>
+          <div className="table adaptive-table" style={{ '--table-columns': 6 }}>
             <div className="table-head">
-              {['Invoice', 'Amount', 'Status', 'Paid On'].map((h) => <div key={h}>{h}</div>)}
+              {['Invoice', 'Total', 'Paid', 'Pending', 'Status', 'Paid On'].map((h) => <div key={h}>{h}</div>)}
               <div />
             </div>
             {allPayments.length ? allPayments.map((row, i) => (
               <div className="data-row" key={i}>
                 <div>{row.invoice}</div>
                 <div>{row.amount}</div>
+                <div>{row.paidAmount}</div>
+                <div>{row.pendingAmount}</div>
                 <div>{row.status}</div>
                 <div>{row.paidOn}</div>
                 <div />
@@ -1738,12 +1823,20 @@ function ClientProfile({ client, onBack }) {
                 <input className="lead-input" value={payForm.invoice} readOnly aria-readonly="true" />
               </label>
               <label className="field-block">
-                <span>Amount</span>
-                <input className="lead-input" value={payForm.amount} onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value }))} placeholder="₹1500" />
+                <span>Total Amount</span>
+                <input className="lead-input" value={payForm.amount} onChange={(e) => setPayForm((f) => { const paidAmount = f.status === 'Paid' ? e.target.value : f.paidAmount; return { ...f, amount: e.target.value, paidAmount, pendingAmount: calculatePendingAmount(e.target.value, paidAmount, f.status) }; })} placeholder="₹1500" />
+              </label>
+              <label className="field-block">
+                <span>Paid Amount</span>
+                <input className="lead-input" value={payForm.paidAmount} onChange={(e) => setPayForm((f) => ({ ...f, paidAmount: e.target.value, pendingAmount: calculatePendingAmount(f.amount, e.target.value, f.status) }))} placeholder="₹500" />
+              </label>
+              <label className="field-block">
+                <span>Pending Amount</span>
+                <input className="lead-input" value={payForm.pendingAmount} readOnly aria-readonly="true" placeholder="Auto calculated" />
               </label>
               <label className="field-block">
                 <span>Status</span>
-                <select className="lead-input" value={payForm.status} onChange={(e) => setPayForm((f) => ({ ...f, status: e.target.value }))}>
+                <select className="lead-input" value={payForm.status} onChange={(e) => setPayForm((f) => { const paidAmount = e.target.value === 'Paid' ? f.amount : e.target.value === 'Pending' ? '' : f.paidAmount; return { ...f, status: e.target.value, paidAmount, pendingAmount: calculatePendingAmount(f.amount, paidAmount, e.target.value) }; })}>
                   <option>Paid</option><option>Pending</option><option>Partial</option>
                 </select>
               </label>
@@ -1915,25 +2008,22 @@ export function PaymentsPage() {
         { label: 'Pending', value: '0' },
         { label: 'Invoices', value: '0' },
       ]}
-      headers={['Client', 'Invoice', 'Amount', 'Status', 'Paid On']}
+      headers={['Client', 'Invoice', 'Total Amount', 'Paid Amount', 'Pending Amount', 'Status', 'Paid On']}
       seedRows={payments}
       filenameBase="ayurflow-payments"
-      fieldOptions={{ Client: clientNames }}
+      fieldOptions={{ Client: clientNames, Status: ['Paid', 'Partial', 'Pending'] }}
+      fieldTypes={{ 'Total Amount': 'number', 'Paid Amount': 'number', 'Pending Amount': 'number', 'Paid On': 'date' }}
       createDefaultRecord={(rows) => ({ Invoice: nextInvoiceNumber(rows), Status: 'Paid', 'Paid On': new Date().toISOString().slice(0, 10) })}
       rowToValues={(row) => ({
-        Client: row.client,
-        Invoice: row.invoice,
-        Amount: row.amount,
-        Status: row.status,
-        'Paid On': row.paidOn,
+        Client: normalizePaymentRecord(row).client,
+        Invoice: normalizePaymentRecord(row).invoice,
+        'Total Amount': normalizePaymentRecord(row).amount,
+        'Paid Amount': normalizePaymentRecord(row).paidAmount,
+        'Pending Amount': normalizePaymentRecord(row).pendingAmount,
+        Status: normalizePaymentRecord(row).status,
+        'Paid On': normalizePaymentRecord(row).paidOn,
       })}
-      parseRow={(entry) => ({
-        client: entry.Client ?? entry.client ?? '',
-        invoice: entry.Invoice ?? entry.invoice ?? '',
-        amount: entry.Amount ?? entry.amount ?? '',
-        status: entry.Status ?? entry.status ?? '',
-        paidOn: entry['Paid On'] ?? entry.paidOn ?? '',
-      })}
+      parseRow={normalizePaymentRecord}
     />
   );
 }
@@ -3177,8 +3267,11 @@ const financeTabs = [
     label: 'Payments',
     singular: 'payment',
     description: 'Invoices, collections, pending dues, partial payments, and receipts.',
-    columns: ['Client', 'Invoice', 'Amount', 'Status', 'Paid On'],
-    rows: payments.map((payment) => [payment.client, payment.invoice, payment.amount, payment.status, payment.paidOn]),
+    columns: ['Client', 'Invoice', 'Total Amount', 'Paid Amount', 'Pending Amount', 'Status', 'Paid On'],
+    rows: payments.map((payment) => {
+      const row = normalizePaymentRecord(payment);
+      return [row.client, row.invoice, row.amount, row.paidAmount, row.pendingAmount, row.status, row.paidOn];
+    }),
   },
   {
     id: 'accounts',
@@ -4610,9 +4703,13 @@ export function ReportsPage() {
     ...(opsTabs.inventory ?? []),
   ];
 
+  const toPaymentReportRow = (entry) => {
+    const row = normalizePaymentRecord(entry);
+    return [row.client, row.invoice, row.amount, row.paidAmount, row.pendingAmount, row.status, row.paidOn];
+  };
   const paymentObjRows = loadSavedState(branchKey('ayurflow-payments:rows:v3'), loadSavedState('ayurflow:ayurflow-payments:rows:v2', []))
-    .map((p) => [p.client ?? '', p.invoice ?? '', p.amount ?? '', p.status ?? '', p.paidOn ?? '']);
-  const paymentRows = [...(finTabs.payments ?? []), ...paymentObjRows];
+    .map(toPaymentReportRow);
+  const paymentRows = [...(finTabs.payments ?? []).map(toPaymentReportRow), ...paymentObjRows];
 
   const accountRows = [
     ...(finTabs.accounts ?? []),
@@ -4627,16 +4724,16 @@ export function ReportsPage() {
   // Summary rows for Finance → Revenue Summary tab
   const incomeTotal = sumAmount(accountRows.filter((r) => r[1] === 'Income'), 2);
   const expenseTotal = sumAmount(accountRows.filter((r) => r[1] === 'Expense'), 2);
-  const paidTotal = sumAmount(paymentRows.filter((r) => r[3] === 'Paid'), 2);
-  const pendingTotal = sumAmount(paymentRows.filter((r) => r[3] === 'Pending'), 2);
+  const paidTotal = sumAmount(paymentRows, 3);
+  const pendingTotal = sumAmount(paymentRows, 4);
 
   const summaryRows = [
     ['Income', `${accountRows.filter((r) => r[1] === 'Income').length} entries`, incomeTotal > 0 ? fmtRs(incomeTotal) : '—'],
     ['Expenses', `${accountRows.filter((r) => r[1] === 'Expense').length} entries`, expenseTotal > 0 ? fmtRs(expenseTotal) : '—'],
     ['Net Profit / Loss', '—', incomeTotal - expenseTotal !== 0 ? fmtRs(incomeTotal - expenseTotal) : '—'],
-    ['Payments Collected', `${paymentRows.filter((r) => r[3] === 'Paid').length} invoices`, paidTotal > 0 ? fmtRs(paidTotal) : '—'],
-    ['Payments Pending', `${paymentRows.filter((r) => r[3] === 'Pending').length} invoices`, pendingTotal > 0 ? fmtRs(pendingTotal) : '—'],
-    ['Partial Payments', `${paymentRows.filter((r) => r[3] === 'Partial').length} invoices`, '—'],
+    ['Payments Collected', `${paymentRows.filter((r) => r[5] === 'Paid').length} invoices`, paidTotal > 0 ? fmtRs(paidTotal) : '—'],
+    ['Payments Pending', `${paymentRows.filter((r) => parseMoney(r[4]) > 0).length} invoices`, pendingTotal > 0 ? fmtRs(pendingTotal) : '—'],
+    ['Partial Payments', `${paymentRows.filter((r) => r[5] === 'Partial').length} invoices`, '—'],
     ['Total Appointments', `${appointmentRows.length}`, '—'],
     ['Confirmed Appointments', `${appointmentRows.filter((r) => r[5] === 'Confirmed').length}`, '—'],
     ['Active Treatment Plans', `${treatmentRows.filter((r) => r[4] === 'Active').length}`, '—'],
@@ -4649,7 +4746,7 @@ export function ReportsPage() {
   const reportMap = {
     treatments: { id: 'treatments', title: 'Treatment Report', columns: ['Patient Name', 'Service', 'Goal', 'Duration', 'Status'], rows: treatmentRows },
     appointments: { id: 'appointments', title: 'Appointment Report', columns: ['Patient Name', 'Mobile', 'Date', 'Time', 'Type', 'Status'], rows: appointmentRows },
-    finance_payments: { id: 'payments', title: 'Payments Report', columns: ['Patient Name', 'Invoice', 'Amount', 'Status', 'Paid On'], rows: paymentRows },
+    finance_payments: { id: 'payments', title: 'Payments Report', columns: ['Patient Name', 'Invoice', 'Total Amount', 'Paid Amount', 'Pending Amount', 'Status', 'Paid On'], rows: paymentRows },
     finance_accounts: { id: 'accounts', title: 'Accounts Report', columns: ['Item', 'Type', 'Amount', 'Mode', 'Status'], rows: accountRows },
     finance_summary: { id: 'revenue-summary', title: 'Revenue & Business Summary', columns: ['Category', 'Details', 'Amount'], rows: summaryRows },
     forms: { id: 'forms', title: 'Form Responses Report', columns: ['Name', 'Form', 'Submitted', 'Phone', 'Status'], rows: formRows },

@@ -16,6 +16,28 @@ function parseAmount(value) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+function paymentStatus(payment) {
+  return String(payment?.status ?? payment?.Status ?? '').toLowerCase();
+}
+
+function paymentTotal(payment) {
+  return parseAmount(payment?.amount ?? payment?.['Total Amount'] ?? payment?.Amount);
+}
+
+function paymentPaid(payment) {
+  const status = paymentStatus(payment);
+  const explicitPaid = payment?.paidAmount ?? payment?.['Paid Amount'];
+  if (explicitPaid !== undefined && explicitPaid !== '') return parseAmount(explicitPaid);
+  return status === 'paid' ? paymentTotal(payment) : 0;
+}
+
+function paymentPending(payment) {
+  const explicitPending = payment?.pendingAmount ?? payment?.['Pending Amount'];
+  if (explicitPending !== undefined && explicitPending !== '') return parseAmount(explicitPending);
+  if (paymentStatus(payment) === 'paid') return 0;
+  return Math.max(paymentTotal(payment) - paymentPaid(payment), 0);
+}
+
 function isToday(value) {
   if (!value) return false;
   const today = new Date().toISOString().slice(0, 10);
@@ -45,7 +67,7 @@ export function loadLiveDashboardData(branch) {
 
   const openLeads = leads.filter((lead) => !['Won', 'Lost', 'Closed'].includes(String(lead.status ?? '')));
   const followUps = leads.filter((lead) => String(lead.status ?? '').toLowerCase().includes('follow'));
-  const pendingPayments = payments.filter((payment) => String(payment.status ?? '').toLowerCase() !== 'paid');
+  const pendingPayments = payments.filter((payment) => paymentPending(payment) > 0);
   const todaysAppointments = appointments.filter((row) => isToday(row[2]));
 
   return {
@@ -60,7 +82,7 @@ export function loadLiveDashboardData(branch) {
     kpis: [
       { label: "Today's Appointments", value: String(todaysAppointments.length), delta: todaysAppointments.length ? 'Scheduled today' : 'Awaiting records', accent: 'green' },
       { label: 'Open Leads', value: String(openLeads.length), delta: openLeads.length ? `${followUps.length} follow-up due` : 'Awaiting records', accent: 'gold' },
-      { label: 'Pending Payments', value: `₹ ${pendingPayments.reduce((sum, payment) => sum + parseAmount(payment.amount), 0).toLocaleString('en-IN')}`, delta: pendingPayments.length ? `${pendingPayments.length} invoice(s)` : 'Awaiting records', accent: 'teal' },
+      { label: 'Pending Payments', value: `₹ ${pendingPayments.reduce((sum, payment) => sum + paymentPending(payment), 0).toLocaleString('en-IN')}`, delta: pendingPayments.length ? `${pendingPayments.length} invoice(s)` : 'Awaiting records', accent: 'teal' },
       { label: 'Follow-ups Due', value: String(followUps.length), delta: followUps.length ? 'Needs attention' : 'Awaiting records', accent: 'gold' },
     ],
     funnelStages: buildFunnel(leads),
@@ -103,14 +125,14 @@ function buildFunnel(leads) {
 }
 
 function buildRevenueSeries(payments) {
-  const paidRows = payments.filter((payment) => String(payment.status ?? '').toLowerCase() === 'paid');
+  const paidRows = payments.filter((payment) => paymentPaid(payment) > 0);
   if (!paidRows.length) return [];
   const buckets = new Map();
   paidRows.forEach((payment) => {
     const label = payment.paidOn || 'Unscheduled';
     const current = buckets.get(label) ?? { label, revenue: 0, collections: 0 };
-    current.revenue += parseAmount(payment.amount);
-    current.collections += parseAmount(payment.amount);
+    current.revenue += paymentPaid(payment);
+    current.collections += paymentPaid(payment);
     buckets.set(label, current);
   });
   return Array.from(buckets.values()).slice(-7);

@@ -12,6 +12,19 @@ const DATE_PRESETS = [
   { label: 'All Time', days: null },
 ];
 
+function paymentPaidAmount(payment) {
+  const explicitPaid = payment?.paidAmount ?? payment?.['Paid Amount'];
+  if (explicitPaid !== undefined && explicitPaid !== '') return parseLiveAmount(explicitPaid);
+  return normalizeStatus(payment?.status) === 'paid' ? parseLiveAmount(payment?.amount ?? payment?.['Total Amount']) : 0;
+}
+
+function paymentPendingAmount(payment) {
+  const explicitPending = payment?.pendingAmount ?? payment?.['Pending Amount'];
+  if (explicitPending !== undefined && explicitPending !== '') return parseLiveAmount(explicitPending);
+  if (normalizeStatus(payment?.status) === 'paid') return 0;
+  return Math.max(parseLiveAmount(payment?.amount ?? payment?.['Total Amount']) - paymentPaidAmount(payment), 0);
+}
+
 function KpiIcon({ accent }) {
   return (
     <div className={`metric-icon m-${accent}`}>
@@ -274,13 +287,13 @@ function buildPaymentAging(payments) {
   ];
   const today = new Date();
   payments
-    .filter((payment) => String(payment.status ?? '').toLowerCase() !== 'paid')
+    .filter((payment) => paymentPendingAmount(payment) > 0)
     .forEach((payment) => {
       const date = parseLooseDate(payment.paidOn);
       const age = date ? Math.max(0, Math.floor((today - date) / 86400000)) : 16;
       const bucket = age <= 7 ? buckets[0] : age <= 15 ? buckets[1] : buckets[2];
       bucket.count += 1;
-      bucket.amount += parseLiveAmount(payment.amount);
+      bucket.amount += paymentPendingAmount(payment);
     });
   const maxAmount = Math.max(...buckets.map((bucket) => bucket.amount), 1);
   return buckets.map((bucket) => ({ ...bucket, percent: Math.round((bucket.amount / maxAmount) * 100) }));
@@ -366,10 +379,10 @@ function buildSalesSummary(payments, packageRows, treatmentRows) {
     { label: 'Other Sales', count: 0, amount: 0 },
   ];
   payments
-    .filter((payment) => normalizeStatus(payment.status) === 'paid')
+    .filter((payment) => paymentPaidAmount(payment) > 0)
     .forEach((payment) => {
       const text = `${payment.invoice ?? ''} ${payment.client ?? ''} ${payment.item ?? ''} ${payment.category ?? ''}`.toLowerCase();
-      const amount = parseLiveAmount(payment.amount);
+      const amount = paymentPaidAmount(payment);
       const bucket = text.includes('medicine') || text.includes('medicin')
         ? buckets[2]
         : packageNames.some((name) => text.includes(name)) || text.includes('package')
@@ -451,11 +464,11 @@ function buildActionQueue(tasks, leads, payments, lowStockAlerts = [], reminders
       tone: 'warm',
     }));
   const collections = payments
-    .filter((payment) => String(payment.status ?? '').toLowerCase() !== 'paid')
+    .filter((payment) => paymentPendingAmount(payment) > 0)
     .slice(0, 2)
     .map((payment) => ({
       title: `Collect ${payment.invoice || 'pending invoice'}`,
-      note: `${payment.client || 'Patient'} · ${payment.amount || 'Amount pending'}`,
+      note: `${payment.client || 'Patient'} · ₹ ${paymentPendingAmount(payment).toLocaleString('en-IN')} pending`,
       route: '/payments',
       tone: 'hot',
     }));
