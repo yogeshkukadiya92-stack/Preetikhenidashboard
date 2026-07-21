@@ -37,6 +37,91 @@ function downloadText(filename, content, mimeType = 'text/plain;charset=utf-8') 
   URL.revokeObjectURL(url);
 }
 
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function pdfEscape(value) {
+  return String(value ?? '')
+    .replaceAll('\\', '\\\\')
+    .replaceAll('(', '\\(')
+    .replaceAll(')', '\\)');
+}
+
+function sanitizeFilename(value, fallback = 'invoice') {
+  const name = String(value ?? '').trim().replace(/[^a-z0-9-]+/gi, '-').replace(/^-+|-+$/g, '');
+  return name || fallback;
+}
+
+function formatInvoiceAmount(value) {
+  const amount = parseMoney(value);
+  return amount ? `Rs. ${amount.toLocaleString('en-IN')}` : 'Rs. 0';
+}
+
+function buildSimplePdf(lines) {
+  const safeLines = lines.map((line) => ({
+    ...line,
+    text: pdfEscape(line.text),
+    size: line.size ?? 11,
+    x: line.x ?? 54,
+    y: line.y ?? 740,
+  }));
+  const textCommands = safeLines
+    .map((line) => `BT /F1 ${line.size} Tf ${line.x} ${line.y} Td (${line.text}) Tj ET`)
+    .join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${textCommands.length} >>\nstream\n${textCommands}\nendstream`,
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return new Blob([pdf], { type: 'application/pdf' });
+}
+
+function downloadPaymentInvoicePdf(row) {
+  const payment = normalizePaymentRecord(row);
+  const invoice = payment.invoice || nextInvoiceNumber([]);
+  const issuedOn = payment.paidOn || new Date().toISOString().slice(0, 10);
+  const pending = parseMoney(payment.pendingAmount);
+  const lines = [
+    { text: "Mom's Pathshala", size: 20, x: 54, y: 780 },
+    { text: 'Payment Invoice', size: 15, x: 54, y: 754 },
+    { text: `Invoice No: ${invoice}`, size: 11, x: 54, y: 718 },
+    { text: `Date: ${issuedOn}`, size: 11, x: 380, y: 718 },
+    { text: `Patient Name: ${payment.client || '-'}`, size: 12, x: 54, y: 684 },
+    { text: 'Billing Summary', size: 13, x: 54, y: 642 },
+    { text: 'Description', size: 11, x: 54, y: 612 },
+    { text: 'Amount', size: 11, x: 430, y: 612 },
+    { text: 'Consultation / Treatment Payment', size: 11, x: 54, y: 586 },
+    { text: formatInvoiceAmount(payment.amount), size: 11, x: 430, y: 586 },
+    { text: `Paid Amount: ${formatInvoiceAmount(payment.paidAmount)}`, size: 12, x: 54, y: 538 },
+    { text: `Pending Amount: ${formatInvoiceAmount(payment.pendingAmount)}`, size: 12, x: 54, y: 514 },
+    { text: `Payment Status: ${payment.status || (pending > 0 ? 'Pending' : 'Paid')}`, size: 12, x: 54, y: 490 },
+    { text: 'Notes: This invoice is generated from the payment record in the dashboard.', size: 10, x: 54, y: 438 },
+    { text: 'Authorized Signature', size: 11, x: 380, y: 328 },
+    { text: 'Thank you.', size: 11, x: 54, y: 92 },
+  ];
+  downloadBlob(`${sanitizeFilename(invoice)}-${sanitizeFilename(payment.client, 'patient')}.pdf`, buildSimplePdf(lines));
+}
+
 function csvEscape(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
@@ -2024,6 +2109,19 @@ export function PaymentsPage() {
         'Paid On': normalizePaymentRecord(row).paidOn,
       })}
       parseRow={normalizePaymentRecord}
+      rowActions={(row, openEditRecord, deleteRecord) => {
+        const payment = normalizePaymentRecord(row);
+        return (
+          <ActionMenu
+            label="Actions"
+            items={[
+              { label: 'View Payment', description: 'Open payment details', onClick: () => openEditRecord(row) },
+              { label: 'Download Invoice PDF', description: `${payment.invoice || 'Invoice'} receipt`, onClick: () => downloadPaymentInvoicePdf(row) },
+              { label: 'Delete Payment', description: 'Remove this payment record', danger: true, onClick: () => deleteRecord(row) },
+            ]}
+          />
+        );
+      }}
     />
   );
 }
