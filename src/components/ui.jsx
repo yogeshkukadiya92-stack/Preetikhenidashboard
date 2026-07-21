@@ -26,13 +26,18 @@ export function Tag({ tone, children }) {
   return <span className={`tag ${tone}`}>{children}</span>;
 }
 
-export function ActionMenu({ label = 'Actions', items = [], align = 'right', compact = false }) {
+export function ActionMenu({ label = 'Actions', items = [], align = 'right', compact = false, openSignal = 0 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
   const menuId = useId();
   const visibleItems = items.filter((item) => !item.hidden);
+
+  useEffect(() => {
+    if (!openSignal) return;
+    setOpen(true);
+  }, [openSignal]);
 
   useEffect(() => {
     if (!open) return undefined;

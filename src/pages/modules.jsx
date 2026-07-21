@@ -499,6 +499,7 @@ function ImportExportModule({
   const [draftMatchedIndex, setDraftMatchedIndex] = useState(-1);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [selectedRowIndexes, setSelectedRowIndexes] = useState(() => new Set());
+  const [rowActionRequest, setRowActionRequest] = useState({ index: -1, token: 0 });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [activeFilter, setActiveFilter] = useState(filterPresets[0]?.column ?? '');
@@ -788,6 +789,13 @@ function ImportExportModule({
     });
   };
 
+  const openRowActionMenu = (event, rowIndex) => {
+    if (!isClientModule || rowIndex === -1) return;
+    if (event.target.closest('button, a, input, select, textarea, [role="menu"], [role="menuitem"]')) return;
+    setRowActionRequest((current) => ({ index: rowIndex, token: current.token + 1 }));
+    setMessage(`${rowToCsvValues(rows[rowIndex])?.[0] || 'Patient'} actions opened.`);
+  };
+
   const deleteRowsByIndexes = (indexes, label = 'record') => {
     const uniqueIndexes = Array.from(new Set(indexes)).filter((index) => index >= 0);
     if (!uniqueIndexes.length) {
@@ -842,10 +850,11 @@ function ImportExportModule({
     { label: 'Invoices', value: rows.length },
   ] : stats;
 
-  const defaultRowAction = (row) => (
+  const defaultRowAction = (row, openSignal = 0) => (
     <ActionMenu
       compact
       label={`Actions for ${rowToCsvValues(row)[0] || 'record'}`}
+      openSignal={openSignal}
       items={[
         { label: 'View', description: 'Open record details', onClick: () => openRecord(row) },
         { label: 'Delete', description: 'Remove this record', danger: true, onClick: () => deleteRecord(row) },
@@ -927,15 +936,30 @@ function ImportExportModule({
               <div />
             </div>
             {filteredRows.length ? (
-              filteredRows.map((row, index) => (
-                <div className="data-row" key={index}>
+              filteredRows.map((row, index) => {
+                const rowIndex = rows.indexOf(row);
+                const openSignal = rowActionRequest.index === rowIndex ? rowActionRequest.token : 0;
+                return (
+                <div
+                  className="data-row"
+                  key={index}
+                  onClick={(event) => openRowActionMenu(event, rowIndex)}
+                  role={isClientModule ? 'button' : undefined}
+                  tabIndex={isClientModule ? 0 : undefined}
+                  onKeyDown={(event) => {
+                    if (!isClientModule || !['Enter', ' '].includes(event.key)) return;
+                    event.preventDefault();
+                    setRowActionRequest((current) => ({ index: rowIndex, token: current.token + 1 }));
+                  }}
+                >
                   <div className="select-cell" data-label="">
-                    <input type="checkbox" checked={selectedRowIndexes.has(rows.indexOf(row))} onChange={() => toggleRowSelection(rows.indexOf(row))} aria-label={`Select ${rowToCsvValues(row)[0] || 'record'}`} />
+                    <input type="checkbox" checked={selectedRowIndexes.has(rowIndex)} onChange={() => toggleRowSelection(rowIndex)} aria-label={`Select ${rowToCsvValues(row)[0] || 'record'}`} />
                   </div>
                   {headers.map((header) => <div data-label={displayHeader(header)} key={header}>{rowToValues(row)[header]}</div>)}
-                  <div>{rowActions ? rowActions(row, openEditRecord, deleteRecord) : defaultRowAction(row)}</div>
+                  <div>{rowActions ? rowActions(row, openEditRecord, deleteRecord, { openSignal }) : defaultRowAction(row, openSignal)}</div>
                 </div>
-              ))
+                );
+              })
             ) : (
               <div className="empty-state compact-empty table-empty">
                 <strong>No records yet.</strong>
@@ -2118,9 +2142,10 @@ export function ClientsPage() {
         Mobile: row.mobile,
       })), 'Visit Date': todayIsoDate() })}
       renderSummary={(rows, rowToValues) => <ClientMonthlySummary rows={rows} rowToValues={rowToValues} />}
-      rowActions={(row, openEditRecord, deleteRecord) => (
+      rowActions={(row, openEditRecord, deleteRecord, actionContext = {}) => (
         <ActionMenu
           label="Actions"
+          openSignal={actionContext.openSignal}
           items={[
             { label: 'View Profile', description: 'Open patient details', onClick: () => setSelectedClient(row) },
             { label: 'Edit Patient', description: 'Update patient fields', onClick: () => openEditRecord(row) },
