@@ -1338,7 +1338,7 @@ export function CRMPage() {
         <div className="module-stats">
           <div className="mini-stat"><span>Total leads</span><strong>{leadRows.length}</strong></div>
           <div className="mini-stat"><span>Hot leads</span><strong>{leadRows.filter((lead) => lead.status === 'Hot').length}</strong></div>
-          <div className="mini-stat"><span>Status</span><strong>{message}</strong></div>
+          <div className="mini-stat"><span>Activity</span><strong>{message}</strong></div>
         </div>
       </div>
 
@@ -1548,9 +1548,9 @@ function ClientProfile({ client, onBack }) {
     const operations = loadSavedObject(branchKey('Operations:tabs:v3'), loadSavedObject('ayurflow:Operations:tabs:v3', {}));
     return (Array.isArray(operations.medicines) ? operations.medicines : []).map((row) => (
       Array.isArray(row)
-        ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '', Status: row[4] ?? '' }
+        ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '' }
         : row
-    )).filter((row) => row.Medicine && row.Status !== 'Inactive');
+    )).filter((row) => row.Medicine);
   }, [branchKey]);
   const [treatServiceOptions] = useState(() => {
     const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
@@ -2594,7 +2594,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     .filter(Boolean);
   const medicineCatalog = (Array.isArray(rowsByTab.medicines) ? rowsByTab.medicines : []).map((row) => (
     Array.isArray(row)
-      ? { Medicine: row[0] ?? '', Category: row[1] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '', Status: row[4] ?? '' }
+      ? { Medicine: row[0] ?? '', Category: row[1] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '' }
       : row
   ));
   const serviceOptions = (Array.isArray(rowsByTab.services) ? rowsByTab.services : [])
@@ -3486,7 +3486,7 @@ const operationsTabs = [
     label: 'Medicines',
     singular: 'medicine',
     description: 'Manual medicine catalog used by treatment plans. Add medicine names here, then select them inside Treatment.',
-    columns: ['Medicine', 'Category', 'Default Dose', 'Timing', 'Status'],
+    columns: ['Medicine', 'Category', 'Default Dose', 'Timing'],
     rows: [],
   },
   {
@@ -4019,8 +4019,8 @@ export function TreatmentPlansPage() {
   const medicineCatalog = useMemo(() => {
     const operations = loadSavedObject(branchKey('Operations:tabs:v3'), loadSavedObject('ayurflow:Operations:tabs:v3', {}));
     return (Array.isArray(operations.medicines) ? operations.medicines : []).map((row) => Array.isArray(row)
-      ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '', Status: row[4] ?? '' }
-      : row).filter((row) => row.Medicine && row.Status !== 'Inactive');
+      ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '' }
+      : row).filter((row) => row.Medicine);
   }, [branchKey]);
   const [activeTab, setActiveTab] = useState('plans');
 
@@ -4557,12 +4557,12 @@ export function TreatmentPlansPage() {
 export function MedicinesPage() {
   const { branchKey } = useBranch();
   const catalogStorageKey = branchKey('Operations:tabs:v3');
-  const medicineHeaders = ['Medicine', 'Category', 'Default Dose', 'Timing', 'Status'];
+  const medicineHeaders = ['Medicine', 'Category', 'Default Dose', 'Timing'];
   const [catalog, setCatalog] = useState(() => {
     const saved = loadSavedObject(catalogStorageKey, loadSavedObject('ayurflow:Operations:tabs:v3', {}));
     return Array.isArray(saved.medicines) ? saved.medicines : [];
   });
-  const [draft, setDraft] = useState({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
+  const [draft, setDraft] = useState({ Medicine: '', Category: '', 'Default Dose': '', Timing: '' });
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [message, setMessage] = useState('Shared medicine catalog ready.');
   const [importOpen, setImportOpen] = useState(false);
@@ -4591,18 +4591,18 @@ export function MedicinesPage() {
         : current.map((item, index) => (index === selectedIndex ? { ...draft } : item))
     ));
     setMessage(selectedIndex === null ? 'Medicine added.' : 'Medicine updated.');
-    setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
+    setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '' });
     setSelectedIndex(null);
   };
 
   const openEdit = (row, index) => {
     setSelectedIndex(index);
-    setDraft(row);
+    setDraft({ Medicine: row.Medicine ?? '', Category: row.Category ?? '', 'Default Dose': row['Default Dose'] ?? '', Timing: row.Timing ?? '' });
   };
 
   const resetDraft = () => {
     setSelectedIndex(null);
-    setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
+    setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '' });
     setMessage('Medicine form reset.');
   };
 
@@ -4612,7 +4612,7 @@ export function MedicinesPage() {
     setMessage('Medicine removed.');
     if (selectedIndex === index) {
       setSelectedIndex(null);
-      setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '', Status: 'Active' });
+      setDraft({ Medicine: '', Category: '', 'Default Dose': '', Timing: '' });
     }
   };
 
@@ -4621,7 +4621,6 @@ export function MedicinesPage() {
     Category: entry.Category ?? entry.category ?? '',
     'Default Dose': entry['Default Dose'] ?? entry.defaultDose ?? entry.Dose ?? entry.dose ?? '',
     Timing: entry.Timing ?? entry.timing ?? '',
-    Status: entry.Status ?? entry.status ?? 'Active',
   });
 
   const exportMedicines = () => {
@@ -4630,8 +4629,8 @@ export function MedicinesPage() {
   };
 
   const sampleMedicineRows = [
-    ['Vitamin D3', 'Supplement', '60000 IU', 'Weekly once after meals', 'Active'],
-    ['Triphala Churna', 'Ayurvedic', '1 tsp', 'Night after meals', 'Active'],
+    ['Vitamin D3', 'Supplement', '60000 IU', 'Weekly once after meals'],
+    ['Triphala Churna', 'Ayurvedic', '1 tsp', 'Night after meals'],
   ];
 
   const openBulkImport = () => {
@@ -4725,7 +4724,7 @@ export function MedicinesPage() {
       >
         <input ref={medicineImportRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleMedicineImport(event.target.files?.[0])} />
         <div className="modal-body detail-grid">
-          {['Medicine', 'Category', 'Default Dose', 'Timing', 'Status'].map((field) => (
+          {medicineHeaders.map((field) => (
             <label className="field-block" key={field}>
               <span>{field}</span>
               <input
@@ -4759,7 +4758,7 @@ export function MedicinesPage() {
                   rows={5}
                   value={bulkText}
                   onChange={(event) => setBulkText(event.target.value)}
-                  placeholder="Vitamin D3, Supplement, 60000 IU, Weekly once, Active&#10;Triphala Churna, Ayurvedic, 1 tsp, Night after meals, Active"
+                  placeholder="Vitamin D3, Supplement, 60000 IU, Weekly once&#10;Triphala Churna, Ayurvedic, 1 tsp, Night after meals"
                 />
               </label>
               <div className="sheet-actions">
@@ -4779,7 +4778,7 @@ export function MedicinesPage() {
               )) : (
                 <div className="empty-state compact-empty">
                   <strong>No valid medicines found.</strong>
-                  <p>Use columns: Medicine, Category, Default Dose, Timing, Status.</p>
+                  <p>Use columns: Medicine, Category, Default Dose, Timing.</p>
                 </div>
               )}
             </div>
@@ -4791,13 +4790,12 @@ export function MedicinesPage() {
         </div>
       )}
       <Card title="Medicine Catalog" subtitle="Edit or remove shared medicines used in treatment presets.">
-        <div className="table adaptive-table" style={{ '--table-columns': 5 }}>
+        <div className="table adaptive-table" style={{ '--table-columns': 4 }}>
           <div className="table-head">
             <div>Medicine</div>
             <div>Category</div>
             <div>Dose</div>
             <div>Timing</div>
-            <div>Status</div>
             <div />
           </div>
           {catalog.length ? catalog.map((row, index) => (
@@ -4806,7 +4804,6 @@ export function MedicinesPage() {
               <div>{row.Category}</div>
               <div>{row['Default Dose']}</div>
               <div>{row.Timing}</div>
-              <div>{row.Status}</div>
               <div>
                 <ActionMenu compact label={`Actions for ${row.Medicine || 'medicine'}`} items={[
                   { label: 'Edit medicine', onClick: () => openEdit(row, index) },
