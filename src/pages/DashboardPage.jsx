@@ -12,6 +12,8 @@ const DATE_PRESETS = [
   { label: 'All Time', days: null },
 ];
 
+const CALENDAR_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 function paymentPaidAmount(payment) {
   const explicitPaid = payment?.paidAmount ?? payment?.['Paid Amount'];
   if (explicitPaid !== undefined && explicitPaid !== '') return parseLiveAmount(explicitPaid);
@@ -42,6 +44,8 @@ export function DashboardPage() {
   const [moreInsightsOpen, setMoreInsightsOpen] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
   const [dataRevision, setDataRevision] = useState(0);
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toLocalIsoDate(new Date()));
   const liveData = useMemo(() => loadLiveDashboardData(currentBranch), [currentBranch, dataRevision]);
   const { kpis, leads, payments, todaySchedule, urgentTasks, appointments, clients, inventory, packages, staff, treatments } = liveData;
   const normalizedPatients = useMemo(() => clients.map(normalizeDashboardPatient).filter((patient) => patient.name), [clients]);
@@ -53,6 +57,22 @@ export function DashboardPage() {
       .slice(0, 8);
   }, [normalizedPatients, patientSearch]);
   const hasPatientSearch = Boolean(patientSearch.trim());
+  const calendarAppointments = useMemo(
+    () => appointments.map(normalizeCalendarAppointment).filter((appointment) => appointment.date),
+    [appointments],
+  );
+  const appointmentsByDate = useMemo(() => {
+    const grouped = new Map();
+    calendarAppointments.forEach((appointment) => {
+      const existing = grouped.get(appointment.date) ?? [];
+      existing.push(appointment);
+      grouped.set(appointment.date, existing);
+    });
+    grouped.forEach((rows) => rows.sort((a, b) => String(a.time).localeCompare(String(b.time))));
+    return grouped;
+  }, [calendarAppointments]);
+  const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const selectedDateAppointments = appointmentsByDate.get(selectedCalendarDate) ?? [];
 
   useEffect(() => {
     const refresh = () => setDataRevision((current) => current + 1);
@@ -199,6 +219,102 @@ export function DashboardPage() {
         </div>
       </section>
 
+      <section className="appointment-calendar-card" aria-labelledby="appointment-calendar-title">
+        <div className="appointment-calendar-head">
+          <div>
+            <span className="control-label">Appointment history</span>
+            <h2 id="appointment-calendar-title">Patient Appointment Calendar</h2>
+            <p>Select any date to review its appointments and open the patient&apos;s complete journey.</p>
+          </div>
+          <div className="calendar-month-actions" aria-label="Calendar month controls">
+            <button type="button" onClick={() => setCalendarMonth((month) => addMonths(month, -1))} aria-label="Previous month">‹</button>
+            <strong>{calendarMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</strong>
+            <button type="button" onClick={() => setCalendarMonth((month) => addMonths(month, 1))} aria-label="Next month">›</button>
+            <button
+              className="calendar-today-button"
+              type="button"
+              onClick={() => {
+                const today = new Date();
+                setCalendarMonth(startOfMonth(today));
+                setSelectedCalendarDate(toLocalIsoDate(today));
+              }}
+            >
+              Today
+            </button>
+          </div>
+        </div>
+
+        <div className="appointment-calendar-layout">
+          <div className="calendar-panel">
+            <div className="calendar-weekdays" aria-hidden="true">
+              {CALENDAR_WEEKDAYS.map((day) => <span key={day}>{day}</span>)}
+            </div>
+            <div className="calendar-grid" role="grid" aria-label={`${calendarMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} appointments`}>
+              {calendarDays.map((day) => {
+                const dateKey = toLocalIsoDate(day);
+                const appointmentCount = appointmentsByDate.get(dateKey)?.length ?? 0;
+                const isCurrentMonth = day.getMonth() === calendarMonth.getMonth();
+                const isSelected = dateKey === selectedCalendarDate;
+                const isToday = dateKey === toLocalIsoDate(new Date());
+                return (
+                  <button
+                    className={`calendar-day${isCurrentMonth ? '' : ' outside'}${isSelected ? ' selected' : ''}${isToday ? ' today' : ''}${appointmentCount ? ' has-appointments' : ''}`}
+                    type="button"
+                    role="gridcell"
+                    key={dateKey}
+                    aria-selected={isSelected}
+                    aria-label={`${day.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}, ${appointmentCount} appointment${appointmentCount === 1 ? '' : 's'}`}
+                    onClick={() => {
+                      setSelectedCalendarDate(dateKey);
+                      if (!isCurrentMonth) setCalendarMonth(startOfMonth(day));
+                    }}
+                  >
+                    <span className="calendar-day-number">{day.getDate()}</span>
+                    {appointmentCount > 0 && <span className="calendar-appointment-count">{appointmentCount}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <aside className="calendar-day-agenda" aria-live="polite">
+            <div className="calendar-agenda-head">
+              <div>
+                <span className="control-label">Selected date</span>
+                <h3>{formatCalendarDate(selectedCalendarDate)}</h3>
+              </div>
+              <span className="calendar-total">{selectedDateAppointments.length} appointment{selectedDateAppointments.length === 1 ? '' : 's'}</span>
+            </div>
+            {selectedDateAppointments.length ? (
+              <div className="calendar-agenda-list">
+                {selectedDateAppointments.map((appointment) => (
+                  <button
+                    className="calendar-agenda-item"
+                    type="button"
+                    key={appointment.id}
+                    disabled={!appointment.name}
+                    onClick={() => navigate(`/journey?client=${encodeURIComponent(appointment.name)}`)}
+                  >
+                    <span className="calendar-agenda-time">{appointment.time || 'Time pending'}</span>
+                    <span className="calendar-agenda-patient">
+                      <strong>{appointment.name || 'Unnamed patient'}</strong>
+                      <small>{appointment.type || 'Appointment'}{appointment.mobile ? ` · ${appointment.mobile}` : ''}</small>
+                    </span>
+                    <span className="calendar-agenda-open">View Journey <ChevronRight /></span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="calendar-empty-state">
+                <strong>No appointments on this date.</strong>
+                <p>Select a date with a count badge or book a new appointment.</p>
+                <button className="pill" type="button" onClick={() => navigate('/appointments?action=add')}>Book Appointment</button>
+              </div>
+            )}
+          </aside>
+        </div>
+      </section>
+
       <section className="dashboard-focus-grid">
         <Card title="Action Queue" subtitle="The next best work items for today.">
           {actionQueue.length ? (
@@ -336,6 +452,66 @@ function normalizeDashboardPatient(row) {
     mobile: String(row?.mobile ?? row?.Mobile ?? row?.phone ?? '').trim(),
     service: String(row?.service ?? row?.Service ?? row?.program ?? row?.Program ?? '').trim(),
   };
+}
+
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date, amount) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function toLocalIsoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeAppointmentDate(value) {
+  if (!value) return '';
+  const raw = String(value).trim();
+  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+  const localMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (localMatch) return `${localMatch[3]}-${localMatch[2].padStart(2, '0')}-${localMatch[1].padStart(2, '0')}`;
+  const parsed = parseLooseDate(raw);
+  return parsed ? toLocalIsoDate(parsed) : '';
+}
+
+function normalizeCalendarAppointment(row, index) {
+  const name = String(pickRowValue(row, 0, ['client', 'Client', 'name', 'patient', 'Patient'])).trim();
+  const mobile = String(pickRowValue(row, 1, ['mobile', 'Mobile', 'phone'])).trim();
+  const date = normalizeAppointmentDate(pickRowValue(row, 2, ['date', 'Date', 'appointmentDate']));
+  const time = String(pickRowValue(row, 3, ['time', 'Time', 'appointmentTime'])).trim();
+  const type = String(pickRowValue(row, 4, ['type', 'Type', 'service', 'Service'])).trim();
+  return {
+    id: `${date}-${time}-${name}-${index}`,
+    name,
+    mobile,
+    date,
+    time,
+    type,
+  };
+}
+
+function buildCalendarDays(month) {
+  const firstDay = startOfMonth(month);
+  const gridStart = new Date(firstDay.getFullYear(), firstDay.getMonth(), 1 - firstDay.getDay());
+  return Array.from({ length: 42 }, (_, index) => (
+    new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index)
+  ));
+}
+
+function formatCalendarDate(value) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 function parseLooseDate(value) {

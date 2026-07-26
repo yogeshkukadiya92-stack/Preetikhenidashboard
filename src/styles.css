@@ -258,6 +258,113 @@ textarea:focus-visible,
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .dashboard-focus-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 12px; align-items: start; }
 
+.appointment-calendar-card {
+  margin-bottom: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+.appointment-calendar-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+.appointment-calendar-head h2 { margin: 2px 0 4px; font-size: 1.08rem; }
+.appointment-calendar-head p { margin: 0; color: var(--muted); font-size: 0.8rem; line-height: 1.45; }
+.calendar-month-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
+.calendar-month-actions button {
+  min-width: 40px;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  font-size: 1.15rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.calendar-month-actions button:hover,
+.calendar-month-actions button:focus-visible { border-color: rgba(14, 91, 82, 0.42); background: rgba(236, 249, 244, 0.72); }
+.calendar-month-actions strong { min-width: 140px; color: var(--text); text-align: center; font-size: 0.88rem; }
+.calendar-month-actions .calendar-today-button { padding: 0 12px; color: var(--green); font-size: 0.78rem; }
+.appointment-calendar-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr); gap: 14px; align-items: stretch; }
+.calendar-panel { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 13px; background: #fff; }
+.calendar-weekdays,
+.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.calendar-weekdays { margin-bottom: 6px; }
+.calendar-weekdays span { padding: 5px 0; color: var(--muted); font-size: 0.68rem; font-weight: 800; text-align: center; text-transform: uppercase; }
+.calendar-day {
+  position: relative;
+  min-width: 0;
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #f8fbfa;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.calendar-day:hover,
+.calendar-day:focus-visible { border-color: rgba(14, 91, 82, 0.34); background: rgba(236, 249, 244, 0.8); }
+.calendar-day.outside { background: transparent; color: #9aa9a4; }
+.calendar-day.today { border-color: rgba(14, 91, 82, 0.34); }
+.calendar-day.selected { border-color: var(--green); background: var(--green); color: #fff; box-shadow: 0 5px 14px rgba(14, 91, 82, 0.18); }
+.calendar-day-number { font-size: 0.8rem; font-weight: 800; }
+.calendar-appointment-count {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  display: grid;
+  place-items: center;
+  min-width: 23px;
+  height: 23px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(14, 91, 82, 0.12);
+  color: var(--green);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+.calendar-day.selected .calendar-appointment-count { background: rgba(255, 255, 255, 0.2); color: #fff; }
+.calendar-day-agenda { min-width: 0; padding: 14px; border: 1px solid rgba(14, 91, 82, 0.17); border-radius: 13px; background: linear-gradient(145deg, rgba(236, 249, 244, 0.72), #fff); }
+.calendar-agenda-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.calendar-agenda-head h3 { margin: 2px 0 0; font-size: 0.98rem; }
+.calendar-total { padding: 6px 9px; border-radius: 999px; background: #fff; color: var(--green); font-size: 0.7rem; font-weight: 800; white-space: nowrap; }
+.calendar-agenda-list { display: grid; gap: 8px; margin-top: 12px; max-height: 360px; overflow-y: auto; }
+.calendar-agenda-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.calendar-agenda-item:hover,
+.calendar-agenda-item:focus-visible { border-color: rgba(14, 91, 82, 0.42); box-shadow: 0 5px 14px rgba(14, 91, 82, 0.08); }
+.calendar-agenda-item:disabled { cursor: default; opacity: 0.7; }
+.calendar-agenda-time { color: var(--green); font-size: 0.74rem; font-weight: 900; }
+.calendar-agenda-patient { display: grid; gap: 3px; min-width: 0; }
+.calendar-agenda-patient strong,
+.calendar-agenda-patient small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-agenda-patient strong { font-size: 0.82rem; }
+.calendar-agenda-patient small { color: var(--muted); font-size: 0.7rem; }
+.calendar-agenda-open { display: inline-flex; align-items: center; gap: 3px; color: var(--green); font-size: 0.7rem; font-weight: 800; white-space: nowrap; }
+.calendar-empty-state { display: grid; justify-items: start; gap: 7px; padding: 28px 4px 8px; }
+.calendar-empty-state strong { font-size: 0.86rem; }
+.calendar-empty-state p { margin: 0 0 5px; color: var(--muted); font-size: 0.76rem; line-height: 1.45; }
+
 .control-label {
   display: block;
   color: var(--muted);
@@ -1721,6 +1828,7 @@ body {
   .app-shell { grid-template-columns: 1fr; }
   .dashboard-controls { grid-template-columns: 1fr; }
   .dashboard-patient-search { grid-template-columns: 1fr; }
+  .appointment-calendar-layout { grid-template-columns: 1fr; }
   .sidebar { padding-bottom: 24px; height: auto; min-height: auto; position: relative; overflow: visible; }
   .clinic-card, .sidebar-art { position: static; }
   .sidebar { display: grid; gap: 10px; }
@@ -1760,6 +1868,18 @@ body {
   .dashboard-operations { grid-template-columns: 1fr; }
   .dashboard-primary-workflow,
   .dashboard-focus-grid { grid-template-columns: 1fr; }
+  .appointment-calendar-card { padding: 12px; }
+  .appointment-calendar-head { align-items: stretch; flex-direction: column; }
+  .calendar-month-actions { justify-content: space-between; }
+  .calendar-month-actions strong { order: -1; width: 100%; text-align: left; }
+  .calendar-panel { padding: 6px; }
+  .calendar-weekdays,
+  .calendar-grid { gap: 3px; }
+  .calendar-day { min-height: 46px; padding: 6px; }
+  .calendar-appointment-count { right: 4px; bottom: 4px; min-width: 19px; height: 19px; padding: 0 4px; }
+  .calendar-agenda-head { align-items: flex-start; flex-direction: column; }
+  .calendar-agenda-item { grid-template-columns: auto minmax(0, 1fr); }
+  .calendar-agenda-open { grid-column: 2; }
   .patient-search-result { grid-template-columns: 1fr auto; }
   .patient-result-service { grid-column: 1 / -1; grid-row: 2; }
   .patient-result-open { grid-column: 2; grid-row: 1; }
