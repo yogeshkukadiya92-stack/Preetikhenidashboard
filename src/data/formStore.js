@@ -2,7 +2,7 @@ const FORMS_KEY = 'moms-pathshala:forms:v2';
 const LEGACY_FORMS_KEY = 'ayurflow:forms:v1';
 const RESPONSES_KEY = 'moms-pathshala:form-responses:v2';
 
-const apiBase = String(import.meta.env.VITE_FORMS_API_URL ?? '').trim().replace(/\/$/, '');
+const apiBase = String(import.meta.env.VITE_FORMS_API_URL ?? '/api').trim().replace(/\/$/, '');
 
 function readJson(key, fallback) {
   try {
@@ -118,12 +118,17 @@ export async function loadPublicForm(slug) {
   const localForm = loadForms().find((form) => form.slug === slug || form.id === slug);
   if (localForm) return { form: localForm, source: 'local' };
   if (!apiBase) return { form: null, source: 'local' };
-  try {
-    const payload = await apiRequest(`/forms/${encodeURIComponent(slug)}`);
-    return { form: normalizeForm(payload?.form ?? payload), source: 'api' };
-  } catch (error) {
-    return { form: null, source: 'api', warning: error.message };
+  let lastError = null;
+  for (const delayMs of [0, 400, 900]) {
+    if (delayMs) await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+    try {
+      const payload = await apiRequest(`/forms/${encodeURIComponent(slug)}`);
+      return { form: normalizeForm(payload?.form ?? payload), source: 'api' };
+    } catch (error) {
+      lastError = error;
+    }
   }
+  return { form: null, source: 'api', warning: lastError?.message ?? 'Form could not be loaded.' };
 }
 
 export async function submitFormResponse(form, answers, respondentEmail = '') {

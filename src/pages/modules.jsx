@@ -26,6 +26,7 @@ import {
   users,
 } from '../data/appConfig.js';
 import { loadAllLocalResponses, loadForms as loadSavedForms } from '../data/formStore.js';
+import { hashPassword, STAFF_PERMISSION_OPTIONS } from '../data/auth.js';
 
 function downloadText(filename, content, mimeType = 'text/plain;charset=utf-8') {
   const blob = new Blob([content], { type: mimeType });
@@ -392,27 +393,36 @@ function normalizeClientId(value) {
   return String(value ?? '').trim().toUpperCase();
 }
 
+const PATIENT_ID_PREFIX = 'M';
+
 function clientIdFromRow(row, rowToValues) {
   const values = rowToValues(row);
   return normalizeClientId(values['Client ID'] ?? values.ClientId ?? values.clientId ?? values.ID);
 }
 
+function patientIdNumber(value) {
+  const match = normalizeClientId(value).match(new RegExp(`^${PATIENT_ID_PREFIX}-?(\\d+)$`));
+  return match ? Number(match[1]) : 0;
+}
+
+function formatPatientId(number) {
+  return `${PATIENT_ID_PREFIX}-${String(number).padStart(4, '0')}`;
+}
+
 function nextClientId(rows = [], rowToValues = (row) => row) {
   const highest = rows.reduce((maximum, row) => {
-    const match = clientIdFromRow(row, rowToValues).match(/(\d+)$/);
-    return match ? Math.max(maximum, Number(match[1])) : maximum;
+    return Math.max(maximum, patientIdNumber(clientIdFromRow(row, rowToValues)));
   }, 0);
-  return `CL-${String(highest + 1).padStart(4, '0')}`;
+  return formatPatientId(highest + 1);
 }
 
 function assignMissingClientIds(rows, rowToValues) {
   let nextNumber = rows.reduce((maximum, row) => {
-    const match = clientIdFromRow(row, rowToValues).match(/(\d+)$/);
-    return match ? Math.max(maximum, Number(match[1])) : maximum;
+    return Math.max(maximum, patientIdNumber(clientIdFromRow(row, rowToValues)));
   }, 0) + 1;
   return rows.map((row) => {
     if (clientIdFromRow(row, rowToValues)) return row;
-    const clientId = `CL-${String(nextNumber).padStart(4, '0')}`;
+    const clientId = formatPatientId(nextNumber);
     nextNumber += 1;
     return { ...row, clientId };
   });
@@ -2214,6 +2224,9 @@ export function UsersPage() {
   const [statusMessage, setStatusMessage] = useState('Ready to import or export users.');
   const [dropActive, setDropActive] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [staffModalOpen, setStaffModalOpen] = useState(false);
+  const [editingStaffEmail, setEditingStaffEmail] = useState('');
+  const [staffForm, setStaffForm] = useState({ name: '', role: 'Receptionist', email: '', password: '', permissions: ['/clients', '/journey', '/appointments'] });
   const [activeTab, setActiveTab] = useState('team');
 
   useEffect(() => {
@@ -2234,7 +2247,8 @@ export function UsersPage() {
   };
 
   const exportJson = () => {
-    downloadText('ayurflow-users.json', JSON.stringify(people, null, 2), 'application/json;charset=utf-8');
+    const safePeople = people.map(({ passwordHash: _passwordHash, ...user }) => user);
+    downloadText('ayurflow-users.json', JSON.stringify(safePeople, null, 2), 'application/json;charset=utf-8');
     setStatusMessage('Export started for JSON download.');
   };
 
@@ -2282,6 +2296,56 @@ export function UsersPage() {
       user.email === email ? { ...user, status: user.status === 'Active' ? 'Pending' : 'Active' } : user
     )));
     setStatusMessage('User status updated.');
+  };
+
+  const toggleStaffPermission = (path) => {
+    setStaffForm((current) => ({
+      ...current,
+      permissions: current.permissions.includes(path)
+        ? current.permissions.filter((permission) => permission !== path)
+        : [...current.permissions, path],
+    }));
+  };
+
+  const saveStaffLogin = async () => {
+    const email = staffForm.email.trim().toLowerCase();
+    const existingStaff = people.find((person) => String(person.email).trim().toLowerCase() === editingStaffEmail);
+    if (!staffForm.name.trim() || !email || (!existingStaff && staffForm.password.length < 6) || (staffForm.password && staffForm.password.length < 6) || !staffForm.permissions.length) {
+      setStatusMessage('Enter name, email, password of at least 6 characters, and one permission.');
+      return;
+    }
+    if (people.some((person) => String(person.email).trim().toLowerCase() === email && String(person.email).trim().toLowerCase() !== editingStaffEmail)) {
+      setStatusMessage('A staff account with this email already exists.');
+      return;
+    }
+    const passwordHash = staffForm.password ? await hashPassword(staffForm.password) : existingStaff?.passwordHash;
+    const savedStaff = {
+      name: staffForm.name.trim(),
+      role: staffForm.role,
+      email,
+      status: 'Active',
+      permissions: staffForm.permissions,
+      passwordHash,
+    };
+    setPeople((current) => existingStaff
+      ? current.map((person) => String(person.email).trim().toLowerCase() === editingStaffEmail ? { ...person, ...savedStaff } : person)
+      : [...current, savedStaff]);
+    setStaffForm({ name: '', role: 'Receptionist', email: '', password: '', permissions: ['/clients', '/journey', '/appointments'] });
+    setEditingStaffEmail('');
+    setStaffModalOpen(false);
+    setStatusMessage(existingStaff ? 'Staff permissions updated successfully.' : 'Staff login created successfully.');
+  };
+
+  const openNewStaff = () => {
+    setEditingStaffEmail('');
+    setStaffForm({ name: '', role: 'Receptionist', email: '', password: '', permissions: ['/clients', '/journey', '/appointments'] });
+    setStaffModalOpen(true);
+  };
+
+  const openEditStaff = (user) => {
+    setEditingStaffEmail(String(user.email).trim().toLowerCase());
+    setStaffForm({ name: user.name ?? '', role: user.role ?? 'Staff', email: user.email ?? '', password: '', permissions: Array.isArray(user.permissions) ? user.permissions : [] });
+    setStaffModalOpen(true);
   };
 
   return (
@@ -2356,16 +2420,20 @@ export function UsersPage() {
         <Card
           title="Current Team"
           subtitle={statusMessage}
-          action={<ActionMenu label="Export" items={[
-            { label: 'Export CSV', description: 'Spreadsheet-compatible team list', onClick: exportCsv },
-            { label: 'Export JSON', description: 'Structured team backup', onClick: exportJson },
-          ]} />}
+          action={<div className="card-action-group">
+            <button className="pill primary-action" type="button" onClick={openNewStaff}>+ Add Staff Login</button>
+            <ActionMenu label="Export" items={[
+              { label: 'Export CSV', description: 'Spreadsheet-compatible team list', onClick: exportCsv },
+              { label: 'Export JSON', description: 'Structured team backup', onClick: exportJson },
+            ]} />
+          </div>}
         >
-          <div className="table adaptive-table" style={{ '--table-columns': 4 }}>
+          <div className="table adaptive-table" style={{ '--table-columns': 5 }}>
             <div className="table-head">
               <div>Name</div>
               <div>Role</div>
               <div>Email</div>
+              <div>Permissions</div>
               <div>Status</div>
               <div />
             </div>
@@ -2375,8 +2443,9 @@ export function UsersPage() {
                   <div>{user.name}</div>
                   <div>{user.role}</div>
                   <div>{user.email}</div>
+                  <div>{Array.isArray(user.permissions) && user.permissions.length ? user.permissions.map((path) => STAFF_PERMISSION_OPTIONS.find((option) => option.path === path)?.label ?? path).join(', ') : 'No login access'}</div>
                   <div><Tag tone={user.status === 'Active' ? 'tag-contacted' : 'tag-follow'}>{user.status}</Tag></div>
-                  <div><button className="row-link" type="button" onClick={() => toggleUserStatus(user.email)}>Toggle</button></div>
+                  <div><button className="row-link" type="button" onClick={() => openEditStaff(user)}>Edit</button><button className="row-link" type="button" onClick={() => toggleUserStatus(user.email)}>Toggle</button></div>
                 </div>
               ))
             ) : (
@@ -2387,6 +2456,35 @@ export function UsersPage() {
             )}
           </div>
         </Card>
+      )}
+
+      {staffModalOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setStaffModalOpen(false)}>
+          <div className="modal-shell" role="dialog" aria-modal="true" aria-label="Add staff login" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div><h2>{editingStaffEmail ? 'Edit Staff Access' : 'Add Staff Login'}</h2><p>Create a separate login and choose exactly what this staff member can access.</p></div>
+              <button className="icon-btn" type="button" onClick={() => setStaffModalOpen(false)} aria-label="Close modal">✕</button>
+            </div>
+            <div className="modal-body detail-grid">
+              <label className="field-block"><span>Name</span><input className="lead-input" value={staffForm.name} onChange={(event) => setStaffForm((current) => ({ ...current, name: event.target.value }))} /></label>
+              <label className="field-block"><span>Role</span><select className="lead-input" value={staffForm.role} onChange={(event) => setStaffForm((current) => ({ ...current, role: event.target.value }))}><option>Receptionist</option><option>Doctor</option><option>Therapist</option><option>Accountant</option><option>Manager</option><option>Staff</option></select></label>
+              <label className="field-block"><span>Email</span><input className="lead-input" type="email" autoComplete="off" value={staffForm.email} onChange={(event) => setStaffForm((current) => ({ ...current, email: event.target.value }))} /></label>
+              <label className="field-block"><span>{editingStaffEmail ? 'New Password (optional)' : 'Temporary Password'}</span><input className="lead-input" type="password" autoComplete="new-password" value={staffForm.password} onChange={(event) => setStaffForm((current) => ({ ...current, password: event.target.value }))} placeholder={editingStaffEmail ? 'Leave blank to keep current password' : 'Minimum 6 characters'} /></label>
+              <fieldset className="full-field permission-fieldset">
+                <legend>Module Permissions</legend>
+                <div className="permission-grid">
+                  {STAFF_PERMISSION_OPTIONS.map((permission) => (
+                    <label className="toggle-row" key={permission.path}>
+                      <input type="checkbox" checked={staffForm.permissions.includes(permission.path)} onChange={() => toggleStaffPermission(permission.path)} />
+                      <span>{permission.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+            <div className="modal-actions"><button className="pill" type="button" onClick={() => setStaffModalOpen(false)}>Cancel</button><button className="pill primary-action" type="button" onClick={saveStaffLogin}>{editingStaffEmail ? 'Save Permissions' : 'Create Staff Login'}</button></div>
+          </div>
+        </div>
       )}
 
       {modalOpen && (

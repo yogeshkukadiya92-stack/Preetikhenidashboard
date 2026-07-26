@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ADMIN_EMAIL, AUTH_CONFIGURED, createAuthSession, getAuthSession, verifyCredentials } from '../data/auth.js';
+import { ADMIN_EMAIL, createAuthSession, getAuthSession, getLandingPath, verifyCredentials } from '../data/auth.js';
 import { hydrateCloudState, pauseCloudSync } from '../data/cloudStore.js';
 
 const MAX_ATTEMPTS = 5;
@@ -19,7 +19,8 @@ export function LoginPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (getAuthSession()) navigate('/', { replace: true });
+    const session = getAuthSession();
+    if (session) navigate(getLandingPath(session), { replace: true });
   }, [navigate]);
 
   const destination = location.state?.from
@@ -33,10 +34,6 @@ export function LoginPage() {
       setError('Too many attempts. Try again in 30 seconds.');
       return;
     }
-    if (!AUTH_CONFIGURED) {
-      setError('Administrator login is not configured. Contact the system administrator.');
-      return;
-    }
     if (!email.trim() || !password) {
       setError('Enter your email and password.');
       return;
@@ -45,16 +42,13 @@ export function LoginPage() {
     try {
       setSubmitting(true);
       setError('');
-      const valid = await verifyCredentials(email, password);
-      if (valid) {
-        createAuthSession(remember);
-        pauseCloudSync();
-        hydrateCloudState()
-          .then((changedKeys) => {
-            if (changedKeys > 0) window.location.reload();
-          })
-          .catch(() => {});
-        navigate(destination, { replace: true });
+      pauseCloudSync();
+      await hydrateCloudState().catch(() => {});
+      const identity = await verifyCredentials(email, password);
+      if (identity) {
+        const session = createAuthSession(identity, remember);
+        const requestedPath = destination.split('?')[0];
+        navigate(identity.isAdmin || identity.permissions.includes(requestedPath) ? destination : getLandingPath(session), { replace: true });
         return;
       }
 
@@ -83,9 +77,9 @@ export function LoginPage() {
           <div><strong>Mom's Pathshala</strong><span>Secure dashboard access</span></div>
         </div>
         <div className="login-copy">
-          <span>Administrator</span>
+          <span>Administrator or Staff</span>
           <h1 id="login-title">Sign in</h1>
-          <p>Use your administrator account to continue.</p>
+          <p>Use your administrator or staff account to continue.</p>
         </div>
         <form className="login-form" onSubmit={submit} noValidate>
           <label className="field-block">

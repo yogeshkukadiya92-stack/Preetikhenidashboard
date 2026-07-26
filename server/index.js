@@ -39,12 +39,44 @@ async function ensureSchema() {
       primary key (branch, key)
     )
   `);
+  await db.query(`
+    create table if not exists public_forms (
+      slug text primary key,
+      form_id text not null,
+      form jsonb not null,
+      updated_at timestamptz not null default now()
+    );
+    create index if not exists public_forms_form_id_idx on public_forms (form_id);
+    create table if not exists form_responses (
+      id text primary key,
+      form_slug text not null references public_forms(slug) on delete cascade,
+      response jsonb not null,
+      submitted_at timestamptz not null default now()
+    );
+    create index if not exists form_responses_slug_submitted_idx on form_responses (form_slug, submitted_at desc);
+  `);
   await db.query(
     `insert into app_state (branch, key, value, updated_at)
      select $1, key, value, updated_at
      from app_state
      where branch = 'workspace'
      on conflict (branch, key) do nothing`,
+    [WORKSPACE_BRANCH],
+  );
+  await db.query(
+    `insert into public_forms (slug, form_id, form, updated_at)
+     select form->>'slug', form->>'id', form, now()
+     from app_state
+     cross join lateral jsonb_array_elements(
+       case when jsonb_typeof(value) = 'array' then value else '[]'::jsonb end
+     ) as form
+     where branch = $1
+       and key = 'moms-pathshala:forms:v2'
+       and form->>'status' = 'Published'
+       and coalesce(form->>'slug', '') <> ''
+       and coalesce(form->>'id', '') <> ''
+     on conflict (slug)
+     do update set form_id = excluded.form_id, form = excluded.form, updated_at = now()`,
     [WORKSPACE_BRANCH],
   );
 }
@@ -89,6 +121,60 @@ app.put('/api/app-state/:key', asyncHandler(async (request, response) => {
   response.status(204).end();
 }));
 
+app.put('/api/forms/:slug', asyncHandler(async (request, response) => {
+  const db = getPool();
+  if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
+  const slug = String(request.params.slug ?? '').trim();
+  const form = request.body;
+  if (!slug || !form?.id || !form?.title) return response.status(400).json({ error: 'A valid form is required.' });
+  await db.query(
+    `insert into public_forms (slug, form_id, form, updated_at)
+     values ($1, $2, $3::jsonb, now())
+     on conflict (slug)
+     do update set form_id = excluded.form_id, form = excluded.form, updated_at = now()`,
+    [slug, String(form.id), JSON.stringify({ ...form, slug })],
+  );
+  response.json({ form: { ...form, slug } });
+}));
+
+app.get('/api/forms/:slug', asyncHandler(async (request, response) => {
+  const db = getPool();
+  if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
+  const result = await db.query('select form from public_forms where slug = $1 limit 1', [String(request.params.slug ?? '')]);
+  const form = result.rows[0]?.form;
+  if (!form || form.status !== 'Published') return response.status(404).json({ error: 'Form not found.' });
+  response.json({ form });
+}));
+
+app.post('/api/forms/:slug/responses', asyncHandler(async (request, response) => {
+  const db = getPool();
+  if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
+  const slug = String(request.params.slug ?? '').trim();
+  const submittedResponse = request.body;
+  if (!slug || !submittedResponse?.id || !submittedResponse?.answers) return response.status(400).json({ error: 'A valid response is required.' });
+  const formResult = await db.query('select form from public_forms where slug = $1 limit 1', [slug]);
+  const form = formResult.rows[0]?.form;
+  if (!form || form.status !== 'Published') return response.status(404).json({ error: 'Form not found.' });
+  await db.query(
+    `insert into form_responses (id, form_slug, response, submitted_at)
+     values ($1, $2, $3::jsonb, $4)
+     on conflict (id) do nothing`,
+    [String(submittedResponse.id), slug, JSON.stringify(submittedResponse), submittedResponse.submittedAt ?? new Date().toISOString()],
+  );
+  response.status(201).json({ response: submittedResponse });
+}));
+
+app.get('/api/forms/:identifier/responses', asyncHandler(async (request, response) => {
+  const db = getPool();
+  if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
+  const identifier = String(request.params.identifier ?? '').trim();
+  const formResult = await db.query('select slug from public_forms where slug = $1 or form_id = $1 limit 1', [identifier]);
+  const slug = formResult.rows[0]?.slug;
+  if (!slug) return response.json({ responses: [] });
+  const result = await db.query('select response from form_responses where form_slug = $1 order by submitted_at desc', [slug]);
+  response.json({ responses: result.rows.map((row) => row.response) });
+}));
+
 app.use(express.static(distDir));
 
 app.get(/.*/, (_request, response) => {
@@ -100,10 +186,15 @@ app.use((error, _request, response, _next) => {
   response.status(500).json({ error: 'Internal server error.' });
 });
 
-ensureSchema().catch((error) => {
-  console.error('PostgreSQL schema initialization failed:', error);
-});
+async function startServer() {
+  try {
+    await ensureSchema();
+  } catch (error) {
+    console.error('PostgreSQL schema initialization failed:', error);
+  }
+  app.listen(port, () => {
+    console.log(`Mom's Pathshala server listening on port ${port}`);
+  });
+}
 
-app.listen(port, () => {
-  console.log(`Mom's Pathshala server listening on port ${port}`);
-});
+startServer();

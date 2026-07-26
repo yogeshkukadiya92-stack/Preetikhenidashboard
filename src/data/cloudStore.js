@@ -82,6 +82,7 @@ export async function hydrateCloudState() {
   const pending = readPending();
   const cloudKeys = new Set();
   let changedKeys = 0;
+  const updatedKeys = [];
   rows.forEach((row) => {
     if (!shouldSync(row.key)) return;
     cloudKeys.add(row.key);
@@ -90,10 +91,15 @@ export async function hydrateCloudState() {
     if (window.localStorage.getItem(row.key) !== cloudValue) {
       originalSetItem.call(window.localStorage, row.key, cloudValue);
       changedKeys += 1;
+      updatedKeys.push(row.key);
     }
   });
   const pendingEntries = Object.entries(pending).filter(([key]) => shouldSync(key));
   if (pendingEntries.length) await Promise.allSettled(pendingEntries.map(([key, value]) => syncCloudValue(key, value)));
+  if (updatedKeys.length) {
+    window.dispatchEvent(new CustomEvent('moms-pathshala:cloud-hydrated', { detail: { keys: updatedKeys } }));
+    window.dispatchEvent(new Event('storage'));
+  }
   return changedKeys;
 }
 
@@ -113,10 +119,8 @@ export function installCloudRefresh() {
   if (refreshInstalled) return;
   refreshInstalled = true;
   window.setInterval(() => {
-    hydrateCloudState()
-      .then((changedKeys) => {
-        if (changedKeys > 0) window.location.reload();
-      })
-      .catch(() => {});
+    // Refresh local cloud-backed data without reloading the page. Consumers that
+    // need live updates subscribe to the storage or cloud-hydrated events.
+    hydrateCloudState().catch(() => {});
   }, REFRESH_INTERVAL_MS);
 }

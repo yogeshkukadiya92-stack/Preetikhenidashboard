@@ -837,8 +837,12 @@ export function FormsPage() {
     const status = form.status === 'Published' ? 'Draft' : 'Published';
     const updated = { ...form, status, updatedAt: new Date().toISOString() };
     setForms((current) => current.map((item) => (item.id === form.id ? updated : item)));
-    if (status === 'Published') await publishForm(updated);
-    setMessage(`${form.title} ${status === 'Published' ? 'published' : 'unpublished'}.`);
+    if (status === 'Published') {
+      const result = await publishForm(updated);
+      setMessage(result.warning ? 'Form saved, but the public link is not ready yet. Check the server connection and publish again.' : `${form.title} published and ready to share.`);
+      return;
+    }
+    setMessage(`${form.title} unpublished.`);
   };
 
   const duplicateForm = (form) => {
@@ -867,13 +871,27 @@ export function FormsPage() {
       setMessage('Publish the form before sharing its public link.');
       return;
     }
-    const link = getPublicFormUrl(form);
+    const published = await publishForm(form);
+    if (published.warning) {
+      setMessage('Public link is not ready yet. Check the server connection, then try Copy public link again.');
+      return;
+    }
+    const link = getPublicFormUrl(published.form ?? form);
     try {
       await navigator.clipboard.writeText(link);
-      setMessage('Public form link copied.');
+      setMessage('Public form is ready. Link copied.');
     } catch {
       setMessage(`Copy this link: ${link}`);
     }
+  };
+
+  const openPublicForm = async (form) => {
+    const published = await publishForm(form);
+    if (published.warning) {
+      setMessage('Public form is not ready yet. Check the server connection and try again.');
+      return;
+    }
+    window.open(getPublicFormUrl(published.form ?? form), '_blank', 'noopener,noreferrer');
   };
 
   const openResponses = async (form) => {
@@ -1097,7 +1115,7 @@ export function FormsPage() {
                     { label: 'Preview form', onClick: () => { setDraftForm(cloneForm(form)); setView('preview'); } },
                     { label: 'View responses', description: `${responseCounts[form.id] ?? 0} collected`, onClick: () => openResponses(form) },
                     { label: 'Copy public link', disabled: form.status !== 'Published', onClick: () => copyPublicLink(form) },
-                    { label: 'Open public form', disabled: form.status !== 'Published', onClick: () => window.open(getPublicFormUrl(form), '_blank', 'noopener,noreferrer') },
+                    { label: 'Open public form', disabled: form.status !== 'Published', onClick: () => openPublicForm(form) },
                     { label: form.status === 'Published' ? 'Unpublish form' : 'Publish form', onClick: () => toggleStatus(form) },
                     { label: 'Duplicate form', onClick: () => duplicateForm(form) },
                     { label: 'Delete form', danger: true, onClick: () => deleteForm(form) },

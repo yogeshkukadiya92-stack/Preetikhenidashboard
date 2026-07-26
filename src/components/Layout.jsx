@@ -4,7 +4,7 @@ import { BellIcon, CalendarIcon, ChartIcon, ChevronDown, ChevronRight, FileIcon,
 import { navItems } from '../data/appConfig.js';
 import { loadLiveDashboardData } from '../data/liveData.js';
 import { useBranch } from '../context/BranchContext.jsx';
-import { ADMIN_EMAIL, clearAuthSession } from '../data/auth.js';
+import { ADMIN_EMAIL, canAccessPath, clearAuthSession, getAuthSession } from '../data/auth.js';
 
 function parsePaymentAmount(value) {
   const numeric = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
@@ -55,6 +55,7 @@ function getCurrentDateRange() {
 }
 
 export function Layout() {
+  const session = getAuthSession();
   const { currentBranch } = useBranch();
   const location = useLocation();
   const navigate = useNavigate();
@@ -66,8 +67,8 @@ export function Layout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navSections = useMemo(() => sectionOrder.map((label) => ({
     label,
-    items: navItems.filter((item) => item.section === label),
-  })), []);
+    items: navItems.filter((item) => item.section === label && canAccessPath(session, item.path)),
+  })).filter((section) => section.items.length), [session?.email]);
   const activeSection = navItems.find((item) => item.path === location.pathname)?.section ?? 'Overview';
   const [openSections, setOpenSections] = useState(() => new Set([activeSection]));
 
@@ -242,10 +243,10 @@ export function Layout() {
           </button>
           {profileOpen && (
             <div className="profile-popover">
-              <strong>Administrator</strong>
-              <span>{ADMIN_EMAIL || 'Administrator account'}</span>
+              <strong>{session?.name || 'Administrator'}</strong>
+              <span>{session?.email || ADMIN_EMAIL || 'Administrator account'}</span>
               <div className="profile-popover-actions">
-                <button type="button" onClick={() => { setProfileOpen(false); navigate('/users'); }}>Open users</button>
+                {session?.isAdmin && <button type="button" onClick={() => { setProfileOpen(false); navigate('/users'); }}>Open users</button>}
                 <button
                   type="button"
                   onClick={() => {

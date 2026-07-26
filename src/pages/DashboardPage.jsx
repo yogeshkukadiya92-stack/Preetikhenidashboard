@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ActionMenu, Card, StatusPill, Tag } from '../components/ui.jsx';
-import { ChevronRight } from '../components/icons.jsx';
+import { ChevronRight, SearchIcon } from '../components/icons.jsx';
 import { loadLiveDashboardData, parseLiveAmount } from '../data/liveData.js';
 import { useBranch } from '../context/BranchContext.jsx';
 
@@ -40,8 +40,29 @@ export function DashboardPage() {
   const { currentBranch } = useBranch();
   const [datePreset, setDatePreset] = useState('7 Days');
   const [moreInsightsOpen, setMoreInsightsOpen] = useState(false);
-  const liveData = loadLiveDashboardData(currentBranch);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [dataRevision, setDataRevision] = useState(0);
+  const liveData = useMemo(() => loadLiveDashboardData(currentBranch), [currentBranch, dataRevision]);
   const { kpis, leads, payments, todaySchedule, urgentTasks, appointments, clients, inventory, packages, staff, treatments } = liveData;
+  const normalizedPatients = useMemo(() => clients.map(normalizeDashboardPatient).filter((patient) => patient.name), [clients]);
+  const patientResults = useMemo(() => {
+    const query = patientSearch.trim().toLowerCase();
+    if (!query) return [];
+    return normalizedPatients
+      .filter((patient) => [patient.id, patient.name, patient.mobile, patient.service].join(' ').toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [normalizedPatients, patientSearch]);
+  const hasPatientSearch = Boolean(patientSearch.trim());
+
+  useEffect(() => {
+    const refresh = () => setDataRevision((current) => current + 1);
+    window.addEventListener('storage', refresh);
+    window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
+    };
+  }, []);
   const filteredLeads = filterRowsByPreset(leads, datePreset, (lead) => lead.addedOn);
   const filteredPayments = filterRowsByPreset(payments, datePreset, (payment) => payment.paidOn);
   const filteredAppointments = filterRowsByPreset(appointments, datePreset, (appointment) => appointment[2] ?? appointment.date);
@@ -86,6 +107,47 @@ export function DashboardPage() {
         <button className="workflow-primary-action" type="button" onClick={() => navigate('/journey')}>
           Open Patient Journey <ChevronRight />
         </button>
+      </section>
+
+      <section className="dashboard-patient-search" aria-labelledby="dashboard-patient-search-title">
+        <div className="patient-search-copy">
+          <span className="control-label">Quick patient lookup</span>
+          <h2 id="dashboard-patient-search-title">Search Patient</h2>
+          <p>Name, mobile number, patient ID અથવા serviceથી શોધો.</p>
+        </div>
+        <div className="patient-search-panel">
+          <label className="patient-search-input">
+            <SearchIcon />
+            <span className="sr-only">Search patient by name, mobile number, ID, or service</span>
+            <input
+              value={patientSearch}
+              onChange={(event) => setPatientSearch(event.target.value)}
+              placeholder="Search name, mobile, patient ID, or service..."
+              autoComplete="off"
+            />
+            {hasPatientSearch && <button type="button" onClick={() => setPatientSearch('')} aria-label="Clear patient search">Clear</button>}
+          </label>
+          {hasPatientSearch && (
+            <div className="patient-search-results" aria-live="polite">
+              {patientResults.length ? patientResults.map((patient) => (
+                <button className="patient-search-result" type="button" key={patient.id || `${patient.name}-${patient.mobile}`} onClick={() => navigate(`/journey?client=${encodeURIComponent(patient.name)}`)}>
+                  <span className="patient-result-main">
+                    <strong>{patient.name}</strong>
+                    <small>{patient.id || 'No ID'} · {patient.mobile || 'No mobile'}</small>
+                  </span>
+                  <span className="patient-result-service">{patient.service || 'No service'}</span>
+                  <span className="patient-result-open">Open Journey <ChevronRight /></span>
+                </button>
+              )) : (
+                <div className="empty-state compact-empty patient-search-empty">
+                  <strong>No patient found.</strong>
+                  <p>Try another name, mobile number, ID, or service.</p>
+                  <button className="pill" type="button" onClick={() => navigate('/clients?action=add')}>+ Add Patient</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="dashboard-controls" aria-label="Dashboard filters">
@@ -256,6 +318,24 @@ export function DashboardPage() {
 
     </>
   );
+}
+
+function normalizeDashboardPatient(row) {
+  if (Array.isArray(row)) {
+    const hasId = row.length >= 7;
+    return {
+      id: hasId ? String(row[0] ?? '').trim() : '',
+      name: String(row[hasId ? 1 : 0] ?? '').trim(),
+      mobile: String(row[hasId ? 2 : 1] ?? '').trim(),
+      service: String(row[row.length >= 8 ? 7 : hasId ? 6 : 5] ?? '').trim(),
+    };
+  }
+  return {
+    id: String(row?.clientId ?? row?.['Client ID'] ?? row?.id ?? '').trim(),
+    name: String(row?.name ?? row?.Client ?? row?.client ?? '').trim(),
+    mobile: String(row?.mobile ?? row?.Mobile ?? row?.phone ?? '').trim(),
+    service: String(row?.service ?? row?.Service ?? row?.program ?? row?.Program ?? '').trim(),
+  };
 }
 
 function parseLooseDate(value) {

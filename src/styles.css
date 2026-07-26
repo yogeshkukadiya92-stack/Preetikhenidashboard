@@ -204,6 +204,58 @@ textarea:focus-visible,
 .workflow-summary span { padding: 9px; border-left: 2px solid rgba(14, 91, 82, 0.16); color: var(--muted); font-size: 0.72rem; }
 .workflow-summary strong { display: block; margin-bottom: 2px; color: var(--text); font-size: 1.12rem; }
 .workflow-primary-action { min-height: 42px; padding: 0 14px; border: 1px solid var(--green); border-radius: 10px; background: var(--green); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 800; white-space: nowrap; }
+.dashboard-patient-search {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.42fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+.patient-search-copy h2 { margin: 2px 0 4px; font-size: 1.05rem; }
+.patient-search-copy p { margin: 0; color: var(--muted); font-size: 0.8rem; line-height: 1.45; }
+.patient-search-panel { min-width: 0; }
+.patient-search-input {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid rgba(14, 91, 82, 0.22);
+  border-radius: 12px;
+  background: #fff;
+}
+.patient-search-input:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px rgba(14, 91, 82, 0.1); }
+.patient-search-input input { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
+.patient-search-input button { min-height: 34px; border: 0; background: transparent; color: var(--green); font-weight: 800; cursor: pointer; }
+.patient-search-results { display: grid; gap: 7px; margin-top: 9px; }
+.patient-search-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(120px, 0.7fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.patient-search-result:hover, .patient-search-result:focus-visible { border-color: rgba(14, 91, 82, 0.42); background: rgba(236, 249, 244, 0.7); }
+.patient-result-main { display: grid; gap: 3px; min-width: 0; }
+.patient-result-main strong, .patient-result-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.patient-result-main small, .patient-result-service { color: var(--muted); font-size: 0.76rem; }
+.patient-result-open { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-size: 0.78rem; font-weight: 800; white-space: nowrap; }
+.patient-search-empty { margin-top: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .dashboard-focus-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 12px; align-items: start; }
 
 .control-label {
@@ -789,6 +841,22 @@ textarea:focus-visible,
 }
 .detail-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.permission-fieldset {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.permission-fieldset legend {
+  padding: 0 6px;
+  font-weight: 800;
+  color: var(--text);
+}
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 .field-block {
   display: grid;
@@ -1563,6 +1631,57 @@ body {
 
 .symptom-chip { cursor: pointer; }
 
+.searchable-preset {
+  position: relative;
+  min-width: 0;
+}
+
+.searchable-preset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.searchable-preset-results {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(19, 52, 39, 0.16);
+}
+
+.searchable-preset-results button {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.searchable-preset-results button:hover,
+.searchable-preset-results button:focus-visible {
+  background: #edf7f3;
+  color: var(--green);
+}
+
+.searchable-preset-empty {
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .quick-preset-row {
   display: flex;
   grid-column: 1 / -1;
@@ -1601,6 +1720,7 @@ body {
   .journey-layout { grid-template-columns: 1fr; }
   .app-shell { grid-template-columns: 1fr; }
   .dashboard-controls { grid-template-columns: 1fr; }
+  .dashboard-patient-search { grid-template-columns: 1fr; }
   .sidebar { padding-bottom: 24px; height: auto; min-height: auto; position: relative; overflow: visible; }
   .clinic-card, .sidebar-art { position: static; }
   .sidebar { display: grid; gap: 10px; }
@@ -1640,6 +1760,9 @@ body {
   .dashboard-operations { grid-template-columns: 1fr; }
   .dashboard-primary-workflow,
   .dashboard-focus-grid { grid-template-columns: 1fr; }
+  .patient-search-result { grid-template-columns: 1fr auto; }
+  .patient-result-service { grid-column: 1 / -1; grid-row: 2; }
+  .patient-result-open { grid-column: 2; grid-row: 1; }
   .workflow-summary { grid-column: auto; grid-row: auto; }
   .workflow-primary-action { width: 100%; }
   .quick-actions { grid-template-columns: 1fr; }
@@ -1715,6 +1838,7 @@ body {
   .import-banner .sheet-actions { width: 100%; }
   .modal-body { grid-template-columns: 1fr; }
   .detail-grid { grid-template-columns: 1fr; }
+  .permission-grid { grid-template-columns: 1fr; }
   .modal-actions { flex-direction: column; }
   .lead-grid { grid-template-columns: 1fr; }
   .form-basics-grid,
