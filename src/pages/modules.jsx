@@ -190,8 +190,8 @@ function normalizePaymentRecord(entry) {
       paidAmount: entry[3],
       pendingAmount: entry[4],
       status: entry[5],
-      paidOn: entry[6],
-      paymentMode: entry[7],
+      paymentMode: entry[6],
+      paidOn: entry[7] ?? '',
     } : {
       client: entry[0],
       invoice: entry[1],
@@ -4713,7 +4713,6 @@ export function MedicinesPage() {
         </div>
         <div className="module-stats">
           <div className="mini-stat"><span>Medicines</span><strong>{catalog.length}</strong></div>
-          <div className="mini-stat"><span>Status</span><strong>{message}</strong></div>
           <div className="mini-stat"><span>Scope</span><strong>Shared</strong></div>
         </div>
       </div>
@@ -4950,6 +4949,17 @@ export function ReportsPage() {
   const { branchKey } = useBranch();
   const [activeReport, setActiveReport] = useState('appointments');
   const [financeSubTab, setFinanceSubTab] = useState('payments');
+  const [, setReportRevision] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setReportRevision((current) => current + 1);
+    window.addEventListener('storage', refresh);
+    window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
+    };
+  }, []);
 
   const today = new Date().toISOString().slice(0, 10);
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -4958,22 +4968,38 @@ export function ReportsPage() {
   const opsTabs = loadSavedState(branchKey('Operations:tabs:v3'), loadSavedState('ayurflow:Operations:tabs:v3', {}));
   const finTabs = loadSavedState(branchKey('Finance:tabs:v3'), loadSavedState('ayurflow:Finance:tabs:v3', {}));
 
-  const appointmentRows = loadSavedState(branchKey('Appointments:rows:v3'), loadSavedState('ayurflow:Appointments:rows:v2', []));
+  const appointmentRows = normalizeAppointmentRows(loadSavedArray(branchKey('Appointments:rows:v3'), loadSavedArray('ayurflow:Appointments:rows:v2', []))).map((row) => Array.isArray(row)
+    ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[5] ?? 'Pending']
+    : [row.client ?? row.Client ?? row.name ?? '', row.mobile ?? row.Mobile ?? '', row.date ?? row.Date ?? '', row.time ?? row.Time ?? '', row.type ?? row.Type ?? '', row.status ?? row.Status ?? 'Pending']);
 
-  const treatmentRows = [
-    ...loadSavedState('ayurflow:Treatment Plans:rows:v2', []).map((row) => [row[0], row[1], row[2], row[3], row[7] ?? row[4]]),
-    ...(opsTabs.treatments ?? []).map((row) => [row[0], row[1], row[5], row[6], row[7]]),
-  ];
+  const savedTreatmentReportRow = (row) => Array.isArray(row)
+    ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[7] ?? row[4] ?? '']
+    : [row.client ?? row.Client ?? row.name ?? '', row.service ?? row.Service ?? '', row.goal ?? row.Goal ?? '', row.duration ?? row.Duration ?? '', row.status ?? row.Status ?? ''];
+  const operationTreatmentReportRow = (row) => Array.isArray(row)
+    ? [row[0] ?? '', row[1] ?? '', row[5] ?? '', row[6] ?? '', row[7] ?? '']
+    : savedTreatmentReportRow(row);
+  const treatmentRows = mergeUniqueRows(
+    loadSavedArray(branchKey('Treatment Plans:rows:v2'), loadSavedArray('ayurflow:Treatment Plans:rows:v2', [])).map(savedTreatmentReportRow),
+    (Array.isArray(opsTabs.treatments) ? opsTabs.treatments : []).map(operationTreatmentReportRow),
+  );
 
-  const formRows = [
-    ...loadSavedState(branchKey('Forms:rows:v3'), loadSavedState('ayurflow:Forms:rows:v2', [])),
-    ...(opsTabs.forms ?? []),
-  ];
+  const formRows = mergeUniqueRows(
+    appFormResponseRows(),
+    mergeUniqueRows(
+      loadSavedArray(branchKey('Forms:rows:v3'), loadSavedArray('ayurflow:Forms:rows:v2', [])),
+      Array.isArray(opsTabs.forms) ? opsTabs.forms : [],
+    ),
+  ).map((row) => Array.isArray(row)
+    ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[5] ?? row[4] ?? 'Received']
+    : [row.name ?? row.Name ?? '', row.form ?? row.Form ?? '', row.submitted ?? row.Submitted ?? '', row.phone ?? row.Phone ?? '', row.status ?? row.Status ?? 'Received']);
 
-  const inventoryRows = [
-    ...loadSavedState(branchKey('Inventory:rows:v3'), loadSavedState('ayurflow:Inventory:rows:v2', [])),
-    ...(opsTabs.inventory ?? []),
-  ];
+  const inventoryReportRow = (row) => Array.isArray(row)
+    ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '']
+    : [row.item ?? row.Item ?? row.name ?? '', row.category ?? row.Category ?? '', row.quantity ?? row.Quantity ?? '', row.expiry ?? row.Expiry ?? '', row.status ?? row.Status ?? ''];
+  const inventoryRows = mergeUniqueRows(
+    loadSavedArray(branchKey('Inventory:rows:v3'), loadSavedArray('ayurflow:Inventory:rows:v2', [])).map(inventoryReportRow),
+    (Array.isArray(opsTabs.inventory) ? opsTabs.inventory : []).map(inventoryReportRow),
+  );
 
   const toPaymentReportRow = (entry) => {
     const row = normalizePaymentRecord(entry);
@@ -4983,10 +5009,13 @@ export function ReportsPage() {
     .map(toPaymentReportRow);
   const paymentRows = [...(finTabs.payments ?? []).map(toPaymentReportRow), ...paymentObjRows];
 
-  const accountRows = [
-    ...(finTabs.accounts ?? []),
-    ...loadSavedState(branchKey('Accounts:rows:v3'), loadSavedState('ayurflow:Accounts:rows:v2', [])),
-  ];
+  const accountReportRow = (row) => Array.isArray(row)
+    ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '']
+    : [row.item ?? row.Item ?? '', row.type ?? row.Type ?? '', row.amount ?? row.Amount ?? '', row.mode ?? row.Mode ?? '', row.status ?? row.Status ?? ''];
+  const accountRows = mergeUniqueRows(
+    (Array.isArray(finTabs.accounts) ? finTabs.accounts : []).map(accountReportRow),
+    loadSavedArray(branchKey('Accounts:rows:v3'), loadSavedArray('ayurflow:Accounts:rows:v2', [])).map(accountReportRow),
+  );
 
   // Revenue helpers
   const sumAmount = (rows, colIndex) =>
@@ -5150,7 +5179,7 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
 <div class="footer"><span>AyurFlow CRM | Vaidhya Wellness Clinic</span><span>${dateStr}</span></div>
 <script>window.onload=function(){window.print()};<\/script>
 </body></html>`;
-    const win = window.open('', '_blank', 'noopener,noreferrer');
+    const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); }
   };
 
@@ -5242,7 +5271,7 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
             </div>
             {currentReport.rows.length ? currentReport.rows.map((row, i) => (
               <div className="data-row" key={i}>
-                {row.map((cell, j) => <div data-label={columns[j]} key={j}>{cell}</div>)}
+                {currentReport.columns.map((column, j) => <div data-label={column} key={column}>{row[j] ?? ''}</div>)}
                 <div />
               </div>
             )) : (
