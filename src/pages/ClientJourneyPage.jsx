@@ -175,7 +175,7 @@ function normalizeJourneyPayment(entry) {
   };
 }
 
-function SearchablePresetInput({ label, value, options, onChange, onSelect, placeholder, action }) {
+function SearchablePresetInput({ label, value, options, onChange, onSelect, onCommit, placeholder, action, helperText }) {
   const [focused, setFocused] = useState(false);
   const query = String(value ?? '').trim().toLowerCase();
   const keywords = query.split(/\s+/).filter(Boolean);
@@ -198,6 +198,12 @@ function SearchablePresetInput({ label, value, options, onChange, onSelect, plac
           onChange={(event) => onChange(event.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || !onCommit || !String(value ?? '').trim()) return;
+            event.preventDefault();
+            onCommit();
+            setFocused(false);
+          }}
           placeholder={placeholder}
           autoComplete="off"
           role="combobox"
@@ -206,6 +212,7 @@ function SearchablePresetInput({ label, value, options, onChange, onSelect, plac
         />
         {action}
       </div>
+      {helperText && <small className="field-help">{helperText}</small>}
       {focused && query && (
         <div className="searchable-preset-results" role="listbox">
           {matches.length ? matches.map((option) => (
@@ -236,6 +243,7 @@ export function ClientJourneyPage() {
   const treatmentTemplatesKey = branchKey('treatment-templates:v2');
   const journeysKey = branchKey('client-journeys:v1');
   const consultationTemplatesKey = branchKey('consultation-templates:v1');
+  const customSymptomsKey = branchKey('consultation-custom-symptoms:v1');
   const [clients, setClients] = useState(() => loadValue(clientsKey, []));
   const [journeys, setJourneys] = useState(() => loadValue(journeysKey, {}));
   const [selectedClient, setSelectedClient] = useState(() => searchParams.get('client') ?? '');
@@ -246,6 +254,7 @@ export function ClientJourneyPage() {
   const [consultationTemplateName, setConsultationTemplateName] = useState('');
   const [selectedConsultationTemplate, setSelectedConsultationTemplate] = useState('');
   const [symptomChoice, setSymptomChoice] = useState('');
+  const [customSymptoms, setCustomSymptoms] = useState(() => loadValue(customSymptomsKey, []));
   const [stageModal, setStageModal] = useState('');
   const [appointmentForm, setAppointmentForm] = useState(() => ({ mobile: '', ...currentSlot(), type: 'Consultation', status: 'Pending' }));
   const [requiredForm, setRequiredForm] = useState('Patient Intake Form');
@@ -296,6 +305,10 @@ export function ClientJourneyPage() {
   useEffect(() => {
     window.localStorage.setItem(consultationTemplatesKey, JSON.stringify(consultationTemplates));
   }, [consultationTemplates, consultationTemplatesKey]);
+
+  useEffect(() => {
+    window.localStorage.setItem(customSymptomsKey, JSON.stringify(customSymptoms));
+  }, [customSymptoms, customSymptomsKey]);
 
   useEffect(() => {
     if (!formOptions.length) return;
@@ -387,9 +400,13 @@ export function ClientJourneyPage() {
   };
 
   const addSymptom = () => {
-    if (!symptomChoice) return;
+    const symptom = symptomChoice.trim().replace(/\s+/g, ' ');
+    if (!symptom) return;
     const current = consultation.complaint.split(',').map((item) => item.trim()).filter(Boolean);
-    if (!current.includes(symptomChoice)) current.push(symptomChoice);
+    if (!current.some((item) => item.toLowerCase() === symptom.toLowerCase())) current.push(symptom);
+    if (![...SYMPTOM_OPTIONS, ...customSymptoms].some((item) => item.toLowerCase() === symptom.toLowerCase())) {
+      setCustomSymptoms((items) => [...items, symptom]);
+    }
     setConsultation((value) => ({ ...value, complaint: current.join(', ') }));
     setSymptomChoice('');
   };
@@ -630,7 +647,7 @@ export function ClientJourneyPage() {
 
       {stageModal === 'followup' && <JourneyModal title="Schedule Next Follow-up" client={selectedClient} onClose={() => setStageModal('')} onSave={saveFollowup} saveLabel="Save Follow-up"><div className="quick-preset-row"><button className="pill" type="button" onClick={() => setFollowupForm((value) => ({ ...value, date: addDays(7) }))}>After 7 days</button><button className="pill" type="button" onClick={() => setFollowupForm((value) => ({ ...value, date: addDays(15) }))}>After 15 days</button><button className="pill" type="button" onClick={() => setFollowupForm((value) => ({ ...value, date: addDays(30) }))}>After 30 days</button></div><label className="field-block"><span>Follow-up Date</span><input className="lead-input" type="date" value={followupForm.date} onChange={(event) => setFollowupForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Follow-up Time</span><input className="lead-input" type="time" value={followupForm.time} onChange={(event) => setFollowupForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block full-field"><span>Follow-up Notes</span><textarea className="lead-input" rows="3" value={followupForm.notes} onChange={(event) => setFollowupForm((value) => ({ ...value, notes: event.target.value }))} placeholder="Reason, instructions, or reminder note..." /></label><label className="field-block"><span>Status</span><select className="lead-input" value={followupForm.status} onChange={(event) => setFollowupForm((value) => ({ ...value, status: event.target.value }))}><option>Confirmed</option><option>Pending</option></select></label></JourneyModal>}
 
-      {consultationOpen && <div className="modal-backdrop" role="presentation" onClick={() => setConsultationOpen(false)}><div className="modal-shell consultation-modal" role="dialog" aria-modal="true" aria-label="Doctor Consultation" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>Doctor Consultation</h2><p>{selectedClient}</p></div><button className="icon-btn" type="button" onClick={() => setConsultationOpen(false)} aria-label="Close modal">x</button></div><div className="modal-body detail-grid"><div className="quick-preset-row">{QUICK_CONSULTATIONS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickConsultation(preset)}>{preset.label}</button>)}</div><div className="consultation-template-tools"><label className="field-block"><span>Use Template</span><select className="lead-input" value={selectedConsultationTemplate} onChange={(event) => applyConsultationTemplate(event.target.value)}><option value="">{consultationTemplates.length ? 'Select consultation template...' : 'No templates saved yet'}</option>{consultationTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}</select></label><label className="field-block"><span>Template Name</span><input className="lead-input" value={consultationTemplateName} onChange={(event) => setConsultationTemplateName(event.target.value)} placeholder="e.g. Diabetes Follow-up" /></label><button className="pill" type="button" disabled={!consultationTemplateName.trim()} onClick={saveConsultationTemplate}>Save Template</button></div><div className="symptom-builder"><SearchablePresetInput label="Symptoms / Chief Complaint" value={symptomChoice} options={SYMPTOM_OPTIONS} onChange={setSymptomChoice} onSelect={(symptom) => { setSymptomChoice(symptom); const current = consultation.complaint.split(',').map((item) => item.trim()).filter(Boolean); if (!current.includes(symptom)) current.push(symptom); setConsultation((value) => ({ ...value, complaint: current.join(', ') })); setSymptomChoice(''); }} placeholder="Type 1–2 keywords, e.g. sugar or joint pain" action={<button className="pill" type="button" onClick={addSymptom} disabled={!symptomChoice.trim()}>Add</button>} /><div className="consultation-chips">{consultation.complaint.split(',').map((item) => item.trim()).filter(Boolean).map((symptom) => <button className="tag symptom-chip" type="button" key={symptom} onClick={() => removeSymptom(symptom)}>{symptom} x</button>)}</div></div><SearchablePresetInput label="Vitals" value={consultation.vitals} options={VITAL_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, vitals: value }))} placeholder="Search or enter measured vitals" /><SearchablePresetInput label="Diagnosis" value={consultation.diagnosis} options={DIAGNOSIS_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, diagnosis: value }))} placeholder="Type 1–2 keywords, e.g. diabetes" /><label className="field-block"><span>Doctor Notes</span><select className="lead-input" value={consultation.notes} onChange={(event) => setConsultation((current) => ({ ...current, notes: event.target.value }))}><option value="">Select reusable note...</option>{NOTE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label></div><div className="modal-actions"><button className="pill" type="button" onClick={() => setConsultationOpen(false)}>Cancel</button><button className="pill primary-action" type="button" onClick={saveConsultation}>Complete Consultation</button></div></div></div>}
+      {consultationOpen && <div className="modal-backdrop" role="presentation" onClick={() => setConsultationOpen(false)}><div className="modal-shell consultation-modal" role="dialog" aria-modal="true" aria-label="Doctor Consultation" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>Doctor Consultation</h2><p>{selectedClient}</p></div><button className="icon-btn" type="button" onClick={() => setConsultationOpen(false)} aria-label="Close modal">x</button></div><div className="modal-body detail-grid"><div className="quick-preset-row">{QUICK_CONSULTATIONS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickConsultation(preset)}>{preset.label}</button>)}</div><div className="consultation-template-tools"><label className="field-block"><span>Use Template</span><select className="lead-input" value={selectedConsultationTemplate} onChange={(event) => applyConsultationTemplate(event.target.value)}><option value="">{consultationTemplates.length ? 'Select consultation template...' : 'No templates saved yet'}</option>{consultationTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}</select></label><label className="field-block"><span>Template Name</span><input className="lead-input" value={consultationTemplateName} onChange={(event) => setConsultationTemplateName(event.target.value)} placeholder="e.g. Diabetes Follow-up" /></label><button className="pill" type="button" disabled={!consultationTemplateName.trim()} onClick={saveConsultationTemplate}>Save Template</button></div><div className="symptom-builder"><SearchablePresetInput label="Symptoms / Chief Complaint" value={symptomChoice} options={[...SYMPTOM_OPTIONS, ...customSymptoms]} onChange={setSymptomChoice} onSelect={(symptom) => { setSymptomChoice(symptom); const current = consultation.complaint.split(',').map((item) => item.trim()).filter(Boolean); if (!current.some((item) => item.toLowerCase() === symptom.toLowerCase())) current.push(symptom); setConsultation((value) => ({ ...value, complaint: current.join(', ') })); setSymptomChoice(''); }} onCommit={addSymptom} placeholder="Search or type a new symptom..." helperText="Ready listમાં ન હોય તો નવું symptom લખીને Add New અથવા Enter દબાવો." action={<button className="pill symptom-add-button" type="button" onClick={addSymptom} disabled={!symptomChoice.trim()}>+ Add New</button>} /><div className="consultation-chips">{consultation.complaint.split(',').map((item) => item.trim()).filter(Boolean).map((symptom) => <button className="tag symptom-chip" type="button" key={symptom} onClick={() => removeSymptom(symptom)}>{symptom} x</button>)}</div></div><SearchablePresetInput label="Vitals" value={consultation.vitals} options={VITAL_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, vitals: value }))} placeholder="Search or enter measured vitals" /><SearchablePresetInput label="Diagnosis" value={consultation.diagnosis} options={DIAGNOSIS_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, diagnosis: value }))} placeholder="Type 1–2 keywords, e.g. diabetes" /><label className="field-block"><span>Doctor Notes</span><select className="lead-input" value={consultation.notes} onChange={(event) => setConsultation((current) => ({ ...current, notes: event.target.value }))}><option value="">Select reusable note...</option>{NOTE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label></div><div className="modal-actions"><button className="pill" type="button" onClick={() => setConsultationOpen(false)}>Cancel</button><button className="pill primary-action" type="button" onClick={saveConsultation}>Complete Consultation</button></div></div></div>}
     </section>
   );
 }
