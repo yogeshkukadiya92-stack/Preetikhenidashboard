@@ -1643,6 +1643,9 @@ body {
 .clinical-print-modal { width: min(1080px, calc(100vw - 28px)); }
 .clinical-print-layout { display: grid; grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr); gap: 14px; padding: 14px; overflow-y: auto; }
 .clinical-print-controls { display: grid; align-content: start; gap: 12px; }
+.clinical-print-template-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 9px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.clinical-print-template-actions { display: flex; grid-column: 1 / -1; gap: 7px; }
+.clinical-print-template-actions .pill { flex: 1; }
 .clinical-print-select-all { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .clinical-print-select-all > div { display: flex; gap: 6px; }
 .clinical-print-select-all strong { font-size: 0.8rem; }
@@ -2093,6 +2096,8 @@ body {
   .returning-patient-summary { grid-template-columns: 1fr; }
   .journey-print-actions,
   .clinical-print-select-all { align-items: stretch; flex-direction: column; }
+  .clinical-print-template-tools { grid-template-columns: 1fr; }
+  .clinical-print-template-actions { grid-column: auto; }
   .journey-print-actions .pill { width: 100%; }
   .clinical-print-select-all > div,
   .clinical-print-select-all .pill { width: 100%; }

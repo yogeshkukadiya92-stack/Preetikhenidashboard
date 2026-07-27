@@ -399,6 +399,49 @@ function savedClientMobile(row) {
   return row?.mobile ?? row?.Mobile ?? row?.phone ?? row?.Phone ?? '';
 }
 
+function PatientSearchPicker({ value, patients, onChange, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const query = String(value ?? '').trim().toLowerCase();
+  const matches = patients
+    .filter((patient) => !query || patient.searchText.includes(query))
+    .slice(0, 8);
+
+  return (
+    <div className="searchable-field-picker">
+      <input
+        className="lead-input"
+        value={value}
+        onChange={(event) => { onChange(event.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setOpen(false);
+          if (event.key === 'Enter' && matches[0]) {
+            event.preventDefault();
+            onSelect(matches[0]);
+            setOpen(false);
+          }
+        }}
+        placeholder="Search Patient ID, name, or mobile..."
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+      />
+      {open && (
+        <div className="searchable-field-results" role="listbox">
+          {matches.length ? matches.map((patient) => (
+            <button type="button" role="option" key={patient.key} onMouseDown={(event) => event.preventDefault()} onClick={() => { onSelect(patient); setOpen(false); }}>
+              <strong>{patient.label}</strong>
+              <small>{patient.mobile || 'Mobile not saved'}</small>
+            </button>
+          )) : <div className="searchable-field-empty">No patient found. Search by Patient ID, name, or mobile.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function normalizeClientId(value) {
   return String(value ?? '').trim().toUpperCase();
 }
@@ -2610,10 +2653,26 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const serviceOptions = (Array.isArray(rowsByTab.services) ? rowsByTab.services : [])
     .map((row) => row[0])
     .filter(Boolean);
-  const clientOptions = Array.from(new Set(loadSavedArray(
+  const savedPatientRows = loadSavedArray(
     branchKey('ayurflow-clients:rows:v3'),
     loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients),
-  ).map(savedClientName).filter(Boolean)));
+  );
+  const clientOptions = Array.from(new Set(savedPatientRows.map(savedClientName).filter(Boolean)));
+  const patientSearchOptions = Array.from(new Map(savedPatientRows.map((row) => {
+    const name = String(savedClientName(row)).trim();
+    const id = String(savedClientId(row)).trim();
+    const mobile = String(savedClientMobile(row)).trim();
+    const key = (id || `${name}-${mobile}`).toLowerCase();
+    if (!name) return null;
+    return [key, {
+      key,
+      name,
+      id,
+      mobile,
+      label: id ? `${id} · ${name}` : name,
+      searchText: `${id} ${name} ${mobile}`.toLowerCase(),
+    }];
+  }).filter(Boolean)).values());
   const treatmentServiceIndex = active.columns.indexOf('Service');
   const treatmentMedicineIndex = active.columns.indexOf('Medicine');
   const displayColumn = (column) => (column === 'Client' ? 'Patient Name' : column);
@@ -2627,6 +2686,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
 
   const shouldUseSelect = (column) => active.id === 'treatments' && ['Service', 'Medicine'].includes(column);
   const isTreatmentClient = (column) => active.id === 'treatments' && column === 'Client';
+  const isPaymentClient = (column) => active.id === 'payments' && column === 'Client';
   const isMedicineColumn = active.id === 'treatments' && active.columns[treatmentMedicineIndex] === 'Medicine';
   const selectedMedicines = (value) => String(value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
   const scheduleOptions = ['Morning', 'Afternoon', 'Evening', 'Night'];
@@ -3226,7 +3286,14 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
               {active.columns.map((column, index) => (
                 <label className="field-block" key={column}>
                   <span>{displayColumn(column)}</span>
-                  {isTreatmentClient(column) ? (
+                  {isPaymentClient(column) ? (
+                    <PatientSearchPicker
+                      value={draftRow[index] ?? ''}
+                      patients={patientSearchOptions}
+                      onChange={(nextValue) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? nextValue : cell)))}
+                      onSelect={(patient) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? patient.name : cell)))}
+                    />
+                  ) : isTreatmentClient(column) ? (
                     <>
                       <input
                         className="lead-input"
@@ -3359,7 +3426,14 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
               {active.columns.map((column, index) => (
                 <label className="field-block" key={column}>
                   <span>{displayColumn(column)}</span>
-                  {isTreatmentClient(column) ? (
+                  {isPaymentClient(column) ? (
+                    <PatientSearchPicker
+                      value={editRow[index] ?? ''}
+                      patients={patientSearchOptions}
+                      onChange={(nextValue) => setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? nextValue : cell)))}
+                      onSelect={(patient) => setEditRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? patient.name : cell)))}
+                    />
+                  ) : isTreatmentClient(column) ? (
                     <>
                       <input
                         className="lead-input"
@@ -3985,6 +4059,22 @@ export function AppointmentsPage() {
               }
               setActionMessage(`Opening WhatsApp for ${row[0]}.`);
               window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer');
+            },
+          },
+          {
+            label: 'Delete appointment',
+            description: 'Permanently remove this appointment',
+            danger: true,
+            onClick: () => {
+              const patient = row[0] || 'this patient';
+              const schedule = [row[2], row[3]].filter(Boolean).join(' at ');
+              if (!window.confirm(`Delete ${patient}'s appointment${schedule ? ` on ${schedule}` : ''}? This cannot be undone.`)) return;
+              setTableRows((current) => {
+                const appointmentIndex = current.findIndex((candidate) => candidate === row);
+                return appointmentIndex < 0 ? current : current.filter((_, index) => index !== appointmentIndex);
+              });
+              setSelectedRow(null);
+              setActionMessage(`${patient}'s appointment deleted.`);
             },
           },
         ]} />

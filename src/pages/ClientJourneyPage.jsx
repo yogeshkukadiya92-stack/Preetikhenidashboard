@@ -292,6 +292,7 @@ export function ClientJourneyPage() {
   const consultationTemplatesKey = branchKey('consultation-templates:v1');
   const customSymptomsKey = branchKey('consultation-custom-symptoms:v1');
   const customDoctorNotesKey = branchKey('consultation-custom-doctor-notes:v1');
+  const clinicalPrintTemplatesKey = branchKey('clinical-print-templates:v1');
   const [clients, setClients] = useState(() => loadValue(clientsKey, []));
   const [journeys, setJourneys] = useState(() => loadValue(journeysKey, {}));
   const [selectedClient, setSelectedClient] = useState(() => searchParams.get('client') ?? '');
@@ -317,6 +318,9 @@ export function ClientJourneyPage() {
   const [clinicalPrintTitle, setClinicalPrintTitle] = useState('Consultation & Treatment Summary');
   const [clinicalPrintNote, setClinicalPrintNote] = useState('');
   const [clinicalPrintSections, setClinicalPrintSections] = useState(() => Object.fromEntries(PRINT_SECTION_OPTIONS.map(([id]) => [id, true])));
+  const [clinicalPrintTemplates, setClinicalPrintTemplates] = useState(() => loadValue(clinicalPrintTemplatesKey, []));
+  const [clinicalPrintTemplateName, setClinicalPrintTemplateName] = useState('');
+  const [selectedClinicalPrintTemplate, setSelectedClinicalPrintTemplate] = useState('');
   const appointments = loadValue(appointmentsKey, []);
   const payments = loadValue(paymentsKey, []);
   const operationRows = loadValue(operationsKey, {});
@@ -368,6 +372,10 @@ export function ClientJourneyPage() {
   useEffect(() => {
     window.localStorage.setItem(customDoctorNotesKey, JSON.stringify(customDoctorNotes));
   }, [customDoctorNotes, customDoctorNotesKey]);
+
+  useEffect(() => {
+    window.localStorage.setItem(clinicalPrintTemplatesKey, JSON.stringify(clinicalPrintTemplates));
+  }, [clinicalPrintTemplates, clinicalPrintTemplatesKey]);
 
   useEffect(() => {
     if (!formOptions.length) return;
@@ -657,6 +665,47 @@ export function ClientJourneyPage() {
     setClinicalPrintSections((current) => ({ ...current, [sectionId]: !current[sectionId] }));
   };
 
+  const applyClinicalPrintTemplate = (templateIndex) => {
+    setSelectedClinicalPrintTemplate(templateIndex);
+    if (templateIndex === '') return;
+    const template = clinicalPrintTemplates[Number(templateIndex)];
+    if (!template) return;
+    setClinicalPrintTemplateName(template.name ?? '');
+    setClinicalPrintTitle(template.title || 'Consultation & Treatment Summary');
+    setClinicalPrintNote(template.note ?? '');
+    setClinicalPrintSections(Object.fromEntries(
+      PRINT_SECTION_OPTIONS.map(([id]) => [id, Boolean(template.sections?.[id])]),
+    ));
+  };
+
+  const saveClinicalPrintTemplate = () => {
+    const name = clinicalPrintTemplateName.trim();
+    if (!name) return;
+    const template = {
+      name,
+      title: clinicalPrintTitle.trim() || 'Consultation & Treatment Summary',
+      note: clinicalPrintNote,
+      sections: { ...clinicalPrintSections },
+      updatedAt: new Date().toISOString(),
+    };
+    setClinicalPrintTemplates((current) => {
+      const existingIndex = current.findIndex((item) => String(item.name ?? '').toLowerCase() === name.toLowerCase());
+      if (existingIndex < 0) return [template, ...current];
+      return current.map((item, index) => index === existingIndex ? template : item);
+    });
+    setSelectedClinicalPrintTemplate('');
+  };
+
+  const deleteClinicalPrintTemplate = () => {
+    if (selectedClinicalPrintTemplate === '') return;
+    const index = Number(selectedClinicalPrintTemplate);
+    const template = clinicalPrintTemplates[index];
+    if (!template || !window.confirm(`Delete "${template.name}" print template?`)) return;
+    setClinicalPrintTemplates((current) => current.filter((_, templateIndex) => templateIndex !== index));
+    setSelectedClinicalPrintTemplate('');
+    setClinicalPrintTemplateName('');
+  };
+
   const printClinicalSummary = () => {
     if (!selectedClient) return;
     const consultationData = journey.consultationData ?? {};
@@ -842,6 +891,14 @@ export function ClientJourneyPage() {
             </div>
             <div className="clinical-print-layout">
               <div className="clinical-print-controls">
+                <div className="clinical-print-template-tools">
+                  <label className="field-block"><span>Use Template</span><select className="lead-input" value={selectedClinicalPrintTemplate} onChange={(event) => applyClinicalPrintTemplate(event.target.value)}><option value="">{clinicalPrintTemplates.length ? 'Select saved print template...' : 'No print templates saved yet'}</option>{clinicalPrintTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}</select></label>
+                  <label className="field-block"><span>Template Name</span><input className="lead-input" value={clinicalPrintTemplateName} onChange={(event) => setClinicalPrintTemplateName(event.target.value)} placeholder="e.g. Standard Consultation" /></label>
+                  <div className="clinical-print-template-actions">
+                    <button className="pill" type="button" disabled={!clinicalPrintTemplateName.trim()} onClick={saveClinicalPrintTemplate}>Save Template</button>
+                    <button className="pill danger" type="button" disabled={selectedClinicalPrintTemplate === ''} onClick={deleteClinicalPrintTemplate}>Delete</button>
+                  </div>
+                </div>
                 <label className="field-block"><span>Print Title</span><input className="lead-input" value={clinicalPrintTitle} onChange={(event) => setClinicalPrintTitle(event.target.value)} /></label>
                 <div className="clinical-print-select-all">
                   <strong>Include in print</strong>
