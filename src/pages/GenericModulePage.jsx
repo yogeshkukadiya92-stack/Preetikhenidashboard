@@ -45,7 +45,50 @@ function asImportRows(value) {
   return [];
 }
 
-export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, fieldTypes = {}, rowActions = null, filterPresets = [], viewPresets = [], normalizeRows = (value) => value }) {
+function SearchableFieldPicker({ value, options, placeholder, onChange, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const query = String(value ?? '').trim().toLowerCase();
+  const matches = options
+    .filter((option) => !query || `${option.label} ${option.searchText ?? ''}`.toLowerCase().includes(query))
+    .slice(0, 8);
+
+  return (
+    <div className="searchable-field-picker">
+      <input
+        className="lead-input"
+        value={value}
+        onChange={(event) => { onChange(event.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setOpen(false);
+          if (event.key === 'Enter' && matches[0]) {
+            event.preventDefault();
+            onSelect(matches[0]);
+            setOpen(false);
+          }
+        }}
+        placeholder={placeholder}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+      />
+      {open && (
+        <div className="searchable-field-results" role="listbox">
+          {matches.length ? matches.map((option) => (
+            <button type="button" role="option" key={option.key ?? option.value} onMouseDown={(event) => event.preventDefault()} onClick={() => { onSelect(option); setOpen(false); }}>
+              <strong>{option.label}</strong>
+              {option.description && <small>{option.description}</small>}
+            </button>
+          )) : <div className="searchable-field-empty">No patient found. Search by Patient ID, name, or mobile.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, searchableFieldOptions = {}, fieldTypes = {}, rowActions = null, filterPresets = [], viewPresets = [], normalizeRows = (value) => value }) {
   const { branchKey } = useBranch();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRow, setSelectedRow] = useState(null);
@@ -312,7 +355,19 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
               {columns.map((column, index) => (
                 <label className="field-block" key={column}>
                   <span>{column}</span>
-                  {fieldOptions[column]?.length ? (
+                  {searchableFieldOptions[column]?.length ? (
+                    <SearchableFieldPicker
+                      value={draftRow[index] ?? ''}
+                      options={searchableFieldOptions[column]}
+                      placeholder={`Search ${column.toLowerCase()} by ID, name, or mobile...`}
+                      onChange={(nextValue) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? nextValue : cell)))}
+                      onSelect={(option) => setDraftRow((current) => columns.map((draftColumn, columnIndex) => {
+                        if (columnIndex === index) return option.value;
+                        if (option.autoFill?.[draftColumn] !== undefined) return option.autoFill[draftColumn];
+                        return current[columnIndex];
+                      }))}
+                    />
+                  ) : fieldOptions[column]?.length ? (
                     <select
                       className="lead-input"
                       value={draftRow[index] ?? ''}

@@ -389,6 +389,16 @@ function savedClientName(row) {
   return row?.name ?? row?.Client ?? row?.client ?? '';
 }
 
+function savedClientId(row) {
+  if (Array.isArray(row)) return row.length >= 7 ? row[0] ?? '' : '';
+  return row?.clientId ?? row?.['Client ID'] ?? row?.ClientId ?? row?.ID ?? row?.id ?? '';
+}
+
+function savedClientMobile(row) {
+  if (Array.isArray(row)) return row.length >= 7 ? row[2] ?? '' : row[1] ?? '';
+  return row?.mobile ?? row?.Mobile ?? row?.phone ?? row?.Phone ?? '';
+}
+
 function normalizeClientId(value) {
   return String(value ?? '').trim().toUpperCase();
 }
@@ -3893,9 +3903,26 @@ function LegacyFormsPage() {
 export function AppointmentsPage() {
   const { branchKey } = useBranch();
   const navigate = useNavigate();
-  const [clientNames] = useState(() =>
-    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map(savedClientName).filter(Boolean)
-  );
+  const [patientOptions] = useState(() => {
+    const savedPatients = loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients));
+    const seen = new Set();
+    return savedPatients.map((row) => {
+      const name = String(savedClientName(row)).trim();
+      const id = String(savedClientId(row)).trim();
+      const mobile = String(savedClientMobile(row)).trim();
+      const key = (id || `${name}-${mobile}`).toLowerCase();
+      if (!name || seen.has(key)) return null;
+      seen.add(key);
+      return {
+        key,
+        value: name,
+        label: id ? `${id} · ${name}` : name,
+        description: mobile || 'Mobile not saved',
+        searchText: `${id} ${name} ${mobile}`,
+        autoFill: { Mobile: mobile },
+      };
+    }).filter(Boolean);
+  });
   return (
     <GenericModulePage
       title="Appointments"
@@ -3907,7 +3934,8 @@ export function AppointmentsPage() {
       ]}
       columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status']}
       rows={[]}
-      fieldOptions={{ Client: clientNames, Type: services }}
+      fieldOptions={{ Type: services }}
+      searchableFieldOptions={{ Client: patientOptions }}
       fieldTypes={{ Mobile: 'tel', Date: 'date', Time: 'time' }}
       normalizeRows={normalizeAppointmentRows}
       filterPresets={[
