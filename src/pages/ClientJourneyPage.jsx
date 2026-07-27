@@ -408,6 +408,13 @@ export function ClientJourneyPage() {
     ? selectedVisitId
     : patientJourneyRecord.activeVisitId || journeyVisits.at(-1)?.id || '';
   const journey = journeyVisits.find((visit) => visit.id === activeVisitId) ?? {};
+  const clinicalPreviewMedicines = Array.isArray(journey.treatmentData?.medicines)
+    ? journey.treatmentData.medicines.filter((item) => item?.medicine)
+    : String(journey.treatmentData?.medicine ?? '').split(',').map((medicine, index) => ({
+      medicine: medicine.trim(),
+      dose: String(journey.treatmentData?.dose ?? '').split(',')[index]?.trim() ?? '',
+      timing: String(journey.treatmentData?.timing ?? '').split(',')[index]?.trim() ?? '',
+    })).filter((item) => item.medicine);
   useEffect(() => {
     const record = normalizeJourneyRecord(journeys[selectedClient]);
     setSelectedVisitId(record.activeVisitId || record.visits.at(-1)?.id || '');
@@ -728,7 +735,7 @@ export function ClientJourneyPage() {
       clinicalPrintSections.diagnosis && section('Diagnosis', `<p>${escapePrintHtml(consultationData.diagnosis || 'Not recorded')}</p>`),
       clinicalPrintSections.doctorNotes && section('Doctor Notes', `<p>${escapePrintHtml(consultationData.notes || 'Not recorded').replaceAll('\n', '<br>')}</p>`),
       clinicalPrintSections.treatment && section('Treatment Plan', `<div class="details">${detail('Service', treatmentData.service)}${detail('Goal', treatmentData.goal)}${detail('Duration', treatmentData.duration)}${detail('Status', treatmentData.status)}</div>`),
-      clinicalPrintSections.medicines && section('Medicines / Products', selectedMedicines.length ? `<table><thead><tr><th>Medicine / Product</th><th>Dose</th><th>Timing</th></tr></thead><tbody>${selectedMedicines.map((item) => `<tr><td>${escapePrintHtml(item.medicine)}</td><td>${escapePrintHtml(item.dose || '—')}</td><td>${escapePrintHtml(item.timing || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>No medicines recorded.</p>'),
+      clinicalPrintSections.medicines && section('Medicines / Products', selectedMedicines.length ? `<table><thead><tr><th style="width:36px">No.</th><th>Medicine / Product</th><th>Dose</th><th>Timing</th></tr></thead><tbody>${selectedMedicines.map((item, index) => `<tr><td>${index + 1}</td><td>${escapePrintHtml(item.medicine)}</td><td>${escapePrintHtml(item.dose || '—')}</td><td>${escapePrintHtml(item.timing || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>No medicines recorded.</p>'),
       clinicalPrintSections.followup && section('Next Follow-up', `<div class="details">${detail('Date', followupData.date)}${detail('Time', followupData.time)}${detail('Notes', followupData.notes)}${detail('Status', followupData.status)}</div>`),
       clinicalPrintSections.payment && section('Payment Details', `<div class="details">${detail('Invoice', paymentData.invoice)}${detail('Amount', paymentData.amount ? `₹ ${paymentData.amount}` : '')}${detail('Paid', paymentData.paidAmount ? `₹ ${paymentData.paidAmount}` : '')}${detail('Pending', paymentData.pendingAmount ? `₹ ${paymentData.pendingAmount}` : '')}${detail('Status', paymentData.status)}</div>`),
     ].filter(Boolean).join('');
@@ -922,7 +929,7 @@ export function ClientJourneyPage() {
                 {clinicalPrintSections.diagnosis && <div className="clinical-preview-section"><strong>Diagnosis</strong><p>{journey.consultationData?.diagnosis || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.doctorNotes && <div className="clinical-preview-section"><strong>Doctor Notes</strong><p>{journey.consultationData?.notes || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.treatment && <div className="clinical-preview-section"><strong>Treatment Plan</strong><p>{[journey.treatmentData?.service, journey.treatmentData?.goal, journey.treatmentData?.duration].filter(Boolean).join(' · ') || 'Not recorded'}</p></div>}
-                {clinicalPrintSections.medicines && <div className="clinical-preview-section"><strong>Medicines, Dose & Timing</strong><p>{journey.treatmentData?.medicine || 'No medicines recorded'}{journey.treatmentData?.dose ? ` · ${journey.treatmentData.dose}` : ''}{journey.treatmentData?.timing ? ` · ${journey.treatmentData.timing}` : ''}</p></div>}
+                {clinicalPrintSections.medicines && <div className="clinical-preview-section"><strong>Medicines, Dose & Timing</strong>{clinicalPreviewMedicines.length ? <div className="clinical-preview-medicine-list" role="table" aria-label="Selected medicines">{clinicalPreviewMedicines.map((item, index) => <div className="clinical-preview-medicine-row" role="row" key={`${item.medicine}-${index}`}><b aria-label={`Medicine ${index + 1}`}>{index + 1}</b><span role="cell"><strong>{item.medicine}</strong><small>{item.dose || 'Dose not recorded'} · {item.timing || 'Timing not recorded'}</small></span></div>)}</div> : <p>No medicines recorded</p>}</div>}
                 {clinicalPrintSections.followup && <div className="clinical-preview-section"><strong>Next Follow-up</strong><p>{journey.followupData?.date ? `${journey.followupData.date} · ${journey.followupData.time || 'Time pending'}` : 'Not scheduled'}</p></div>}
                 {clinicalPrintSections.payment && <div className="clinical-preview-section"><strong>Payment Details</strong><p>{journey.paymentData?.amount ? `₹ ${journey.paymentData.amount} · ${journey.paymentData.status || ''}` : 'Not recorded'}</p></div>}
                 {clinicalPrintNote.trim() && <div className="clinical-preview-section"><strong>Additional Instructions</strong><p>{clinicalPrintNote}</p></div>}

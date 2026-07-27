@@ -1682,6 +1682,12 @@ body {
 .clinical-preview-section { margin-top: 13px; break-inside: avoid; }
 .clinical-preview-section > strong { display: block; padding-bottom: 4px; border-bottom: 1px solid var(--border); color: var(--green); font-size: 0.76rem; }
 .clinical-preview-section p { margin: 6px 0 0; color: var(--text); font-size: 0.74rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.clinical-preview-medicine-list { display: grid; gap: 5px; margin-top: 7px; }
+.clinical-preview-medicine-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 7px; align-items: start; padding: 6px 7px; border: 1px solid var(--border); border-radius: 7px; background: #fff; }
+.clinical-preview-medicine-row > b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--green); color: #fff; font-size: 0.68rem; }
+.clinical-preview-medicine-row span { display: grid; gap: 2px; min-width: 0; }
+.clinical-preview-medicine-row span > strong { color: var(--text); font-size: 0.72rem; overflow-wrap: anywhere; }
+.clinical-preview-medicine-row small { color: var(--muted); font-size: 0.67rem; line-height: 1.4; overflow-wrap: anywhere; }
 .journey-next { width: 100%; margin-top: 12px; }
 .matched-response-list {
   display: grid;
