@@ -565,6 +565,20 @@ export function ClientJourneyPage() {
     setStageModal(stage);
   };
 
+  const openReturningVisit = () => {
+    if (!selectedClient || !selectedClientRecord) return;
+    const previousAppointments = normalizeAppointments(appointments)
+      .filter((row) => String(row[0] ?? '').toLowerCase() === selectedClient.toLowerCase())
+      .sort((a, b) => `${b[2] ?? ''} ${b[3] ?? ''}`.localeCompare(`${a[2] ?? ''} ${a[3] ?? ''}`));
+    setAppointmentForm({
+      mobile: clientMobile(selectedClientRecord),
+      ...currentSlot(),
+      type: previousAppointments[0]?.[4] || 'Consultation',
+      status: 'Checked-in',
+    });
+    setStageModal('returning-visit');
+  };
+
   const saveAppointment = () => {
     if (!appointmentForm.date || !appointmentForm.time) return;
     const current = normalizeAppointments(loadValue(appointmentsKey, []));
@@ -637,6 +651,13 @@ export function ClientJourneyPage() {
       <div className="journey-layout">
         <Card title="Reception Desk" subtitle="Search an existing patient or register a new walk-in." action={<button className="pill primary-action" type="button" onClick={() => navigate('/clients?action=add')}>+ Register Patient</button>}>
           <input className="lead-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search patient by ID, name, or mobile..." />
+          <div className="returning-patient-action">
+            <div>
+              <strong>Returning patient?</strong>
+              <span>Select an existing patient below, then start a new visit with saved profile data.</span>
+            </div>
+            <button className="pill" type="button" disabled={!selectedClient} onClick={openReturningVisit}>+ Start New Visit</button>
+          </div>
           <div className="journey-client-list">
             {visibleClients.length ? visibleClients.map((row) => {
               const name = clientName(row);
@@ -664,6 +685,8 @@ export function ClientJourneyPage() {
       </div>
 
       {stageModal === 'appointment' && <JourneyModal title="Add Appointment" client={selectedClient} onClose={() => setStageModal('')} onSave={saveAppointment} saveLabel="Save Appointment"><div className="quick-preset-row"><button className="pill" type="button" onClick={() => setAppointmentPreset('now')}>Walk-in now</button><button className="pill" type="button" onClick={() => setAppointmentPreset('today')}>Today</button><button className="pill" type="button" onClick={() => setAppointmentPreset('tomorrow')}>Tomorrow</button><button className="pill" type="button" onClick={() => setAppointmentPreset('week')}>After 7 days</button><button className="pill" type="button" onClick={() => setAppointmentPreset('month')}>After 30 days</button></div><label className="field-block"><span>Mobile</span><input className="lead-input" type="tel" value={appointmentForm.mobile} onChange={(event) => setAppointmentForm((value) => ({ ...value, mobile: event.target.value }))} /></label><label className="field-block"><span>Date</span><input className="lead-input" type="date" value={appointmentForm.date} onChange={(event) => setAppointmentForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Time</span><input className="lead-input" type="time" value={appointmentForm.time} onChange={(event) => setAppointmentForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block"><span>Type</span><select className="lead-input" value={appointmentForm.type} onChange={(event) => setAppointmentForm((value) => ({ ...value, type: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Status</span><select className="lead-input" value={appointmentForm.status} onChange={(event) => setAppointmentForm((value) => ({ ...value, status: event.target.value }))}><option>Pending</option><option>Confirmed</option><option>Checked-in</option><option>Cancelled</option></select></label></JourneyModal>}
+
+      {stageModal === 'returning-visit' && <JourneyModal title="New Visit for Existing Patient" client={selectedClient} onClose={() => setStageModal('')} onSave={saveAppointment} saveLabel="Add Visit & Check In"><div className="returning-patient-summary full-field"><span><strong>{clientId(selectedClientRecord) || 'Saved patient'}</strong> Patient ID</span><span><strong>{clientMobile(selectedClientRecord) || 'Not saved'}</strong> Mobile</span><span><strong>Auto-filled</strong> Saved profile linked</span></div><div className="action-note full-field"><strong>Existing patient selected.</strong> This creates a new visit while keeping all previous journey, treatment, form, and payment records linked.</div><label className="field-block"><span>Mobile</span><input className="lead-input" type="tel" value={appointmentForm.mobile} onChange={(event) => setAppointmentForm((value) => ({ ...value, mobile: event.target.value }))} /></label><label className="field-block"><span>Visit Date</span><input className="lead-input" type="date" value={appointmentForm.date} onChange={(event) => setAppointmentForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Visit Time</span><input className="lead-input" type="time" value={appointmentForm.time} onChange={(event) => setAppointmentForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block"><span>Service</span><select className="lead-input" value={appointmentForm.type} onChange={(event) => setAppointmentForm((value) => ({ ...value, type: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Status</span><select className="lead-input" value={appointmentForm.status} onChange={(event) => setAppointmentForm((value) => ({ ...value, status: event.target.value }))}><option>Checked-in</option><option>Confirmed</option><option>Pending</option></select></label></JourneyModal>}
 
       {stageModal === 'forms' && <JourneyModal title="Required Form" client={selectedClient} onClose={() => setStageModal('')} onSave={saveRequiredForm} saveLabel={matchedFormResponses.length ? 'Mark Form Received' : 'Waiting for Submission'} saveDisabled={!matchedFormResponses.length}><label className="field-block"><span>Form</span><select className="lead-input" value={requiredForm} onChange={(event) => setRequiredForm(event.target.value)}>{formOptions.length ? formOptions.map((form) => <option key={form.id || form.slug || formTitle(form)} value={formTitle(form)}>{formTitle(form)}</option>) : <option value="">No forms created yet</option>}</select></label><div className="action-note"><strong>{matchedFormResponses.length ? `${matchedFormResponses.length} response(s) found` : 'Submission not found'}</strong>{matchedFormResponses.length ? ' Mobile number matched with submitted form responses below.' : ' Ask the patient to submit any created form using the same mobile number saved in the patient profile.'}</div><div className="matched-response-list full-field">{matchedFormResponses.length ? matchedFormResponses.map(({ response, form }) => <div className="matched-response-card" key={response.id}><div><strong>{response.formTitle || formTitle(form) || 'Submitted Form'}</strong><span>{formatResponseDate(response.submittedAt)}</span></div>{responsePreview(response, form).map(([label, value]) => <p key={`${response.id}-${label}`}><b>{label}:</b> {value}</p>)}</div>) : <div className="empty-state compact-empty"><strong>No matched response yet.</strong><p>Patient mobile: {selectedClientPhone || 'not saved'}</p></div>}</div></JourneyModal>}
 

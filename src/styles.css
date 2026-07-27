@@ -1693,6 +1693,10 @@ body {
   width: min(1120px, calc(100vw - 28px));
 }
 
+.diet-pdf-message {
+  margin-bottom: 10px;
+}
+
 .diet-plan-modal .modal-body {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
@@ -1748,6 +1752,36 @@ body {
   gap: 8px;
   padding-top: 2px;
 }
+
+.returning-patient-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 9px;
+  padding: 10px;
+  border: 1px solid rgba(14, 91, 82, 0.2);
+  border-radius: 10px;
+  background: rgba(236, 249, 244, 0.66);
+}
+.returning-patient-action > div { display: grid; gap: 2px; min-width: 0; }
+.returning-patient-action strong { font-size: 0.8rem; }
+.returning-patient-action span { color: var(--muted); font-size: 0.72rem; line-height: 1.4; }
+.returning-patient-action .pill { flex: 0 0 auto; }
+.returning-patient-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.returning-patient-summary span {
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #f8fbfa;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+.returning-patient-summary strong { display: block; margin-bottom: 2px; color: var(--text); font-size: 0.8rem; overflow-wrap: anywhere; }
 
 .consultation-chips {
   display: flex;
@@ -1882,6 +1916,9 @@ body {
   .symptom-builder { grid-template-columns: 1fr; }
   .report-form-filter { align-items: stretch; flex-direction: column; }
   .report-form-filter .pill { width: 100%; }
+  .returning-patient-action { align-items: stretch; flex-direction: column; }
+  .returning-patient-action .pill { width: 100%; }
+  .returning-patient-summary { grid-template-columns: 1fr; }
   .login-page { padding: 14px; }
   .login-shell { padding: 22px 18px; }
   .kpis { grid-template-columns: 1fr; }
