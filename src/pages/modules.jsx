@@ -4317,19 +4317,25 @@ export function TreatmentPlansPage() {
     const pdfModule = await import('html2pdf.js');
     const html2pdf = pdfModule.default ?? pdfModule;
     const element = buildDietPlanPdfElement(plan);
-    element.style.position = 'fixed';
-    element.style.left = '-10000px';
+    element.style.position = 'absolute';
+    element.style.left = '0';
     element.style.top = '0';
+    element.style.zIndex = '-2147483647';
+    element.style.pointerEvents = 'none';
     document.body.appendChild(element);
     try {
-      return await html2pdf().set({
+      await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+      const blob = await html2pdf().set({
         margin: 8,
         filename: `${fileSafeName(plan.client)}-diet-plan.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
+        html2canvas: { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: 900 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.detail'] },
       }).from(element).outputPdf('blob');
+      const signature = new TextDecoder().decode((await blob.slice(0, 5).arrayBuffer()));
+      if (blob.size < 2500 || signature !== '%PDF-') throw new Error('Generated PDF is empty.');
+      return blob;
     } finally {
       element.remove();
     }
