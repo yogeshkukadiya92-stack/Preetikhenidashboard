@@ -1586,12 +1586,99 @@ body {
 .journey-client span { color: var(--muted); font-size: 0.75rem; }
 .journey-client.active { border-color: var(--green); background: #eef8f2; box-shadow: inset 3px 0 0 var(--green); }
 .journey-stages { display: grid; gap: 8px; }
+.journey-visit-history {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8fbfa;
+}
+.journey-visit-history > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.journey-visit-history > div:first-child strong { font-size: 0.8rem; }
+.journey-visit-history > div:first-child span { color: var(--muted); font-size: 0.7rem; }
+.journey-visit-tabs { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; }
+.journey-visit-tab {
+  display: grid;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-width: 118px;
+  min-height: 48px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.journey-visit-tab:hover,
+.journey-visit-tab:focus-visible { border-color: rgba(14, 91, 82, 0.4); }
+.journey-visit-tab.active { border-color: var(--green); background: var(--green); color: #fff; }
+.journey-visit-tab strong { font-size: 0.75rem; }
+.journey-visit-tab span { color: var(--muted); font-size: 0.66rem; }
+.journey-visit-tab.active span { color: rgba(255, 255, 255, 0.8); }
 .journey-stage { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 58px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
 .journey-stage.complete { background: #f1f8f4; }
 .journey-index { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #e5ece8; color: var(--muted); font-weight: 900; }
 .journey-stage.complete .journey-index { background: var(--green); color: #fff; }
 .journey-stage strong, .journey-stage small { display: block; }
 .journey-stage small { margin-top: 2px; color: var(--muted); }
+.journey-print-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 11px;
+  border: 1px solid rgba(14, 91, 82, 0.2);
+  border-radius: 10px;
+  background: rgba(236, 249, 244, 0.7);
+}
+.journey-print-actions > div { display: grid; gap: 2px; min-width: 0; }
+.journey-print-actions strong { font-size: 0.8rem; }
+.journey-print-actions span { color: var(--muted); font-size: 0.72rem; line-height: 1.4; }
+.journey-print-actions .pill { flex: 0 0 auto; }
+.clinical-print-modal { width: min(1080px, calc(100vw - 28px)); }
+.clinical-print-layout { display: grid; grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr); gap: 14px; padding: 14px; overflow-y: auto; }
+.clinical-print-controls { display: grid; align-content: start; gap: 12px; }
+.clinical-print-select-all { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.clinical-print-select-all > div { display: flex; gap: 6px; }
+.clinical-print-select-all strong { font-size: 0.8rem; }
+.clinical-print-options { display: grid; gap: 6px; }
+.clinical-print-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.clinical-print-option.selected { border-color: rgba(14, 91, 82, 0.42); background: rgba(236, 249, 244, 0.85); }
+.clinical-print-option input { width: 17px; height: 17px; accent-color: var(--green); }
+.clinical-print-preview {
+  min-height: 520px;
+  padding: 22px;
+  border: 1px solid #d6e4df;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(19, 52, 39, 0.08);
+}
+.clinical-preview-header { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 3px solid var(--green); }
+.clinical-preview-header > div { display: grid; gap: 3px; }
+.clinical-preview-header strong { color: var(--green); font-size: 1.05rem; }
+.clinical-preview-header span,
+.clinical-preview-header small { color: var(--muted); font-size: 0.7rem; }
+.clinical-preview-section { margin-top: 13px; break-inside: avoid; }
+.clinical-preview-section > strong { display: block; padding-bottom: 4px; border-bottom: 1px solid var(--border); color: var(--green); font-size: 0.76rem; }
+.clinical-preview-section p { margin: 6px 0 0; color: var(--text); font-size: 0.74rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .journey-next { width: 100%; margin-top: 12px; }
 .matched-response-list {
   display: grid;
@@ -1965,6 +2052,7 @@ body {
   .dashboard-controls { grid-template-columns: 1fr; }
   .dashboard-patient-search { grid-template-columns: 1fr; }
   .inline-response-layout { grid-template-columns: 1fr; }
+  .clinical-print-layout { grid-template-columns: 1fr; }
   .appointment-calendar-layout { grid-template-columns: 1fr; }
   .sidebar { padding-bottom: 24px; height: auto; min-height: auto; position: relative; overflow: visible; }
   .clinic-card, .sidebar-art { position: static; }
@@ -2003,6 +2091,13 @@ body {
   .returning-patient-action { align-items: stretch; flex-direction: column; }
   .returning-patient-action .pill { width: 100%; }
   .returning-patient-summary { grid-template-columns: 1fr; }
+  .journey-print-actions,
+  .clinical-print-select-all { align-items: stretch; flex-direction: column; }
+  .journey-print-actions .pill { width: 100%; }
+  .clinical-print-select-all > div,
+  .clinical-print-select-all .pill { width: 100%; }
+  .clinical-print-preview { min-height: 0; padding: 14px; }
+  .journey-visit-history > div:first-child { align-items: flex-start; flex-direction: column; }
   .login-page { padding: 14px; }
   .login-shell { padding: 22px 18px; }
   .kpis { grid-template-columns: 1fr; }

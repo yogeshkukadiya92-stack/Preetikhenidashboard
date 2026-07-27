@@ -80,6 +80,16 @@ function displayAnswer(value) {
   return String(value ?? '').trim();
 }
 
+function escapePrintHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character]);
+}
+
 function responsePreview(response, form) {
   const answers = response?.answers && typeof response.answers === 'object' ? response.answers : {};
   const fields = Array.isArray(form?.fields) ? form.fields : [];
@@ -120,6 +130,18 @@ const QUICK_CONSULTATIONS = [
   { label: 'Hair fall', complaint: 'Hair fall, Stress', diagnosis: 'Hair disorder', notes: 'Review after 30 days', vitals: 'Vitals stable' },
 ];
 
+const PRINT_SECTION_OPTIONS = [
+  ['patient', 'Patient Details'],
+  ['symptoms', 'Symptoms / Chief Complaint'],
+  ['vitals', 'Vitals'],
+  ['diagnosis', 'Diagnosis'],
+  ['doctorNotes', 'Doctor Notes'],
+  ['treatment', 'Treatment Plan'],
+  ['medicines', 'Medicines, Dose & Timing'],
+  ['followup', 'Next Follow-up'],
+  ['payment', 'Payment Details'],
+];
+
 function currentSlot() {
   const now = new Date();
   return {
@@ -136,6 +158,31 @@ function addDays(days) {
 
 function normalizeAppointments(rows = []) {
   return rows.map((row) => row.length >= 7 ? [row[0], row[1], row[2], row[3], row[4], row[6] || row[5] || 'Pending'] : row.slice(0, 6));
+}
+
+function visitDateFromJourney(visit) {
+  return visit?.visitDate
+    || visit?.appointmentData?.date
+    || String(visit?.appointmentAt ?? visit?.consultedAt ?? visit?.updatedAt ?? '').slice(0, 10)
+    || currentSlot().date;
+}
+
+function normalizeJourneyRecord(record) {
+  if (Array.isArray(record?.visits)) {
+    const visits = record.visits.map((visit, index) => ({
+      ...visit,
+      id: visit.id || `visit-${visitDateFromJourney(visit)}-${index}`,
+      visitDate: visitDateFromJourney(visit),
+    }));
+    return { visits, activeVisitId: record.activeVisitId || visits.at(-1)?.id || '' };
+  }
+  if (!record || !Object.keys(record).length) return { visits: [], activeVisitId: '' };
+  const legacyVisit = {
+    ...record,
+    id: `visit-${visitDateFromJourney(record)}-legacy`,
+    visitDate: visitDateFromJourney(record),
+  };
+  return { visits: [legacyVisit], activeVisitId: legacyVisit.id };
 }
 
 function nextInvoice(rows = []) {
@@ -248,6 +295,7 @@ export function ClientJourneyPage() {
   const [clients, setClients] = useState(() => loadValue(clientsKey, []));
   const [journeys, setJourneys] = useState(() => loadValue(journeysKey, {}));
   const [selectedClient, setSelectedClient] = useState(() => searchParams.get('client') ?? '');
+  const [selectedVisitId, setSelectedVisitId] = useState('');
   const [search, setSearch] = useState('');
   const [consultationOpen, setConsultationOpen] = useState(false);
   const [consultation, setConsultation] = useState({ complaint: '', diagnosis: '', notes: '', vitals: '' });
@@ -265,6 +313,10 @@ export function ClientJourneyPage() {
   const [treatmentMedicineRows, setTreatmentMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
   const [paymentForm, setPaymentForm] = useState({ invoice: '', amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
   const [followupForm, setFollowupForm] = useState(() => ({ date: addDays(7), time: currentSlot().time, notes: '', status: 'Confirmed' }));
+  const [clinicalPrintOpen, setClinicalPrintOpen] = useState(false);
+  const [clinicalPrintTitle, setClinicalPrintTitle] = useState('Consultation & Treatment Summary');
+  const [clinicalPrintNote, setClinicalPrintNote] = useState('');
+  const [clinicalPrintSections, setClinicalPrintSections] = useState(() => Object.fromEntries(PRINT_SECTION_OPTIONS.map(([id]) => [id, true])));
   const appointments = loadValue(appointmentsKey, []);
   const payments = loadValue(paymentsKey, []);
   const operationRows = loadValue(operationsKey, {});
@@ -342,10 +394,16 @@ export function ClientJourneyPage() {
     const haystack = [clientId(row), clientName(row), clientMobile(row)].join(' ').toLowerCase();
     return haystack.includes(search.toLowerCase());
   });
-  const journey = journeys[selectedClient] ?? {};
-  const hasAppointment = appointments.some((row) => String(row?.[0] ?? row?.Client ?? '').toLowerCase() === selectedClient.toLowerCase());
-  const hasPayment = payments.some((row) => String(row?.[0] ?? row?.Client ?? '').toLowerCase() === selectedClient.toLowerCase());
-  const hasTreatment = (operationRows.treatments ?? []).some((row) => String(row?.[0] ?? row?.Client ?? '').toLowerCase() === selectedClient.toLowerCase());
+  const patientJourneyRecord = normalizeJourneyRecord(journeys[selectedClient]);
+  const journeyVisits = patientJourneyRecord.visits;
+  const activeVisitId = journeyVisits.some((visit) => visit.id === selectedVisitId)
+    ? selectedVisitId
+    : patientJourneyRecord.activeVisitId || journeyVisits.at(-1)?.id || '';
+  const journey = journeyVisits.find((visit) => visit.id === activeVisitId) ?? {};
+  useEffect(() => {
+    const record = normalizeJourneyRecord(journeys[selectedClient]);
+    setSelectedVisitId(record.activeVisitId || record.visits.at(-1)?.id || '');
+  }, [selectedClient]);
   const selectedClientPhone = normalizePhoneNumber(clientMobile(selectedClientRecord));
   const requiredFormRecord = localForms.find((form) => formTitle(form).toLowerCase() === requiredForm.toLowerCase());
   const matchedFormResponses = localResponses
@@ -366,13 +424,17 @@ export function ClientJourneyPage() {
     const nameMatches = selectedClient && responseName(response, requiredFormRecord) === normalizePersonName(selectedClient);
     return phoneMatches || nameMatches;
   });
+  const hasCurrentVisitFormResponse = matchedFormResponses.some(({ response }) => {
+    if (!journey.visitDate) return true;
+    return String(response.submittedAt ?? '').slice(0, 10) >= journey.visitDate;
+  });
 
   const stageDone = (id) => {
     if (id === 'registration') return Boolean(selectedClient);
-    if (id === 'appointment') return hasAppointment || journey.appointment;
-    if (id === 'billing') return hasPayment || journey.billing;
-    if (id === 'treatment') return hasTreatment || journey.treatment;
-    if (id === 'forms') return hasRequiredFormResponse || matchedFormResponses.length > 0 || journey.forms;
+    if (id === 'appointment') return Boolean(journey.appointment);
+    if (id === 'billing') return Boolean(journey.billing);
+    if (id === 'treatment') return Boolean(journey.treatment);
+    if (id === 'forms') return Boolean(journey.forms);
     return Boolean(journey[id]);
   };
   const stageDetail = (id, complete) => {
@@ -384,16 +446,29 @@ export function ClientJourneyPage() {
 
   const updateJourney = (changes) => {
     if (!selectedClient) return;
-    setJourneys((current) => ({
-      ...current,
-      [selectedClient]: { ...(current[selectedClient] ?? {}), ...changes, updatedAt: new Date().toISOString() },
-    }));
+    const targetId = selectedVisitId || patientJourneyRecord.activeVisitId || `visit-${Date.now()}`;
+    if (!selectedVisitId) setSelectedVisitId(targetId);
+    setJourneys((current) => {
+      const record = normalizeJourneyRecord(current[selectedClient]);
+      const now = new Date().toISOString();
+      let visits = record.visits;
+      if (!visits.some((visit) => visit.id === targetId)) {
+        visits = [...visits, { id: targetId, visitDate: currentSlot().date, createdAt: now }];
+      }
+      return {
+        ...current,
+        [selectedClient]: {
+          visits: visits.map((visit) => visit.id === targetId ? { ...visit, ...changes, updatedAt: now } : visit),
+          activeVisitId: targetId,
+        },
+      };
+    });
   };
 
   useEffect(() => {
-    if (!selectedClient || journey.forms || (!hasRequiredFormResponse && !matchedFormResponses.length)) return;
+    if (!selectedClient || !activeVisitId || journey.forms || !hasCurrentVisitFormResponse) return;
     updateJourney({ forms: true, requiredForm, formsCompletedAt: new Date().toISOString(), formAutoMatched: true });
-  }, [selectedClient, journey.forms, hasRequiredFormResponse, matchedFormResponses.length, requiredForm]);
+  }, [selectedClient, activeVisitId, journey.forms, hasCurrentVisitFormResponse, requiredForm]);
 
   const openConsultation = () => {
     setConsultation(journey.consultationData ?? { complaint: '', diagnosis: '', notes: '', vitals: '' });
@@ -542,8 +617,7 @@ export function ClientJourneyPage() {
       return;
     }
     if (stage === 'appointment') {
-      const existing = normalizeAppointments(appointments).find((row) => String(row[0]).toLowerCase() === selectedClient.toLowerCase());
-      setAppointmentForm(existing ? { mobile: existing[1] ?? clientMobile(selectedClientRecord), date: existing[2] ?? '', time: existing[3] ?? '', type: existing[4] ?? 'Consultation', status: existing[5] ?? 'Pending' } : { mobile: clientMobile(selectedClientRecord), ...currentSlot(), type: 'Consultation', status: 'Pending' });
+      setAppointmentForm(journey.appointmentData ?? { mobile: clientMobile(selectedClientRecord), ...currentSlot(), type: 'Consultation', status: 'Pending' });
     }
     if (stage === 'treatment') {
       const savedTreatment = journey.treatmentData;
@@ -561,7 +635,7 @@ export function ClientJourneyPage() {
     if (stage === 'followup') {
       setFollowupForm(journey.followupData ?? { date: addDays(7), time: currentSlot().time, notes: '', status: 'Confirmed' });
     }
-    if (stage === 'payment' || stage === 'billing') setPaymentForm({ invoice: nextInvoice(payments), amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
+    if (stage === 'payment' || stage === 'billing') setPaymentForm(journey.paymentData ?? { invoice: nextInvoice(payments), amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
     setStageModal(stage);
   };
 
@@ -579,12 +653,72 @@ export function ClientJourneyPage() {
     setStageModal('returning-visit');
   };
 
+  const toggleClinicalPrintSection = (sectionId) => {
+    setClinicalPrintSections((current) => ({ ...current, [sectionId]: !current[sectionId] }));
+  };
+
+  const printClinicalSummary = () => {
+    if (!selectedClient) return;
+    const consultationData = journey.consultationData ?? {};
+    const treatmentData = journey.treatmentData ?? {};
+    const followupData = journey.followupData ?? {};
+    const paymentData = journey.paymentData ?? {};
+    const selectedMedicines = Array.isArray(treatmentData.medicines)
+      ? treatmentData.medicines
+      : String(treatmentData.medicine ?? '').split(',').map((medicine, index) => ({
+        medicine: medicine.trim(),
+        dose: String(treatmentData.dose ?? '').split(',')[index]?.trim() ?? '',
+        timing: String(treatmentData.timing ?? '').split(',')[index]?.trim() ?? '',
+      })).filter((item) => item.medicine);
+    const section = (title, content) => content ? `<section><h2>${escapePrintHtml(title)}</h2>${content}</section>` : '';
+    const detail = (label, value) => value ? `<div class="detail"><span>${escapePrintHtml(label)}</span><strong>${escapePrintHtml(value)}</strong></div>` : '';
+    const sections = [
+      clinicalPrintSections.patient && section('Patient Details', `<div class="details">${detail('Patient Name', selectedClient)}${detail('Patient ID', clientId(selectedClientRecord))}${detail('Mobile', clientMobile(selectedClientRecord))}${detail('Printed On', new Date().toLocaleString('en-IN'))}</div>`),
+      clinicalPrintSections.symptoms && section('Symptoms / Chief Complaint', `<p>${escapePrintHtml(consultationData.complaint || 'Not recorded')}</p>`),
+      clinicalPrintSections.vitals && section('Vitals', `<p>${escapePrintHtml(consultationData.vitals || 'Not recorded')}</p>`),
+      clinicalPrintSections.diagnosis && section('Diagnosis', `<p>${escapePrintHtml(consultationData.diagnosis || 'Not recorded')}</p>`),
+      clinicalPrintSections.doctorNotes && section('Doctor Notes', `<p>${escapePrintHtml(consultationData.notes || 'Not recorded').replaceAll('\n', '<br>')}</p>`),
+      clinicalPrintSections.treatment && section('Treatment Plan', `<div class="details">${detail('Service', treatmentData.service)}${detail('Goal', treatmentData.goal)}${detail('Duration', treatmentData.duration)}${detail('Status', treatmentData.status)}</div>`),
+      clinicalPrintSections.medicines && section('Medicines / Products', selectedMedicines.length ? `<table><thead><tr><th>Medicine / Product</th><th>Dose</th><th>Timing</th></tr></thead><tbody>${selectedMedicines.map((item) => `<tr><td>${escapePrintHtml(item.medicine)}</td><td>${escapePrintHtml(item.dose || '—')}</td><td>${escapePrintHtml(item.timing || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>No medicines recorded.</p>'),
+      clinicalPrintSections.followup && section('Next Follow-up', `<div class="details">${detail('Date', followupData.date)}${detail('Time', followupData.time)}${detail('Notes', followupData.notes)}${detail('Status', followupData.status)}</div>`),
+      clinicalPrintSections.payment && section('Payment Details', `<div class="details">${detail('Invoice', paymentData.invoice)}${detail('Amount', paymentData.amount ? `₹ ${paymentData.amount}` : '')}${detail('Paid', paymentData.paidAmount ? `₹ ${paymentData.paidAmount}` : '')}${detail('Pending', paymentData.pendingAmount ? `₹ ${paymentData.pendingAmount}` : '')}${detail('Status', paymentData.status)}</div>`),
+    ].filter(Boolean).join('');
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapePrintHtml(selectedClient)} - Clinical Summary</title><style>*{box-sizing:border-box}body{margin:0;padding:28px 34px;color:#173b31;font-family:Arial,sans-serif;font-size:12px;line-height:1.5}.header{display:flex;justify-content:space-between;gap:20px;padding-bottom:14px;border-bottom:3px solid #0e5b52}.header h1{margin:0 0 4px;color:#0e5b52;font-size:22px}.header p{margin:0;color:#60776f}.clinic{text-align:right;font-weight:700}section{margin-top:17px;break-inside:avoid}h2{margin:0 0 8px;padding-bottom:5px;border-bottom:1px solid #d6e4df;color:#0e5b52;font-size:14px}p{margin:0;white-space:pre-wrap}.details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.detail{padding:8px;border:1px solid #dbe7e2;border-radius:6px}.detail span{display:block;margin-bottom:2px;color:#6a7f77;font-size:10px}.detail strong{overflow-wrap:anywhere}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #d6e4df;text-align:left;vertical-align:top}th{background:#edf7f3}.custom-note{margin-top:18px;padding:10px;border:1px solid #d6e4df;border-radius:6px;white-space:pre-wrap}.footer{margin-top:28px;padding-top:10px;border-top:1px solid #d6e4df;color:#758a82;font-size:10px;display:flex;justify-content:space-between}@page{margin:14mm}@media print{body{padding:0}th{background:#edf7f3!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><div><h1>${escapePrintHtml(clinicalPrintTitle || 'Clinical Summary')}</h1><p>Personalized consultation and treatment record</p></div><div class="clinic">Mom's Pathshala<br>Main Branch</div></div>${sections}${clinicalPrintNote.trim() ? `<div class="custom-note"><strong>Additional Instructions</strong><br>${escapePrintHtml(clinicalPrintNote).replaceAll('\n', '<br>')}</div>` : ''}<div class="footer"><span>Generated from Patient Journey</span><span>Doctor / Consultant Signature: __________________</span></div><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},300)});<\/script></body></html>`);
+    printWindow.document.close();
+  };
+
   const saveAppointment = () => {
     if (!appointmentForm.date || !appointmentForm.time) return;
     const current = normalizeAppointments(loadValue(appointmentsKey, []));
     const row = [selectedClient, appointmentForm.mobile, appointmentForm.date, appointmentForm.time, appointmentForm.type, appointmentForm.status];
     window.localStorage.setItem(appointmentsKey, JSON.stringify([row, ...current]));
-    updateJourney({ appointment: true, appointmentData: appointmentForm, appointmentAt: new Date().toISOString() });
+    if (stageModal === 'returning-visit') {
+      const visitId = `visit-${appointmentForm.date}-${Date.now()}`;
+      const now = new Date().toISOString();
+      setJourneys((currentJourneys) => {
+        const record = normalizeJourneyRecord(currentJourneys[selectedClient]);
+        return {
+          ...currentJourneys,
+          [selectedClient]: {
+            visits: [...record.visits, {
+              id: visitId,
+              visitDate: appointmentForm.date,
+              createdAt: now,
+              updatedAt: now,
+              appointment: true,
+              appointmentData: appointmentForm,
+              appointmentAt: now,
+            }],
+            activeVisitId: visitId,
+          },
+        };
+      });
+      setSelectedVisitId(visitId);
+    } else {
+      updateJourney({ appointment: true, appointmentData: appointmentForm, visitDate: appointmentForm.date, appointmentAt: new Date().toISOString() });
+    }
     setStageModal('');
   };
 
@@ -672,17 +806,79 @@ export function ClientJourneyPage() {
         <Card title={selectedClient ? `${selectedClient} Journey` : 'Journey Stages'} subtitle={selectedClient ? 'Complete each stage in order; earlier records remain linked.' : 'Select a patient to begin.'}>
           {selectedClient ? (
             <>
+              <div className="journey-visit-history">
+                <div><strong>Date-wise Journeys</strong><span>{journeyVisits.length ? `${journeyVisits.length} visit journey${journeyVisits.length === 1 ? '' : 's'} saved` : 'No visit journey created yet'}</span></div>
+                <div className="journey-visit-tabs" role="tablist" aria-label={`${selectedClient} visit journeys`}>
+                  {[...journeyVisits].sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate))).map((visit, index) => (
+                    <button className={`journey-visit-tab ${activeVisitId === visit.id ? 'active' : ''}`} type="button" role="tab" aria-selected={activeVisitId === visit.id} key={visit.id} onClick={() => setSelectedVisitId(visit.id)}>
+                      <strong>{formatResponseDate(visit.visitDate)}</strong>
+                      <span>{visit.appointmentData?.type || (index === 0 ? 'Latest visit' : 'Patient visit')}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="journey-stages">
                 {STAGES.map(([id, label], index) => {
                   const complete = stageDone(id);
                   return <div className={`journey-stage ${complete ? 'complete' : ''}`} key={id}><span className="journey-index">{complete ? '✓' : index + 1}</span><div><strong>{label}</strong><small>{stageDetail(id, complete)}</small></div>{id !== 'registration' && <button className="pill" type="button" onClick={() => runStage(id)}>{complete ? 'Open' : id === 'consultation' ? 'Consult' : id === 'followup' ? 'Schedule' : 'Start'}</button>}</div>;
                 })}
               </div>
+              <div className="journey-print-actions">
+                <div><strong>Patient handout</strong><span>Select consultation and treatment details for a customized print.</span></div>
+                <button className="pill" type="button" onClick={() => setClinicalPrintOpen(true)}>Customize Patient Print</button>
+              </div>
               {nextAction() !== 'completed' ? <button className="pill primary-action journey-next" type="button" onClick={() => runStage(nextAction())}>Continue to {STAGES.find(([id]) => id === nextAction())?.[1]}</button> : <div className="action-note"><strong>Journey completed.</strong> All required stages are recorded.</div>}
             </>
           ) : <div className="empty-state"><strong>No patient selected.</strong><p>Choose a patient from Reception Desk to see their workflow.</p></div>}
         </Card>
       </div>
+
+      {clinicalPrintOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setClinicalPrintOpen(false)}>
+          <div className="modal-shell clinical-print-modal" role="dialog" aria-modal="true" aria-label="Customize patient print" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div><h2>Customize Patient Print</h2><p>{selectedClient} · Select only the sections you want to print.</p></div>
+              <button className="icon-btn" type="button" onClick={() => setClinicalPrintOpen(false)} aria-label="Close print customization">x</button>
+            </div>
+            <div className="clinical-print-layout">
+              <div className="clinical-print-controls">
+                <label className="field-block"><span>Print Title</span><input className="lead-input" value={clinicalPrintTitle} onChange={(event) => setClinicalPrintTitle(event.target.value)} /></label>
+                <div className="clinical-print-select-all">
+                  <strong>Include in print</strong>
+                  <div><button className="pill" type="button" onClick={() => setClinicalPrintSections(Object.fromEntries(PRINT_SECTION_OPTIONS.map(([id]) => [id, true])))}>Select all</button><button className="pill" type="button" onClick={() => setClinicalPrintSections(Object.fromEntries(PRINT_SECTION_OPTIONS.map(([id]) => [id, false])))}>Clear all</button></div>
+                </div>
+                <div className="clinical-print-options">
+                  {PRINT_SECTION_OPTIONS.map(([id, label]) => (
+                    <label className={`clinical-print-option ${clinicalPrintSections[id] ? 'selected' : ''}`} key={id}>
+                      <input type="checkbox" checked={clinicalPrintSections[id]} onChange={() => toggleClinicalPrintSection(id)} />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+                <label className="field-block"><span>Additional Instructions</span><textarea className="lead-input" rows="4" value={clinicalPrintNote} onChange={(event) => setClinicalPrintNote(event.target.value)} placeholder="Optional custom instruction for this patient..." /></label>
+              </div>
+              <div className="clinical-print-preview" aria-live="polite">
+                <div className="clinical-preview-header"><div><strong>{clinicalPrintTitle || 'Clinical Summary'}</strong><span>Mom&apos;s Pathshala</span></div><small>Print preview</small></div>
+                {clinicalPrintSections.patient && <div className="clinical-preview-section"><strong>Patient Details</strong><p>{clientId(selectedClientRecord) || 'No ID'} · {selectedClient}<br />{clientMobile(selectedClientRecord) || 'Mobile not saved'}</p></div>}
+                {clinicalPrintSections.symptoms && <div className="clinical-preview-section"><strong>Symptoms / Chief Complaint</strong><p>{journey.consultationData?.complaint || 'Not recorded'}</p></div>}
+                {clinicalPrintSections.vitals && <div className="clinical-preview-section"><strong>Vitals</strong><p>{journey.consultationData?.vitals || 'Not recorded'}</p></div>}
+                {clinicalPrintSections.diagnosis && <div className="clinical-preview-section"><strong>Diagnosis</strong><p>{journey.consultationData?.diagnosis || 'Not recorded'}</p></div>}
+                {clinicalPrintSections.doctorNotes && <div className="clinical-preview-section"><strong>Doctor Notes</strong><p>{journey.consultationData?.notes || 'Not recorded'}</p></div>}
+                {clinicalPrintSections.treatment && <div className="clinical-preview-section"><strong>Treatment Plan</strong><p>{[journey.treatmentData?.service, journey.treatmentData?.goal, journey.treatmentData?.duration].filter(Boolean).join(' · ') || 'Not recorded'}</p></div>}
+                {clinicalPrintSections.medicines && <div className="clinical-preview-section"><strong>Medicines, Dose & Timing</strong><p>{journey.treatmentData?.medicine || 'No medicines recorded'}{journey.treatmentData?.dose ? ` · ${journey.treatmentData.dose}` : ''}{journey.treatmentData?.timing ? ` · ${journey.treatmentData.timing}` : ''}</p></div>}
+                {clinicalPrintSections.followup && <div className="clinical-preview-section"><strong>Next Follow-up</strong><p>{journey.followupData?.date ? `${journey.followupData.date} · ${journey.followupData.time || 'Time pending'}` : 'Not scheduled'}</p></div>}
+                {clinicalPrintSections.payment && <div className="clinical-preview-section"><strong>Payment Details</strong><p>{journey.paymentData?.amount ? `₹ ${journey.paymentData.amount} · ${journey.paymentData.status || ''}` : 'Not recorded'}</p></div>}
+                {clinicalPrintNote.trim() && <div className="clinical-preview-section"><strong>Additional Instructions</strong><p>{clinicalPrintNote}</p></div>}
+                {!Object.values(clinicalPrintSections).some(Boolean) && !clinicalPrintNote.trim() && <div className="empty-state compact-empty"><strong>No sections selected.</strong><p>Select at least one item to create a useful patient print.</p></div>}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setClinicalPrintOpen(false)}>Cancel</button>
+              <button className="pill primary-action" type="button" disabled={!Object.values(clinicalPrintSections).some(Boolean) && !clinicalPrintNote.trim()} onClick={printClinicalSummary}>Print / Save PDF</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {stageModal === 'appointment' && <JourneyModal title="Add Appointment" client={selectedClient} onClose={() => setStageModal('')} onSave={saveAppointment} saveLabel="Save Appointment"><div className="quick-preset-row"><button className="pill" type="button" onClick={() => setAppointmentPreset('now')}>Walk-in now</button><button className="pill" type="button" onClick={() => setAppointmentPreset('today')}>Today</button><button className="pill" type="button" onClick={() => setAppointmentPreset('tomorrow')}>Tomorrow</button><button className="pill" type="button" onClick={() => setAppointmentPreset('week')}>After 7 days</button><button className="pill" type="button" onClick={() => setAppointmentPreset('month')}>After 30 days</button></div><label className="field-block"><span>Mobile</span><input className="lead-input" type="tel" value={appointmentForm.mobile} onChange={(event) => setAppointmentForm((value) => ({ ...value, mobile: event.target.value }))} /></label><label className="field-block"><span>Date</span><input className="lead-input" type="date" value={appointmentForm.date} onChange={(event) => setAppointmentForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Time</span><input className="lead-input" type="time" value={appointmentForm.time} onChange={(event) => setAppointmentForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block"><span>Type</span><select className="lead-input" value={appointmentForm.type} onChange={(event) => setAppointmentForm((value) => ({ ...value, type: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Status</span><select className="lead-input" value={appointmentForm.status} onChange={(event) => setAppointmentForm((value) => ({ ...value, status: event.target.value }))}><option>Pending</option><option>Confirmed</option><option>Checked-in</option><option>Cancelled</option></select></label></JourneyModal>}
 
