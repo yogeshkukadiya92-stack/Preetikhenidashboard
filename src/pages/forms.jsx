@@ -705,6 +705,7 @@ export function FormsPage() {
   const [selectedResponse, setSelectedResponse] = useState(null);
   const [message, setMessage] = useState(hasFormsApi() ? 'Forms API connected.' : 'Local mode. Configure Forms API for cross-device submissions.');
   const dragFieldId = useRef(null);
+  const inlineResponsesRef = useRef(null);
 
   useEffect(() => {
     if (!saveForms(forms)) setMessage('Browser storage is full. Export responses or connect the Forms API.');
@@ -903,6 +904,18 @@ export function FormsPage() {
     setResponses(result.responses);
     setMessage(result.warning ? 'Showing responses from the shared workspace. External form API could not be reached.' : `${result.responses.length} response(s) loaded.`);
     setResponsesLoading(false);
+  };
+
+  const showResponsesBelow = async (form) => {
+    setResponseForm(form);
+    setResponsesLoading(true);
+    setSelectedResponse(null);
+    const result = await loadResponses(form.id);
+    setResponses(result.responses);
+    setSelectedResponse(result.responses[0] ?? null);
+    setMessage(result.warning ? 'Showing available responses. External form API could not be reached.' : `${result.responses.length} response(s) loaded for ${form.title}.`);
+    setResponsesLoading(false);
+    window.requestAnimationFrame(() => inlineResponsesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
 
   const exportResponses = () => {
@@ -1104,7 +1117,7 @@ export function FormsPage() {
             <div className="table-head"><div>Form</div><div>Fields</div><div>Responses</div><div>Status</div><div>Updated</div><div /></div>
             {forms.map((form) => (
               <div className="data-row" key={form.id}>
-                <div><strong>{form.title}</strong><div className="subtle form-row-slug">/public/forms/{form.slug}</div></div>
+                <div><button className="form-name-button" type="button" onClick={() => showResponsesBelow(form)} aria-label={`View responses for ${form.title}`}><strong>{form.title}</strong><span className="subtle form-row-slug">/public/forms/{form.slug}</span></button></div>
                 <div>{form.fields.length}</div>
                 <div>{responseCounts[form.id] ?? 0}</div>
                 <div><Tag tone={form.status === 'Published' ? 'tag-contacted' : 'tag-follow'}>{form.status}</Tag></div>
@@ -1113,7 +1126,8 @@ export function FormsPage() {
                   <ActionMenu compact label={`Actions for ${form.title}`} items={[
                     { label: 'Edit form', onClick: () => startEdit(form) },
                     { label: 'Preview form', onClick: () => { setDraftForm(cloneForm(form)); setView('preview'); } },
-                    { label: 'View responses', description: `${responseCounts[form.id] ?? 0} collected`, onClick: () => openResponses(form) },
+                    { label: 'View responses below', description: `${responseCounts[form.id] ?? 0} collected`, onClick: () => showResponsesBelow(form) },
+                    { label: 'Open response workspace', description: 'Review and export in a dedicated view', onClick: () => openResponses(form) },
                     { label: 'Copy public link', disabled: form.status !== 'Published', onClick: () => copyPublicLink(form) },
                     { label: 'Open public form', disabled: form.status !== 'Published', onClick: () => openPublicForm(form) },
                     { label: form.status === 'Published' ? 'Unpublish form' : 'Publish form', onClick: () => toggleStatus(form) },
@@ -1128,6 +1142,51 @@ export function FormsPage() {
           <div className="empty-state compact-empty table-empty"><strong>No forms created yet.</strong><p>Create your first intake form, assessment, or registration form.</p><div className="empty-action-row"><button className="pill primary-action" type="button" onClick={startCreate}>+ Blank Form</button>{FORM_TEMPLATES.slice(0, 3).map((template) => <button className="pill" type="button" key={template.name} onClick={() => startFromTemplate(template)}>{template.name}</button>)}</div></div>
         )}
       </Card>
+      {view === 'list' && responseForm && (
+        <div ref={inlineResponsesRef} className="inline-form-responses">
+          <Card
+            title={`${responseForm.title} Responses`}
+            subtitle={responsesLoading ? 'Loading submitted data...' : `${responses.length} submission${responses.length === 1 ? '' : 's'} found`}
+            action={<div className="card-action-group"><button className="pill" type="button" disabled={!responses.length} onClick={exportResponses}>Export CSV</button><button className="pill" type="button" onClick={() => { setResponseForm(null); setResponses([]); setSelectedResponse(null); }}>Close</button></div>}
+          >
+            {responsesLoading ? (
+              <div className="empty-state compact-empty"><strong>Loading responses...</strong><p>Please wait while submitted form data is collected.</p></div>
+            ) : responses.length ? (
+              <div className="inline-response-layout">
+                <div className="inline-response-list" aria-label={`${responseForm.title} submitters`}>
+                  {responses.map((response, index) => {
+                    const inputFields = responseForm.fields.filter((field) => INPUT_TYPES.has(field.type));
+                    const nameField = inputFields.find((field) => /name|patient|client/i.test(field.label ?? ''));
+                    const phoneField = inputFields.find((field) => /phone|mobile|contact|whatsapp/i.test(field.label ?? ''));
+                    const submitter = displayAnswer(response.answers?.[nameField?.id]) || response.respondentEmail || `Submission ${index + 1}`;
+                    const phone = displayAnswer(response.answers?.[phoneField?.id]);
+                    return (
+                      <button className={`inline-response-item ${selectedResponse?.id === response.id ? 'active' : ''}`} type="button" key={response.id} onClick={() => setSelectedResponse(response)}>
+                        <span><strong>{submitter}</strong><small>{phone || response.respondentEmail || 'Contact not collected'}</small></span>
+                        <time>{new Date(response.submittedAt).toLocaleString('en-IN')}</time>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="inline-response-detail">
+                  {selectedResponse && (
+                    <>
+                      <div className="inline-response-detail-head"><div><span className="control-label">Submitted response</span><strong>{new Date(selectedResponse.submittedAt).toLocaleString('en-IN')}</strong></div><button className="pill" type="button" onClick={() => setSelectedResponse(null)}>Close details</button></div>
+                      <div className="response-detail-grid">
+                        {responseForm.fields.filter((field) => INPUT_TYPES.has(field.type)).map((field) => (
+                          <div className="response-answer" key={field.id}><span>{field.label || fieldTypeLabel(field.type)}</span><strong>{displayAnswer(selectedResponse.answers?.[field.id]) || 'No answer'}</strong></div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state compact-empty"><strong>No responses yet.</strong><p>This form has not been submitted by anyone yet.</p></div>
+            )}
+          </Card>
+        </div>
+      )}
     </section>
   );
 }
