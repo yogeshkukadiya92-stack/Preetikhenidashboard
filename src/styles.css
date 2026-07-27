@@ -1729,6 +1729,14 @@ body {
 
 .symptom-builder { grid-template-columns: minmax(220px, 1fr) auto; }
 
+.doctor-note-builder {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding-top: 2px;
+}
+
 .consultation-chips {
   display: flex;
   grid-column: 1 / -1;
