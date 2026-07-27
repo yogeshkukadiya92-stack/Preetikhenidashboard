@@ -317,14 +317,14 @@ function appFormResponseRows() {
     const form = formById.get(response.formId) ?? formById.get(response.formSlug);
     const name = findAnswerByLabel(response, form, ['name', 'client', 'full']) || response.respondentEmail || 'App form user';
     const phone = findAnswerByLabel(response, form, ['phone', 'mobile', 'contact', 'whatsapp']);
-    return [
+    return {
       name,
-      response.formTitle || form?.title || response.formSlug || response.formId || 'App Form',
-      formatSubmittedDate(response.submittedAt),
+      form: response.formTitle || form?.title || response.formSlug || response.formId || 'App Form',
+      formId: response.formId || form?.id || response.formSlug || form?.slug || '',
+      submitted: formatSubmittedDate(response.submittedAt),
       phone,
-      'App Form',
-      'Received',
-    ];
+      status: 'Received',
+    };
   });
 }
 
@@ -4949,6 +4949,7 @@ export function ReportsPage() {
   const { branchKey } = useBranch();
   const [activeReport, setActiveReport] = useState('appointments');
   const [financeSubTab, setFinanceSubTab] = useState('payments');
+  const [formFilter, setFormFilter] = useState('all');
   const [, setReportRevision] = useState(0);
 
   useEffect(() => {
@@ -4983,6 +4984,18 @@ export function ReportsPage() {
     (Array.isArray(opsTabs.treatments) ? opsTabs.treatments : []).map(operationTreatmentReportRow),
   );
 
+  const reportForms = loadSavedForms();
+  const formIdByName = new Map(reportForms.flatMap((form) => {
+    const id = String(form.id ?? form.slug ?? '').trim();
+    return [form.title, form.name, form.slug, form.id]
+      .filter(Boolean)
+      .map((value) => [String(value).trim().toLowerCase(), id]);
+  }));
+  const resolveFormId = (title, explicitId = '') => (
+    String(explicitId ?? '').trim()
+    || formIdByName.get(String(title ?? '').trim().toLowerCase())
+    || '—'
+  );
   const formRows = mergeUniqueRows(
     appFormResponseRows(),
     mergeUniqueRows(
@@ -4990,8 +5003,22 @@ export function ReportsPage() {
       Array.isArray(opsTabs.forms) ? opsTabs.forms : [],
     ),
   ).map((row) => Array.isArray(row)
-    ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[5] ?? row[4] ?? 'Received']
-    : [row.name ?? row.Name ?? '', row.form ?? row.Form ?? '', row.submitted ?? row.Submitted ?? '', row.phone ?? row.Phone ?? '', row.status ?? row.Status ?? 'Received']);
+    ? [row[0] ?? '', row[1] ?? '', resolveFormId(row[1]), row[2] ?? '', row[3] ?? '', row[5] ?? row[4] ?? 'Received']
+    : [
+      row.name ?? row.Name ?? '',
+      row.form ?? row.Form ?? row.formTitle ?? '',
+      resolveFormId(row.form ?? row.Form ?? row.formTitle, row.formId ?? row['Form ID']),
+      row.submitted ?? row.Submitted ?? '',
+      row.phone ?? row.Phone ?? '',
+      row.status ?? row.Status ?? 'Received',
+    ]);
+  const formFilterOptions = Array.from(new Map(formRows.map((row) => {
+    const key = row[2] !== '—' ? `id:${row[2]}` : `name:${row[1]}`;
+    return [key, { key, id: row[2], name: row[1] || 'Untitled form' }];
+  })).values()).sort((a, b) => a.name.localeCompare(b.name));
+  const filteredFormRows = formFilter === 'all'
+    ? formRows
+    : formRows.filter((row) => (row[2] !== '—' ? `id:${row[2]}` : `name:${row[1]}`) === formFilter);
 
   const inventoryReportRow = (row) => Array.isArray(row)
     ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '']
@@ -5050,7 +5077,7 @@ export function ReportsPage() {
     finance_payments: { id: 'payments', title: 'Payments Report', columns: ['Patient Name', 'Invoice', 'Total Amount', 'Paid Amount', 'Pending Amount', 'Status', 'Payment Mode', 'Paid On'], rows: paymentRows },
     finance_accounts: { id: 'accounts', title: 'Accounts Report', columns: ['Item', 'Type', 'Amount', 'Mode', 'Status'], rows: accountRows },
     finance_summary: { id: 'revenue-summary', title: 'Revenue & Business Summary', columns: ['Category', 'Details', 'Amount'], rows: summaryRows },
-    forms: { id: 'forms', title: 'Form Responses Report', columns: ['Name', 'Form', 'Submitted', 'Phone', 'Status'], rows: formRows },
+    forms: { id: 'forms', title: 'Form Responses Report', columns: ['Name', 'Form', 'Form ID', 'Submitted', 'Phone', 'Status'], rows: filteredFormRows },
     inventory: { id: 'inventory', title: 'Inventory Report', columns: ['Item', 'Category', 'Quantity', 'Expiry', 'Status'], rows: inventoryRows },
   };
 
@@ -5090,9 +5117,9 @@ export function ReportsPage() {
       { label: 'Invoices Paid', value: paymentRows.filter((r) => r[5] === 'Paid').length },
     ];
     if (activeReport === 'forms') return [
-      { label: 'Total Responses', value: formRows.length },
-      { label: 'Pending', value: formRows.filter((r) => r[4] === 'Pending').length },
-      { label: 'Contacted', value: formRows.filter((r) => r[4] === 'Contacted').length },
+      { label: 'Total Responses', value: filteredFormRows.length },
+      { label: 'Pending', value: filteredFormRows.filter((r) => r[5] === 'Pending').length },
+      { label: 'Contacted', value: filteredFormRows.filter((r) => r[5] === 'Contacted').length },
     ];
     if (activeReport === 'inventory') return [
       { label: 'Total Items', value: inventoryRows.length },
@@ -5264,6 +5291,21 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
             { label: 'Export CSV', description: 'Download raw report rows', onClick: exportCsv },
           ]} />}
         >
+          {activeReport === 'forms' && (
+            <div className="report-form-filter" aria-label="Form response filters">
+              <label className="field-block">
+                <span>Filter by Form</span>
+                <select className="lead-input" value={formFilter} onChange={(event) => setFormFilter(event.target.value)}>
+                  <option value="all">All forms ({formRows.length} responses)</option>
+                  {formFilterOptions.map((form) => {
+                    const count = formRows.filter((row) => (row[2] !== '—' ? `id:${row[2]}` : `name:${row[1]}`) === form.key).length;
+                    return <option value={form.key} key={form.key}>{form.name} · {form.id} ({count})</option>;
+                  })}
+                </select>
+              </label>
+              {formFilter !== 'all' && <button className="pill" type="button" onClick={() => setFormFilter('all')}>Clear filter</button>}
+            </div>
+          )}
           <div className="data-table adaptive-table" style={{ '--table-columns': currentReport.columns.length }}>
             <div className="table-head">
               {currentReport.columns.map((col) => <div key={col}>{col}</div>)}

@@ -688,6 +688,18 @@ textarea:focus-visible,
 .compact-action-card .filter-panel {
   margin-top: 8px;
 }
+.report-form-filter {
+  display: flex;
+  align-items: end;
+  gap: 9px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(236, 249, 244, 0.58);
+}
+.report-form-filter .field-block { width: min(440px, 100%); }
+.report-form-filter .pill { flex: 0 0 auto; }
 .single-row-actions {
   display: flex;
   align-items: center;
@@ -1868,6 +1880,8 @@ body {
   .next-appointment-fields { grid-template-columns: 1fr; }
   .consultation-template-tools,
   .symptom-builder { grid-template-columns: 1fr; }
+  .report-form-filter { align-items: stretch; flex-direction: column; }
+  .report-form-filter .pill { width: 100%; }
   .login-page { padding: 14px; }
   .login-shell { padding: 22px 18px; }
   .kpis { grid-template-columns: 1fr; }
