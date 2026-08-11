@@ -44,6 +44,12 @@ const INPUT_TYPES = new Set(FIELD_TYPES.filter((item) => !['heading', 'paragraph
 const OPTION_TYPES = new Set(['select', 'radio', 'multiselect']);
 const TEXT_VALIDATION_TYPES = new Set(['text', 'textarea', 'email', 'phone', 'url', 'address', 'signature']);
 const DEFAULT_OPTIONS = ['Option 1', 'Option 2'];
+const PATIENT_DATA_TARGETS = [
+  { value: '', label: 'Do not attach to patient data' },
+  { value: 'patient_mobile', label: 'Patient mobile (match patient)' },
+  { value: 'patient_name', label: 'Patient name' },
+  { value: 'patient_weight', label: 'Weight history (kg)' },
+];
 const OPTION_PRESETS = [
   { label: 'Yes / No', options: ['Yes', 'No'] },
   { label: 'Gender', options: ['Female', 'Male', 'Other', 'Prefer not to say'] },
@@ -100,9 +106,9 @@ const FORM_TEMPLATES = [
     title: 'Follow-up Assessment Form',
     description: 'Progress review before the next consultation.',
     fields: [
-      ['text', 'Patient name', { required: true, width: 'half' }],
-      ['phone', 'Mobile number', { required: true, width: 'half' }],
-      ['number', 'Current weight', { width: 'half' }],
+      ['text', 'Patient name', { required: true, width: 'half', dataTarget: 'patient_name' }],
+      ['phone', 'Mobile number', { required: true, width: 'half', dataTarget: 'patient_mobile' }],
+      ['number', 'Current weight', { width: 'half', dataTarget: 'patient_weight' }],
       ['yesno', 'Medicine taken regularly?', { required: true, width: 'half' }],
       ['scale', 'Overall improvement', { min: 1, max: 10 }],
       ['textarea', 'Challenges faced', { placeholder: 'Diet, exercise, sleep, medicine, travel...' }],
@@ -146,6 +152,7 @@ function makeField(type = 'text') {
     maxFileMb: 2,
     width: layoutType ? 'full' : 'full',
     condition: { enabled: false, fieldId: '', operator: 'equals', value: '' },
+    dataTarget: '',
   };
 }
 
@@ -511,6 +518,9 @@ export function FormRenderer({ form, mode = 'public', onSubmitted }) {
       <div className="public-form-state success-state">
         <strong>Response submitted</strong>
         <p>{form.confirmationMessage}</p>
+        {result.patientData?.status === 'updated' && <p className="form-data-sync-success">Patient matched. {result.patientData.count} mapped value updated in {result.patientData.patientName}'s record.</p>}
+        {result.patientData?.status === 'unmatched' && <p className="field-error">Response saved, but no patient matched mobile number {result.patientData.mobile}.</p>}
+        {result.patientData?.status === 'skipped' && form.fields?.some((field) => field.dataTarget) && <p className="field-error">Response saved, but patient data was not updated. Map and fill a Patient mobile field.</p>}
         {result.warning && <p className="field-error">Saved to the shared workspace. External delivery needs attention.</p>}
         {form.allowMultiple && (
           <button className="pill" type="button" onClick={() => { setAnswers({}); setRespondentEmail(''); setErrors({}); setResult(null); setCurrentPage(0); }}>Submit another response</button>
@@ -642,6 +652,15 @@ function FieldInspector({ field, allFields, onChange, onAddOption, onUpdateOptio
             <span>Required</span>
           </label>
         </div>
+      )}
+      {!layoutOnly && (
+        <label className="field-block patient-data-link-field">
+          <span>Attach answer to patient data</span>
+          <select className="lead-input" value={field.dataTarget ?? ''} onChange={(event) => onChange('dataTarget', event.target.value)}>
+            {PATIENT_DATA_TARGETS.map((target) => <option value={target.value} key={target.value || 'none'}>{target.label}</option>)}
+          </select>
+          <small className="field-help">Use Patient mobile on one field to match the correct patient. Mapped answers update automatically after submission.</small>
+        </label>
       )}
       {(field.type === 'number' || field.type === 'scale') && (
         <div className="inspector-inline-grid">

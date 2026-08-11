@@ -98,6 +98,9 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [activeFilter, setActiveFilter] = useState(filterPresets[0]?.column ?? '');
+  const [appointmentNameFilter, setAppointmentNameFilter] = useState('');
+  const [appointmentDateFrom, setAppointmentDateFrom] = useState('');
+  const [appointmentDateTo, setAppointmentDateTo] = useState('');
   const [activeView, setActiveView] = useState(viewPresets[0]?.id ?? 'all');
   const [addOpen, setAddOpen] = useState(false);
   const [draftRow, setDraftRow] = useState(columns.map(() => ''));
@@ -109,6 +112,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const hasMountedRows = useRef(false);
   const activeViewPredicate = viewPresets.find((preset) => preset.id === activeView)?.match ?? null;
   const activeViewLabel = viewPresets.find((preset) => preset.id === activeView)?.label ?? 'All';
+  const isAppointmentsPage = title === 'Appointments';
 
   useEffect(() => {
     const closeTransientUi = (event) => {
@@ -135,6 +139,13 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
 
   const filteredRows = tableRows.filter((row) => {
     if (activeViewPredicate && !activeViewPredicate(row, columns)) return false;
+    if (isAppointmentsPage) {
+      const patientName = String(row[0] ?? '').toLowerCase();
+      const appointmentDate = String(row[2] ?? '');
+      if (appointmentNameFilter.trim() && !patientName.includes(appointmentNameFilter.trim().toLowerCase())) return false;
+      if (appointmentDateFrom && appointmentDate < appointmentDateFrom) return false;
+      if (appointmentDateTo && appointmentDate > appointmentDateTo) return false;
+    }
     if (!filterText) return true;
     if (!activeFilter) return row.join(' ').toLowerCase().includes(filterText.toLowerCase());
     const columnIndex = columns.indexOf(activeFilter);
@@ -153,6 +164,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
       if (column === 'Mobile') return searchParams.get('mobile') ?? '';
       if (title === 'Appointments' && column === 'Date') return localDate;
       if (title === 'Appointments' && column === 'Time') return localTime;
+      if (title === 'Appointments' && column === 'Mode') return 'Offline';
       return '';
     }));
     setAddOpen(true);
@@ -282,6 +294,29 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
         )}
       >
         <input ref={importInputRef} className="hidden-file-input" type="file" accept=".csv,.json" onChange={async (event) => handleFile(event.target.files?.[0])} />
+        {isAppointmentsPage && (
+          <div className="appointment-filter-bar" aria-label="Appointment filters">
+            <label className="field-block">
+              <span>Patient name</span>
+              <input className="lead-input" value={appointmentNameFilter} onChange={(event) => setAppointmentNameFilter(event.target.value)} placeholder="Search patient name..." />
+            </label>
+            <label className="field-block">
+              <span>Date from</span>
+              <input className="lead-input" type="date" value={appointmentDateFrom} onChange={(event) => setAppointmentDateFrom(event.target.value)} />
+            </label>
+            <label className="field-block">
+              <span>Date to</span>
+              <input className="lead-input" type="date" min={appointmentDateFrom || undefined} value={appointmentDateTo} onChange={(event) => setAppointmentDateTo(event.target.value)} />
+            </label>
+            <button className="pill" type="button" disabled={!appointmentNameFilter && !appointmentDateFrom && !appointmentDateTo} onClick={() => {
+              setAppointmentNameFilter('');
+              setAppointmentDateFrom('');
+              setAppointmentDateTo('');
+              setActionMessage('Appointment filters cleared.');
+            }}>Clear filters</button>
+            <span className="appointment-filter-count" aria-live="polite">{filteredRows.length} result{filteredRows.length === 1 ? '' : 's'}</span>
+          </div>
+        )}
         {filterOpen && (
           <div className="filter-panel">
             {filterPresets.length > 0 && (

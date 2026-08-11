@@ -10,6 +10,8 @@ const distDir = path.join(rootDir, 'dist');
 const port = Number(process.env.PORT ?? 3000);
 const databaseUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '';
 const WORKSPACE_BRANCH = 'shreeayurved09@gmail.com';
+const PATIENTS_STATE_KEY = 'moms-pathshala:Main Branch:ayurflow-clients:rows:v3';
+const PATIENT_UPDATES_STATE_KEY = 'moms-pathshala:Main Branch:patient-form-updates:v1';
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
@@ -87,6 +89,75 @@ function asyncHandler(handler) {
   };
 }
 
+function normalizePhone(value) {
+  return String(value ?? '').replace(/\D/g, '').slice(-10);
+}
+
+function patientDetails(row) {
+  if (Array.isArray(row)) {
+    return row.length >= 7
+      ? { id: row[0] ?? '', name: row[1] ?? '', mobile: row[2] ?? '' }
+      : { id: '', name: row[0] ?? '', mobile: row[1] ?? '' };
+  }
+  return {
+    id: row?.clientId ?? row?.['Client ID'] ?? row?.ClientId ?? row?.ID ?? row?.id ?? '',
+    name: row?.name ?? row?.Client ?? row?.client ?? '',
+    mobile: row?.mobile ?? row?.Mobile ?? row?.phone ?? row?.Phone ?? '',
+  };
+}
+
+async function applyPatientDataMappings(db, form, submittedResponse) {
+  const fields = Array.isArray(form?.fields) ? form.fields : [];
+  const mobileField = fields.find((field) => field.dataTarget === 'patient_mobile');
+  const mobile = normalizePhone(submittedResponse.answers?.[mobileField?.id]);
+  if (!mobile) return;
+
+  const patientResult = await db.query(
+    'select value from app_state where branch = $1 and key = $2 limit 1',
+    [WORKSPACE_BRANCH, PATIENTS_STATE_KEY],
+  );
+  const patients = Array.isArray(patientResult.rows[0]?.value) ? patientResult.rows[0].value : [];
+  const matchedRow = patients.find((row) => normalizePhone(patientDetails(row).mobile) === mobile);
+  if (!matchedRow) return;
+  const patient = patientDetails(matchedRow);
+
+  const updates = fields.filter((field) => field.dataTarget === 'patient_weight').flatMap((field) => {
+    const value = Number(String(submittedResponse.answers?.[field.id] ?? '').replace(/[^\d.-]/g, ''));
+    if (!Number.isFinite(value) || value <= 0) return [];
+    return [{
+      id: `${submittedResponse.id}:${field.id}`,
+      patientId: patient.id,
+      patientName: patient.name,
+      mobile,
+      type: 'weight',
+      value,
+      unit: 'kg',
+      recordedAt: submittedResponse.submittedAt ?? new Date().toISOString(),
+      formId: form.id,
+      formTitle: form.title,
+      responseId: submittedResponse.id,
+      fieldId: field.id,
+      fieldLabel: field.label,
+    }];
+  });
+  if (!updates.length) return;
+
+  const currentResult = await db.query(
+    'select value from app_state where branch = $1 and key = $2 limit 1',
+    [WORKSPACE_BRANCH, PATIENT_UPDATES_STATE_KEY],
+  );
+  const current = Array.isArray(currentResult.rows[0]?.value) ? currentResult.rows[0].value : [];
+  const ids = new Set(current.map((item) => item.id));
+  const next = [...updates.filter((item) => !ids.has(item.id)), ...current];
+  await db.query(
+    `insert into app_state (branch, key, value, updated_at)
+     values ($1, $2, $3::jsonb, now())
+     on conflict (branch, key)
+     do update set value = excluded.value, updated_at = now()`,
+    [WORKSPACE_BRANCH, PATIENT_UPDATES_STATE_KEY, JSON.stringify(next)],
+  );
+}
+
 app.get('/api/health', asyncHandler(async (_request, response) => {
   const db = getPool();
   if (!db) return response.json({ ok: true, database: false });
@@ -161,6 +232,7 @@ app.post('/api/forms/:slug/responses', asyncHandler(async (request, response) =>
      on conflict (id) do nothing`,
     [String(submittedResponse.id), slug, JSON.stringify(submittedResponse), submittedResponse.submittedAt ?? new Date().toISOString()],
   );
+  await applyPatientDataMappings(db, form, submittedResponse);
   response.status(201).json({ response: submittedResponse });
 }));
 

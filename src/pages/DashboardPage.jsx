@@ -39,6 +39,7 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const { currentBranch } = useBranch();
   const [datePreset, setDatePreset] = useState('7 Days');
+  const [customDateRange, setCustomDateRange] = useState(null);
   const [moreInsightsOpen, setMoreInsightsOpen] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
   const [dataRevision, setDataRevision] = useState(0);
@@ -81,9 +82,24 @@ export function DashboardPage() {
       window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
     };
   }, []);
-  const filteredLeads = filterRowsByPreset(leads, datePreset, (lead) => lead.addedOn);
-  const filteredPayments = filterRowsByPreset(payments, datePreset, (payment) => payment.paidOn);
-  const filteredAppointments = filterRowsByPreset(appointments, datePreset, (appointment) => appointment[2] ?? appointment.date);
+  useEffect(() => {
+    const applyHeaderDateRange = (event) => {
+      const { start, end } = event.detail ?? {};
+      if (!start || !end) return;
+      setCustomDateRange({ start, end });
+      setDatePreset('Custom');
+      const selected = new Date(`${end}T00:00:00`);
+      if (!Number.isNaN(selected.getTime())) {
+        setCalendarMonth(startOfMonth(selected));
+        setSelectedCalendarDate(end);
+      }
+    };
+    window.addEventListener('moms-pathshala:date-range-change', applyHeaderDateRange);
+    return () => window.removeEventListener('moms-pathshala:date-range-change', applyHeaderDateRange);
+  }, []);
+  const filteredLeads = filterRowsByPreset(leads, datePreset, (lead) => lead.addedOn, customDateRange);
+  const filteredPayments = filterRowsByPreset(payments, datePreset, (payment) => payment.paidOn, customDateRange);
+  const filteredAppointments = filterRowsByPreset(appointments, datePreset, (appointment) => appointment[2] ?? appointment.date, customDateRange);
   const paymentAging = buildPaymentAging(payments);
   const leadSources = buildLeadSourcePerformance(filteredLeads.length ? filteredLeads : leads);
   const staffWorkload = buildStaffWorkload(filteredAppointments.length ? filteredAppointments : appointments, staff);
@@ -177,7 +193,7 @@ export function DashboardPage() {
                 className={datePreset === preset.label ? 'active' : ''}
                 type="button"
                 key={preset.label}
-                onClick={() => setDatePreset(preset.label)}
+                onClick={() => { setDatePreset(preset.label); setCustomDateRange(null); }}
               >
                 {preset.label}
               </button>
@@ -521,7 +537,15 @@ function parseLooseDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function filterRowsByPreset(rows, presetLabel, getDate) {
+function filterRowsByPreset(rows, presetLabel, getDate, customRange = null) {
+  if (presetLabel === 'Custom' && customRange?.start && customRange?.end) {
+    const start = new Date(`${customRange.start}T00:00:00`);
+    const end = new Date(`${customRange.end}T23:59:59`);
+    return rows.filter((row) => {
+      const date = parseLooseDate(getDate(row));
+      return date ? date >= start && date <= end : false;
+    });
+  }
   const preset = DATE_PRESETS.find((item) => item.label === presetLabel);
   if (!preset?.days) return rows;
   const since = new Date();

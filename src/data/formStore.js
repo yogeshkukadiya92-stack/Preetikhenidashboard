@@ -1,6 +1,9 @@
 const FORMS_KEY = 'moms-pathshala:forms:v2';
 const LEGACY_FORMS_KEY = 'ayurflow:forms:v1';
 const RESPONSES_KEY = 'moms-pathshala:form-responses:v2';
+const PATIENTS_KEY = 'moms-pathshala:Main Branch:ayurflow-clients:rows:v3';
+const LEGACY_PATIENTS_KEY = 'ayurflow:ayurflow-clients:rows:v3';
+const PATIENT_UPDATES_KEY = 'moms-pathshala:Main Branch:patient-form-updates:v1';
 
 const apiBase = String(import.meta.env.VITE_FORMS_API_URL ?? '/api').trim().replace(/\/$/, '');
 
@@ -20,6 +23,63 @@ function writeJson(key, value) {
   } catch {
     return false;
   }
+}
+
+function normalizePhone(value) {
+  return String(value ?? '').replace(/\D/g, '').slice(-10);
+}
+
+function patientName(row) {
+  if (Array.isArray(row)) return row.length >= 7 ? row[1] ?? '' : row[0] ?? '';
+  return row?.name ?? row?.Client ?? row?.client ?? '';
+}
+
+function patientMobile(row) {
+  if (Array.isArray(row)) return row.length >= 7 ? row[2] ?? '' : row[1] ?? '';
+  return row?.mobile ?? row?.Mobile ?? row?.phone ?? row?.Phone ?? '';
+}
+
+function patientId(row) {
+  if (Array.isArray(row)) return row.length >= 7 ? row[0] ?? '' : '';
+  return row?.clientId ?? row?.['Client ID'] ?? row?.ClientId ?? row?.ID ?? row?.id ?? '';
+}
+
+function applyPatientDataMappings(form, response) {
+  const fields = Array.isArray(form?.fields) ? form.fields : [];
+  const mobileField = fields.find((field) => field.dataTarget === 'patient_mobile');
+  const mobile = normalizePhone(response.answers?.[mobileField?.id]);
+  if (!mobile) return { status: 'skipped', reason: 'Patient mobile mapping is missing or empty.' };
+
+  const patients = readJson(PATIENTS_KEY, readJson(LEGACY_PATIENTS_KEY, []));
+  const patient = Array.isArray(patients) ? patients.find((row) => normalizePhone(patientMobile(row)) === mobile) : null;
+  if (!patient) return { status: 'unmatched', mobile };
+
+  const mappedFields = fields.filter((field) => field.dataTarget === 'patient_weight');
+  const current = readJson(PATIENT_UPDATES_KEY, []);
+  const updates = mappedFields.flatMap((field) => {
+    const numericValue = Number(String(response.answers?.[field.id] ?? '').replace(/[^\d.-]/g, ''));
+    if (!Number.isFinite(numericValue) || numericValue <= 0) return [];
+    return [{
+      id: `${response.id}:${field.id}`,
+      patientId: patientId(patient),
+      patientName: patientName(patient),
+      mobile,
+      type: 'weight',
+      value: numericValue,
+      unit: 'kg',
+      recordedAt: response.submittedAt,
+      formId: form.id,
+      formTitle: form.title,
+      responseId: response.id,
+      fieldId: field.id,
+      fieldLabel: field.label,
+    }];
+  });
+  const existing = Array.isArray(current) ? current : [];
+  const existingIds = new Set(existing.map((item) => item.id));
+  const newUpdates = updates.filter((item) => !existingIds.has(item.id));
+  if (newUpdates.length) writeJson(PATIENT_UPDATES_KEY, [...newUpdates, ...existing]);
+  return { status: newUpdates.length ? 'updated' : 'no-change', count: newUpdates.length, patientName: patientName(patient) };
 }
 
 function normalizeForm(form) {
@@ -147,16 +207,17 @@ export async function submitFormResponse(form, answers, respondentEmail = '') {
   if (!writeJson(RESPONSES_KEY, next)) {
     throw new Error('Browser storage is full. Remove large file responses or connect the Forms API.');
   }
+  const patientData = applyPatientDataMappings(form, response);
 
-  if (!apiBase) return { response, delivery: 'local' };
+  if (!apiBase) return { response, delivery: 'local', patientData };
   try {
     await apiRequest(`/forms/${encodeURIComponent(form.slug)}/responses`, {
       method: 'POST',
       body: JSON.stringify(response),
     });
-    return { response, delivery: 'api' };
+    return { response, delivery: 'api', patientData };
   } catch (error) {
-    return { response, delivery: 'local', warning: error.message };
+    return { response, delivery: 'local', patientData, warning: error.message };
   }
 }
 

@@ -15,6 +15,7 @@ export const STAFF_PERMISSION_OPTIONS = [
   { path: '/services', label: 'Services' },
   { path: '/treatments', label: 'Treatments' },
   { path: '/coaching', label: 'Coaching' },
+  { path: '/attendance', label: 'Attendance' },
   { path: '/operations', label: 'Operations' },
   { path: '/medicines', label: 'Medicines' },
   { path: '/inventory', label: 'Inventory' },

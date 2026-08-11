@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/DashboardPage.jsx';
 import { FormsPage, PublicFormPage } from './pages/forms.jsx';
 import { LoginPage } from './pages/LoginPage.jsx';
 import { ClientJourneyPage } from './pages/ClientJourneyPage.jsx';
+import { AttendancePage } from './pages/AttendancePage.jsx';
 import {
   AccountsPage,
   AppointmentsPage,
@@ -45,6 +46,7 @@ export function App() {
           <Route path="/users" element={<UsersPage />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/appointments" element={<AppointmentsPage />} />
+          <Route path="/attendance" element={<AttendancePage />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/operations" element={<OperationsPage />} />
           <Route path="/medicines" element={<MedicinesPage />} />

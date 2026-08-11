@@ -47,13 +47,6 @@ function downloadBlob(filename, blob) {
   URL.revokeObjectURL(url);
 }
 
-function pdfEscape(value) {
-  return String(value ?? '')
-    .replaceAll('\\', '\\\\')
-    .replaceAll('(', '\\(')
-    .replaceAll(')', '\\)');
-}
-
 function sanitizeFilename(value, fallback = 'invoice') {
   const name = String(value ?? '').trim().replace(/[^a-z0-9-]+/gi, '-').replace(/^-+|-+$/g, '');
   return name || fallback;
@@ -64,64 +57,119 @@ function formatInvoiceAmount(value) {
   return amount ? `Rs. ${amount.toLocaleString('en-IN')}` : 'Rs. 0';
 }
 
-function buildSimplePdf(lines) {
-  const safeLines = lines.map((line) => ({
-    ...line,
-    text: pdfEscape(line.text),
-    size: line.size ?? 11,
-    x: line.x ?? 54,
-    y: line.y ?? 740,
-  }));
-  const textCommands = safeLines
-    .map((line) => `BT /F1 ${line.size} Tf ${line.x} ${line.y} Td (${line.text}) Tj ET`)
-    .join('\n');
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    `<< /Length ${textCommands.length} >>\nstream\n${textCommands}\nendstream`,
-  ];
-  let pdf = '%PDF-1.4\n';
-  const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets.push(pdf.length);
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xrefOffset = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  offsets.slice(1).forEach((offset) => {
-    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
-  });
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  return new Blob([pdf], { type: 'application/pdf' });
-}
-
-function downloadPaymentInvoicePdf(row) {
+async function downloadPaymentInvoicePdf(row) {
   const payment = normalizePaymentRecord(row);
   const invoice = payment.invoice || nextInvoiceNumber([]);
   const issuedOn = payment.paidOn || new Date().toISOString().slice(0, 10);
   const pending = parseMoney(payment.pendingAmount);
-  const lines = [
-    { text: "Mom's Pathshala", size: 20, x: 54, y: 780 },
-    { text: 'Payment Invoice', size: 15, x: 54, y: 754 },
-    { text: `Invoice No: ${invoice}`, size: 11, x: 54, y: 718 },
-    { text: `Date: ${issuedOn}`, size: 11, x: 380, y: 718 },
-    { text: `Patient Name: ${payment.client || '-'}`, size: 12, x: 54, y: 684 },
-    { text: 'Billing Summary', size: 13, x: 54, y: 642 },
-    { text: 'Description', size: 11, x: 54, y: 612 },
-    { text: 'Amount', size: 11, x: 430, y: 612 },
-    { text: 'Consultation / Treatment Payment', size: 11, x: 54, y: 586 },
-    { text: formatInvoiceAmount(payment.amount), size: 11, x: 430, y: 586 },
-    { text: `Paid Amount: ${formatInvoiceAmount(payment.paidAmount)}`, size: 12, x: 54, y: 538 },
-    { text: `Pending Amount: ${formatInvoiceAmount(payment.pendingAmount)}`, size: 12, x: 54, y: 514 },
-    { text: `Payment Status: ${payment.status || (pending > 0 ? 'Pending' : 'Paid')}`, size: 12, x: 54, y: 490 },
-    { text: `Payment Mode: ${payment.paymentMode || '-'}`, size: 12, x: 54, y: 466 },
-    { text: 'Notes: This invoice is generated from the payment record in the dashboard.', size: 10, x: 54, y: 438 },
-    { text: 'Authorized Signature', size: 11, x: 380, y: 328 },
-    { text: 'Thank you.', size: 11, x: 54, y: 92 },
+  const status = payment.status || (pending > 0 ? 'Pending' : 'Paid');
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 16;
+  const contentWidth = pageWidth - margin * 2;
+
+  doc.setFillColor(14, 91, 82);
+  doc.rect(0, 0, pageWidth, 34, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.text("Mom's Pathshala", margin, 15);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Care, consultation and treatment services', margin, 22);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('PAYMENT INVOICE', pageWidth - margin, 16, { align: 'right' });
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Invoice: ${invoice}`, pageWidth - margin, 23, { align: 'right' });
+  doc.text(`Date: ${issuedOn}`, pageWidth - margin, 28, { align: 'right' });
+
+  let y = 44;
+  doc.setTextColor(22, 63, 51);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('BILLED TO', margin, y);
+  doc.setFontSize(13);
+  doc.text(payment.client || 'Patient name not saved', margin, y + 7);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(85, 112, 103);
+  doc.text(`Payment Mode: ${payment.paymentMode || '-'}`, margin, y + 14);
+  doc.text(`Status: ${status}`, pageWidth - margin, y + 7, { align: 'right' });
+  y += 24;
+
+  const columns = [78, 37, 37, 26];
+  const headers = ['Description', 'Total Amount', 'Paid Amount', 'Pending'];
+  let x = margin;
+  doc.setFillColor(14, 91, 82);
+  doc.setDrawColor(185, 211, 202);
+  headers.forEach((header, index) => {
+    doc.rect(x, y, columns[index], 11, 'FD');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text(header, index ? x + columns[index] - 3 : x + 3, y + 7, index ? { align: 'right' } : undefined);
+    x += columns[index];
+  });
+  y += 11;
+  const values = ['Consultation / Treatment Payment', formatInvoiceAmount(payment.amount), formatInvoiceAmount(payment.paidAmount), formatInvoiceAmount(payment.pendingAmount)];
+  x = margin;
+  values.forEach((value, index) => {
+    doc.setFillColor(249, 252, 251);
+    doc.setDrawColor(205, 222, 216);
+    doc.rect(x, y, columns[index], 15, 'FD');
+    doc.setTextColor(22, 63, 51);
+    doc.setFont('helvetica', index ? 'bold' : 'normal');
+    doc.setFontSize(9);
+    doc.text(value, index ? x + columns[index] - 3 : x + 3, y + 9, index ? { align: 'right' } : undefined);
+    x += columns[index];
+  });
+  y += 23;
+
+  const summaryX = pageWidth - margin - 76;
+  const summaryRows = [
+    ['Invoice Total', formatInvoiceAmount(payment.amount)],
+    ['Amount Paid', formatInvoiceAmount(payment.paidAmount)],
+    ['Balance Due', formatInvoiceAmount(payment.pendingAmount)],
   ];
-  downloadBlob(`${sanitizeFilename(invoice)}-${sanitizeFilename(payment.client, 'patient')}.pdf`, buildSimplePdf(lines));
+  summaryRows.forEach(([label, value], index) => {
+    const rowY = y + index * 11;
+    doc.setFillColor(index === 2 ? 234 : 248, index === 2 ? 245 : 251, index === 2 ? 241 : 250);
+    doc.setDrawColor(205, 222, 216);
+    doc.rect(summaryX, rowY, 76, 11, 'FD');
+    doc.setTextColor(70, 96, 88);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(label, summaryX + 3, rowY + 7);
+    doc.setTextColor(22, 63, 51);
+    doc.setFont('helvetica', 'bold');
+    doc.text(value, summaryX + 73, rowY + 7, { align: 'right' });
+  });
+
+  y += 48;
+  doc.setTextColor(22, 63, 51);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('Payment Details', margin, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(85, 112, 103);
+  doc.text(`Status: ${status}   |   Mode: ${payment.paymentMode || '-'}   |   Recorded on: ${issuedOn}`, margin, y + 7);
+  doc.text('This invoice was generated from the payment record in Mom\'s Pathshala.', margin, y + 14);
+
+  doc.setDrawColor(205, 222, 216);
+  doc.line(margin, pageHeight - 28, pageWidth - margin, pageHeight - 28);
+  doc.setTextColor(95, 120, 111);
+  doc.setFontSize(8.5);
+  doc.text('Thank you for your payment.', margin, pageHeight - 19);
+  doc.text('Authorized Signature: ____________________', pageWidth - margin, pageHeight - 19, { align: 'right' });
+  doc.text(`Invoice ${invoice}`, margin, pageHeight - 11);
+  doc.text("Generated by Mom's Pathshala", pageWidth - margin, pageHeight - 11, { align: 'right' });
+
+  downloadBlob(`${sanitizeFilename(invoice)}-${sanitizeFilename(payment.client, 'patient')}.pdf`, doc.output('blob'));
 }
 
 function csvEscape(value) {
@@ -370,8 +418,11 @@ function normalizeDateInput(value) {
 function normalizeAppointmentRows(rows = []) {
   return rows.map((row) => {
     if (!Array.isArray(row)) return row;
-    if (row.length >= 7) return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[6] ?? row[5] ?? 'Pending'];
-    return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[5] ?? 'Pending'];
+    if (row.length >= 7) {
+      const savedMode = /^(online|offline)$/i.test(String(row[5] ?? '')) ? row[5] : 'Offline';
+      return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', savedMode, row[6] ?? row[5] ?? 'Pending'];
+    }
+    return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', 'Offline', row[5] ?? 'Pending'];
   });
 }
 
@@ -1858,9 +1909,9 @@ function ClientProfile({ client, onBack }) {
 
       {activeTab === 'appointments' && (
         <Card title="Appointments" subtitle={`Appointments linked to ${clientName}`}>
-          <div className="table adaptive-table" style={{ '--table-columns': 5 }}>
+          <div className="table adaptive-table" style={{ '--table-columns': 6 }}>
             <div className="table-head">
-              {['Date', 'Time', 'Type', 'Mobile', 'Status'].map((h) => <div key={h}>{h}</div>)}
+              {['Date', 'Time', 'Type', 'Mode', 'Mobile', 'Status'].map((h) => <div key={h}>{h}</div>)}
               <div />
             </div>
             {allAppointments.length ? allAppointments.map((row, i) => (
@@ -1868,8 +1919,9 @@ function ClientProfile({ client, onBack }) {
                 <div>{row[2]}</div>
                 <div>{row[3]}</div>
                 <div>{row[4]}</div>
-                <div>{row[1]}</div>
                 <div>{row[5]}</div>
+                <div>{row[1]}</div>
+                <div>{row[6]}</div>
                 <div />
               </div>
             )) : (
@@ -4020,9 +4072,9 @@ export function AppointmentsPage() {
         { label: 'Confirmed', value: '0' },
         { label: 'Pending', value: '0' },
       ]}
-      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Status']}
+      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Mode', 'Status']}
       rows={[]}
-      fieldOptions={{ Type: services }}
+      fieldOptions={{ Type: services, Mode: ['Offline', 'Online'] }}
       searchableFieldOptions={{ Client: patientOptions }}
       fieldTypes={{ Mobile: 'tel', Date: 'date', Time: 'time' }}
       normalizeRows={normalizeAppointmentRows}
@@ -4051,14 +4103,14 @@ export function AppointmentsPage() {
           {
             label: 'Confirm appointment',
             onClick: () => {
-              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 5 ? 'Confirmed' : cell) : item));
+              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 6 ? 'Confirmed' : cell) : item));
               setActionMessage(`${row[0]} appointment confirmed.`);
             },
           },
           {
             label: 'Check in patient',
             onClick: () => {
-              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 5 ? 'Checked-in' : cell) : item));
+              setTableRows((current) => current.map((item) => item === row ? item.map((cell, index) => index === 6 ? 'Checked-in' : cell) : item));
               setActionMessage(`${row[0]} checked in and ready for consultation.`);
             },
           },
@@ -4167,7 +4219,7 @@ export function TreatmentPlansPage() {
     { time: '17:00', meal: 'Evening', food: 'Tea without sugar + roasted snack', notes: 'No fried snacks' },
     { time: '20:00', meal: 'Dinner', food: 'Soup / khichdi / protein + vegetables', notes: 'Finish early' },
   ];
-  const blankDietPlan = { client: '', service: serviceOptions.find((item) => /nutrition|diet|fat|weight|muscle/i.test(item)) ?? serviceOptions[0] ?? '', goal: 'Fat loss', duration: '30 days', calories: '', water: '2.5-3 L', instructions: 'Sleep 7 hours, walk daily, avoid sugar and fried food.', meals: blankDietMeals };
+  const blankDietPlan = { client: '', service: serviceOptions.find((item) => /nutrition|diet|fat|weight|muscle/i.test(item)) ?? serviceOptions[0] ?? '', goal: 'Fat loss', duration: '30 days', planDate: todayIsoDate(), weekLabel: '', calories: '', water: '2.5-3 L', instructions: 'Sleep 7 hours, walk daily, avoid sugar and fried food.', meals: blankDietMeals };
 
   const [planModal, setPlanModal] = useState(false);
   const [planForm, setPlanForm] = useState(blankPlan);
@@ -4338,7 +4390,7 @@ export function TreatmentPlansPage() {
   };
 
   const openEditDietPlan = (plan, index) => {
-    setDietForm({ ...blankDietPlan, ...plan, meals: Array.isArray(plan.meals) && plan.meals.length ? plan.meals : blankDietMeals });
+    setDietForm({ ...blankDietPlan, ...plan, planDate: plan.planDate ?? '', weekLabel: plan.weekLabel ?? '', meals: Array.isArray(plan.meals) && plan.meals.length ? plan.meals : blankDietMeals });
     setDietTemplateName('');
     setEditingDietIndex(index);
     setDietModal(true);
@@ -4352,6 +4404,8 @@ export function TreatmentPlansPage() {
       service: template.service ?? current.service,
       goal: template.goal ?? current.goal,
       duration: template.duration ?? current.duration,
+      planDate: template.planDate ?? current.planDate,
+      weekLabel: template.weekLabel ?? current.weekLabel,
       calories: template.calories ?? current.calories,
       water: template.water ?? current.water,
       instructions: template.instructions ?? current.instructions,
@@ -4367,6 +4421,8 @@ export function TreatmentPlansPage() {
       service: dietForm.service,
       goal: dietForm.goal,
       duration: dietForm.duration,
+      planDate: dietForm.planDate,
+      weekLabel: dietForm.weekLabel,
       calories: dietForm.calories,
       water: dietForm.water,
       instructions: dietForm.instructions,
@@ -4392,7 +4448,7 @@ export function TreatmentPlansPage() {
 
   const buildDietPlanPrintHtml = (plan) => {
     const mealRows = (plan.meals ?? []).map((meal) => `<tr><td>${escapeHtml(meal.time)}</td><td>${escapeHtml(meal.meal)}</td><td>${escapeHtml(meal.food)}</td><td>${escapeHtml(meal.notes)}</td></tr>`).join('');
-    return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(plan.client || 'Diet Plan')}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#163f33}h1{margin:0 0 8px}p{margin:4px 0 12px;color:#4f6f65;white-space:pre-wrap}.toolbar{display:flex;gap:10px;margin-bottom:20px}.toolbar button{border:1px solid #bcd4cc;background:#087c68;color:#fff;border-radius:8px;padding:10px 14px;font-weight:700}.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:20px 0}.box{border:1px solid #d6e4df;border-radius:8px;padding:10px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #d6e4df;padding:10px;text-align:left;vertical-align:top;white-space:pre-wrap}th{background:#eaf5f1}@page{margin:16mm}@media print{.toolbar{display:none}body{margin:0;color:#163f33}thead th{background:#eaf5f1!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><h1>Diet Plan</h1><p>Mom's Pathshala</p><div class="meta"><div class="box"><strong>Patient Name</strong><br>${escapeHtml(plan.client)}</div><div class="box"><strong>Service</strong><br>${escapeHtml(plan.service)}</div><div class="box"><strong>Goal</strong><br>${escapeHtml(plan.goal)}</div><div class="box"><strong>Duration</strong><br>${escapeHtml(plan.duration)}</div><div class="box"><strong>Calories</strong><br>${escapeHtml(plan.calories)}</div><div class="box"><strong>Water</strong><br>${escapeHtml(plan.water)}</div></div><h2>Meal Schedule</h2><table><thead><tr><th>Time</th><th>Meal</th><th>Food</th><th>Notes</th></tr></thead><tbody>${mealRows || '<tr><td colspan="4">No meals added.</td></tr>'}</tbody></table><h2>Instructions</h2><p>${escapeHtml(plan.instructions)}</p><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},500)});<\/script></body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(plan.client || 'Diet Plan')}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#163f33}h1{margin:0 0 8px}h2{margin:16px 0 8px}p{margin:4px 0 12px;color:#4f6f65;white-space:pre-wrap}.toolbar{display:flex;gap:10px;margin-bottom:20px}.toolbar button{border:1px solid #bcd4cc;background:#087c68;color:#fff;border-radius:8px;padding:10px 14px;font-weight:700}.summary{margin:12px 0 6px;padding:7px 0;border-top:1px solid #d6e4df;border-bottom:1px solid #d6e4df;color:#365e52;font-size:11px;line-height:1.6}.summary strong{color:#163f33}.summary span{white-space:nowrap}.summary span:not(:last-child)::after{content:'  •  ';color:#8aa59d}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #d6e4df;padding:8px;text-align:left;vertical-align:top;white-space:pre-wrap}th{background:#eaf5f1}@page{margin:16mm}@media print{.toolbar{display:none}body{margin:0;color:#163f33}thead th{background:#eaf5f1!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><h1>Diet Plan</h1><p>Mom's Pathshala</p><div class="summary"><span><strong>Patient:</strong> ${escapeHtml(plan.client)}</span><span><strong>Service:</strong> ${escapeHtml(plan.service)}</span><span><strong>Goal:</strong> ${escapeHtml(plan.goal)}</span><span><strong>Duration:</strong> ${escapeHtml(plan.duration)}</span><br><span><strong>Date:</strong> ${escapeHtml(plan.planDate)}</span><span><strong>Week / Phase:</strong> ${escapeHtml(plan.weekLabel)}</span><span><strong>Calories:</strong> ${escapeHtml(plan.calories)}</span><span><strong>Water:</strong> ${escapeHtml(plan.water)}</span></div><h2>Meal Schedule</h2><table><thead><tr><th>Time</th><th>Meal</th><th>Food</th><th>Notes</th></tr></thead><tbody>${mealRows || '<tr><td colspan="4">No meals added.</td></tr>'}</tbody></table><h2>Instructions</h2><p>${escapeHtml(plan.instructions)}</p><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},500)});<\/script></body></html>`;
   };
 
   const openDietPdf = (plan) => {
@@ -4433,23 +4489,6 @@ export function TreatmentPlansPage() {
       doc.line(margin, y, pageWidth - margin, y);
       y += 7;
     };
-    const drawInfoBox = (label, value, column, row) => {
-      const gap = 4;
-      const boxWidth = (contentWidth - gap) / 2;
-      const x = margin + column * (boxWidth + gap);
-      const boxY = y + row * 17;
-      doc.setDrawColor(214, 228, 223);
-      doc.setFillColor(248, 251, 250);
-      doc.roundedRect(x, boxY, boxWidth, 14, 2, 2, 'FD');
-      doc.setTextColor(90, 117, 107);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.text(label, x + 3, boxY + 4);
-      doc.setTextColor(22, 63, 51);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.text(doc.splitTextToSize(clean(value), boxWidth - 6).slice(0, 2), x + 3, boxY + 9);
-    };
     const drawMealHeader = () => {
       const widths = [22, 35, 75, 50];
       const headers = ['Time', 'Meal', 'Food', 'Notes'];
@@ -4480,16 +4519,19 @@ export function TreatmentPlansPage() {
     doc.line(margin, y + 10, pageWidth - margin, y + 10);
     y += 17;
 
-    const details = [
-      ['Patient Name', plan.client],
-      ['Service', plan.service],
-      ['Goal', plan.goal],
-      ['Duration', plan.duration],
-      ['Calories', plan.calories],
-      ['Water', plan.water],
+    const summaryLines = [
+      `Patient: ${clean(plan.client)}  |  Service: ${clean(plan.service)}  |  Goal: ${clean(plan.goal)}  |  Duration: ${clean(plan.duration)}`,
+      `Date: ${clean(plan.planDate)}  |  Week / Phase: ${clean(plan.weekLabel)}  |  Calories: ${clean(plan.calories)}  |  Water: ${clean(plan.water)}`,
     ];
-    details.forEach(([label, value], index) => drawInfoBox(label, value, index % 2, Math.floor(index / 2)));
-    y += 55;
+    doc.setDrawColor(214, 228, 223);
+    doc.line(margin, y, pageWidth - margin, y);
+    doc.setTextColor(54, 94, 82);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text(summaryLines, margin, y + 5, { lineHeightFactor: 1.45 });
+    y += 14;
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 7;
 
     drawSectionTitle('Meal Schedule');
     drawMealHeader();
@@ -4827,6 +4869,8 @@ export function TreatmentPlansPage() {
               <label className="field-block"><span>Service</span><select className="lead-input" value={dietForm.service} onChange={(e) => setDietForm((f) => ({ ...f, service: e.target.value }))}>{serviceOptions.map((service) => <option key={service}>{service}</option>)}</select></label>
               <label className="field-block"><span>Goal</span><input className="lead-input" value={dietForm.goal} onChange={(e) => setDietForm((f) => ({ ...f, goal: e.target.value }))} /></label>
               <label className="field-block"><span>Duration</span><input className="lead-input" value={dietForm.duration} onChange={(e) => setDietForm((f) => ({ ...f, duration: e.target.value }))} /></label>
+              <label className="field-block"><span>Plan Date</span><input className="lead-input" type="date" value={dietForm.planDate} onChange={(e) => setDietForm((f) => ({ ...f, planDate: e.target.value }))} /></label>
+              <label className="field-block"><span>Week / Phase</span><input className="lead-input" value={dietForm.weekLabel} onChange={(e) => setDietForm((f) => ({ ...f, weekLabel: e.target.value }))} placeholder="e.g. Week 1, Week 2, Phase 3" /></label>
               <label className="field-block"><span>Calories</span><input className="lead-input" value={dietForm.calories} onChange={(e) => setDietForm((f) => ({ ...f, calories: e.target.value }))} placeholder="e.g. 1500 kcal" /></label>
               <label className="field-block"><span>Water</span><input className="lead-input" value={dietForm.water} onChange={(e) => setDietForm((f) => ({ ...f, water: e.target.value }))} /></label>
               <div className="treatment-medicine-builder">
@@ -5271,8 +5315,8 @@ export function ReportsPage() {
   const finTabs = loadSavedState(branchKey('Finance:tabs:v3'), loadSavedState('ayurflow:Finance:tabs:v3', {}));
 
   const appointmentRows = normalizeAppointmentRows(loadSavedArray(branchKey('Appointments:rows:v3'), loadSavedArray('ayurflow:Appointments:rows:v2', []))).map((row) => Array.isArray(row)
-    ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[5] ?? 'Pending']
-    : [row.client ?? row.Client ?? row.name ?? '', row.mobile ?? row.Mobile ?? '', row.date ?? row.Date ?? '', row.time ?? row.Time ?? '', row.type ?? row.Type ?? '', row.status ?? row.Status ?? 'Pending']);
+    ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[5] ?? 'Offline', row[6] ?? 'Pending']
+    : [row.client ?? row.Client ?? row.name ?? '', row.mobile ?? row.Mobile ?? '', row.date ?? row.Date ?? '', row.time ?? row.Time ?? '', row.type ?? row.Type ?? '', row.mode ?? row.Mode ?? 'Offline', row.status ?? row.Status ?? 'Pending']);
 
   const savedTreatmentReportRow = (row) => Array.isArray(row)
     ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[7] ?? row[4] ?? '']
@@ -5364,7 +5408,7 @@ export function ReportsPage() {
     ['Payments Pending', `${paymentRows.filter((r) => parseMoney(r[4]) > 0).length} invoices`, pendingTotal > 0 ? fmtRs(pendingTotal) : '—'],
     ['Partial Payments', `${paymentRows.filter((r) => r[5] === 'Partial').length} invoices`, '—'],
     ['Total Appointments', `${appointmentRows.length}`, '—'],
-    ['Confirmed Appointments', `${appointmentRows.filter((r) => r[5] === 'Confirmed').length}`, '—'],
+    ['Confirmed Appointments', `${appointmentRows.filter((r) => r[6] === 'Confirmed').length}`, '—'],
     ['Active Treatment Plans', `${treatmentRows.filter((r) => r[4] === 'Active').length}`, '—'],
     ['Inventory Items', `${inventoryRows.length}`, '—'],
     ['Low Stock Alerts', `${inventoryRows.filter((r) => r[4] === 'Low Stock').length}`, '—'],
@@ -5374,7 +5418,7 @@ export function ReportsPage() {
   // Report map
   const reportMap = {
     treatments: { id: 'treatments', title: 'Treatment Report', columns: ['Patient Name', 'Service', 'Goal', 'Duration', 'Status'], rows: treatmentRows },
-    appointments: { id: 'appointments', title: 'Appointment Report', columns: ['Patient Name', 'Mobile', 'Date', 'Time', 'Type', 'Status'], rows: appointmentRows },
+    appointments: { id: 'appointments', title: 'Appointment Report', columns: ['Patient Name', 'Mobile', 'Date', 'Time', 'Type', 'Mode', 'Status'], rows: appointmentRows },
     finance_payments: { id: 'payments', title: 'Payments Report', columns: ['Patient Name', 'Invoice', 'Total Amount', 'Paid Amount', 'Pending Amount', 'Status', 'Payment Mode', 'Paid On'], rows: paymentRows },
     finance_accounts: { id: 'accounts', title: 'Accounts Report', columns: ['Item', 'Type', 'Amount', 'Mode', 'Status'], rows: accountRows },
     finance_summary: { id: 'revenue-summary', title: 'Revenue & Business Summary', columns: ['Category', 'Details', 'Amount'], rows: summaryRows },
@@ -5389,9 +5433,9 @@ export function ReportsPage() {
   const stats = (() => {
     if (activeReport === 'appointments') return [
       { label: 'Total', value: appointmentRows.length },
-      { label: 'Confirmed', value: appointmentRows.filter((r) => r[5] === 'Confirmed').length },
-      { label: 'Pending', value: appointmentRows.filter((r) => r[5] === 'Pending').length },
-      { label: 'Cancelled', value: appointmentRows.filter((r) => r[5] === 'Cancelled').length },
+      { label: 'Confirmed', value: appointmentRows.filter((r) => r[6] === 'Confirmed').length },
+      { label: 'Pending', value: appointmentRows.filter((r) => r[6] === 'Pending').length },
+      { label: 'Cancelled', value: appointmentRows.filter((r) => r[6] === 'Cancelled').length },
     ];
     if (activeReport === 'treatments') return [
       { label: 'Total Plans', value: treatmentRows.length },

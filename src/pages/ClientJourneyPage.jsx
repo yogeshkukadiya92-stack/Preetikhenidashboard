@@ -303,6 +303,58 @@ function SearchablePresetInput({ label, value, options, onChange, onSelect, onCo
   );
 }
 
+function MedicineSearchInput({ index, value, catalog, onChange, onSelect, onAdd }) {
+  const [focused, setFocused] = useState(false);
+  const query = String(value ?? '').trim().toLowerCase();
+  const matches = catalog
+    .filter((item) => !query || `${item.Medicine} ${item['Default Dose'] || ''} ${item.Timing || ''}`.toLowerCase().includes(query))
+    .slice(0, 8);
+  const exactMatch = catalog.some((item) => item.Medicine.toLowerCase() === query);
+
+  return (
+    <div className="field-block searchable-preset medicine-search-picker">
+      <span>Medicine {index + 1}</span>
+      <input
+        className="lead-input"
+        value={value}
+        onChange={(event) => { onChange(event.target.value); setFocused(true); }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setFocused(false);
+          if (event.key === 'Enter' && matches[0]) {
+            event.preventDefault();
+            onSelect(matches[0]);
+            setFocused(false);
+          }
+        }}
+        placeholder="Search medicine..."
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={focused}
+        aria-autocomplete="list"
+      />
+      {focused && (
+        <div className="searchable-field-results medicine-search-results" role="listbox">
+          {matches.map((item) => (
+            <button type="button" role="option" key={item.Medicine} onMouseDown={(event) => event.preventDefault()} onClick={() => { onSelect(item); setFocused(false); }}>
+              <strong>{item.Medicine}</strong>
+              <small>{[item['Default Dose'], item.Timing].filter(Boolean).join(' · ') || 'Dose and timing not saved'}</small>
+            </button>
+          ))}
+          {query && !exactMatch && (
+            <button className="medicine-add-result" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { onAdd(); setFocused(false); }}>
+              <strong>+ Add “{value.trim()}” as new medicine</strong>
+              <small>Current dose and timing will be saved in Medicines master.</small>
+            </button>
+          )}
+          {!matches.length && (!query || exactMatch) ? <div className="searchable-field-empty">No matching medicine found.</div> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ClientJourneyPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -317,6 +369,7 @@ export function ClientJourneyPage() {
   const customSymptomsKey = branchKey('consultation-custom-symptoms:v1');
   const customDoctorNotesKey = branchKey('consultation-custom-doctor-notes:v1');
   const clinicalPrintTemplatesKey = branchKey('clinical-print-templates:v1');
+  const patientFormUpdatesKey = branchKey('patient-form-updates:v1');
   const [clients, setClients] = useState(() => loadValue(clientsKey, []));
   const [journeys, setJourneys] = useState(() => loadValue(journeysKey, {}));
   const [selectedClient, setSelectedClient] = useState(() => searchParams.get('client') ?? '');
@@ -336,28 +389,31 @@ export function ClientJourneyPage() {
   const [requiredForm, setRequiredForm] = useState('Patient Intake Form');
   const [treatmentForm, setTreatmentForm] = useState({ service: 'Consultation', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
   const [treatmentMedicineRows, setTreatmentMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
+  const [medicineCatalogRevision, setMedicineCatalogRevision] = useState(0);
   const [paymentForm, setPaymentForm] = useState({ invoice: '', amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
   const [followupForm, setFollowupForm] = useState(() => ({ date: addDays(7), time: currentSlot().time, notes: '', status: 'Confirmed' }));
   const [clinicalPrintOpen, setClinicalPrintOpen] = useState(false);
   const [clinicalPrintTitle, setClinicalPrintTitle] = useState('Consultation & Treatment Summary');
   const [clinicalPrintNote, setClinicalPrintNote] = useState('');
   const [clinicalPrintSections, setClinicalPrintSections] = useState(() => Object.fromEntries(PRINT_SECTION_OPTIONS.map(([id]) => [id, true])));
+  const [clinicalPrintVisitIds, setClinicalPrintVisitIds] = useState([]);
   const [clinicalPrintTemplates, setClinicalPrintTemplates] = useState(() => loadValue(clinicalPrintTemplatesKey, []));
   const [clinicalPrintTemplateName, setClinicalPrintTemplateName] = useState('');
   const [selectedClinicalPrintTemplate, setSelectedClinicalPrintTemplate] = useState('');
   const appointments = loadValue(appointmentsKey, []);
   const payments = loadValue(paymentsKey, []);
-  const operationRows = loadValue(operationsKey, {});
   const treatmentTemplates = loadValue(treatmentTemplatesKey, loadValue('ayurflow:treatment-templates:v1', []));
   const [localForms, setLocalForms] = useState(() => loadForms());
   const [localResponses, setLocalResponses] = useState(() => loadAllLocalResponses());
+  const [patientFormUpdates, setPatientFormUpdates] = useState(() => loadValue(patientFormUpdatesKey, []));
   const formOptions = localForms.filter((form) => formTitle(form));
   const formByKey = new Map(localForms.flatMap((form) => [[form.id, form], [form.slug, form]].filter(([key]) => key)));
   const medicineCatalog = useMemo(() => {
+    const operationRows = loadValue(operationsKey, {});
     return (Array.isArray(operationRows.medicines) ? operationRows.medicines : []).map((row) => Array.isArray(row)
       ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '' }
       : row).filter((row) => row.Medicine);
-  }, [operationRows]);
+  }, [operationsKey, medicineCatalogRevision]);
 
   useEffect(() => {
     const refresh = () => setClients(loadValue(clientsKey, []));
@@ -365,6 +421,18 @@ export function ClientJourneyPage() {
     window.addEventListener('storage', refresh);
     return () => { window.removeEventListener('focus', refresh); window.removeEventListener('storage', refresh); };
   }, [clientsKey]);
+
+  useEffect(() => {
+    const refresh = () => setPatientFormUpdates(loadValue(patientFormUpdatesKey, []));
+    window.addEventListener('focus', refresh);
+    window.addEventListener('storage', refresh);
+    window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
+    };
+  }, [patientFormUpdatesKey]);
 
   useEffect(() => {
     const refreshFormsAndResponses = () => {
@@ -472,6 +540,12 @@ export function ClientJourneyPage() {
     setSelectedVisitId(record.activeVisitId || record.visits.at(-1)?.id || '');
   }, [selectedClient]);
   const selectedClientPhone = normalizePhoneNumber(clientMobile(selectedClientRecord));
+  const selectedWeightUpdates = patientFormUpdates
+    .filter((update) => update?.type === 'weight' && (
+      (selectedClientPhone && normalizePhoneNumber(update.mobile) === selectedClientPhone)
+      || (clientId(selectedClientRecord) && String(update.patientId) === String(clientId(selectedClientRecord)))
+    ))
+    .sort((a, b) => String(b.recordedAt ?? '').localeCompare(String(a.recordedAt ?? '')));
   const requiredFormRecord = localForms.find((form) => formTitle(form).toLowerCase() === requiredForm.toLowerCase());
   const matchedFormResponses = localResponses
     .map((response) => {
@@ -661,12 +735,25 @@ export function ClientJourneyPage() {
   };
 
   const selectTreatmentMedicine = (index, medicineName) => {
-    const entry = medicineCatalog.find((item) => item.Medicine.toLowerCase() === medicineName.toLowerCase());
+    const entry = typeof medicineName === 'object' ? medicineName : medicineCatalog.find((item) => item.Medicine.toLowerCase() === medicineName.toLowerCase());
     syncTreatmentMedicineRows(treatmentMedicineRows.map((row, rowIndex) => rowIndex === index ? {
       medicine: entry?.Medicine ?? medicineName,
       dose: entry?.['Default Dose'] ?? row.dose,
       timing: entry?.Timing ?? row.timing,
     } : row));
+  };
+
+  const addTreatmentMedicineToCatalog = (index) => {
+    const row = treatmentMedicineRows[index];
+    const name = row?.medicine?.trim();
+    if (!name || medicineCatalog.some((item) => item.Medicine.toLowerCase() === name.toLowerCase())) return;
+    const operations = loadValue(operationsKey, {});
+    const medicines = Array.isArray(operations.medicines) ? operations.medicines : [];
+    window.localStorage.setItem(operationsKey, JSON.stringify({
+      ...operations,
+      medicines: [[name, 'General', row.dose || '', row.timing || ''], ...medicines],
+    }));
+    setMedicineCatalogRevision((current) => current + 1);
   };
 
   const updateTreatmentMedicine = (index, field, value) => {
@@ -724,6 +811,29 @@ export function ClientJourneyPage() {
     setClinicalPrintSections((current) => ({ ...current, [sectionId]: !current[sectionId] }));
   };
 
+  const openClinicalPrint = () => {
+    setClinicalPrintVisitIds(activeVisitId ? [activeVisitId] : journeyVisits.map((visit) => visit.id));
+    setClinicalPrintOpen(true);
+  };
+
+  const pastJourneyVisits = journeyVisits
+    .filter((visit) => visit.id !== activeVisitId && String(visit.visitDate || '') < String(journey.visitDate || ''))
+    .sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate)));
+
+  const openPastJourneyPrint = () => {
+    if (!pastJourneyVisits.length) return;
+    setClinicalPrintVisitIds(pastJourneyVisits.map((visit) => visit.id));
+    setClinicalPrintTitle(`${selectedClient} · Past Journey Summary`);
+    setClinicalPrintSections(Object.fromEntries(PRINT_SECTION_OPTIONS.map(([id]) => [id, true])));
+    setClinicalPrintOpen(true);
+  };
+
+  const toggleClinicalPrintVisit = (visitId) => {
+    setClinicalPrintVisitIds((current) => current.includes(visitId)
+      ? current.filter((id) => id !== visitId)
+      : [...current, visitId]);
+  };
+
   const applyClinicalPrintTemplate = (templateIndex) => {
     setSelectedClinicalPrintTemplate(templateIndex);
     if (templateIndex === '') return;
@@ -767,33 +877,41 @@ export function ClientJourneyPage() {
 
   const printClinicalSummary = () => {
     if (!selectedClient) return;
-    const consultationData = journey.consultationData ?? {};
-    const treatmentData = journey.treatmentData ?? {};
-    const followupData = journey.followupData ?? {};
-    const paymentData = journey.paymentData ?? {};
-    const selectedMedicines = Array.isArray(treatmentData.medicines)
-      ? treatmentData.medicines
-      : String(treatmentData.medicine ?? '').split(',').map((medicine, index) => ({
-        medicine: medicine.trim(),
-        dose: String(treatmentData.dose ?? '').split(',')[index]?.trim() ?? '',
-        timing: String(treatmentData.timing ?? '').split(',')[index]?.trim() ?? '',
-      })).filter((item) => item.medicine);
     const section = (title, content) => content ? `<section><h2>${escapePrintHtml(title)}</h2>${content}</section>` : '';
     const detail = (label, value) => value ? `<div class="detail"><span>${escapePrintHtml(label)}</span><strong>${escapePrintHtml(value)}</strong></div>` : '';
-    const sections = [
+    const selectedVisits = [...journeyVisits]
+      .filter((visit) => clinicalPrintVisitIds.includes(visit.id))
+      .sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate)));
+    const patientSection = [
       clinicalPrintSections.patient && section('Patient Details', `<div class="details">${detail('Patient Name', selectedClient)}${detail('Patient ID', clientId(selectedClientRecord))}${detail('Mobile', clientMobile(selectedClientRecord))}${detail('Printed On', new Date().toLocaleString('en-IN'))}</div>`),
-      clinicalPrintSections.symptoms && section('Symptoms / Chief Complaint', `<p>${escapePrintHtml(consultationData.complaint || 'Not recorded')}</p>`),
-      clinicalPrintSections.vitals && section('Vitals', `<p>${escapePrintHtml(consultationData.vitals || 'Not recorded')}</p>`),
-      clinicalPrintSections.diagnosis && section('Diagnosis', `<p>${escapePrintHtml(consultationData.diagnosis || 'Not recorded')}</p>`),
-      clinicalPrintSections.doctorNotes && section('Doctor Notes', `<p>${escapePrintHtml(consultationData.notes || 'Not recorded').replaceAll('\n', '<br>')}</p>`),
-      clinicalPrintSections.treatment && section('Treatment Plan', `<div class="details">${detail('Service', treatmentData.service)}${detail('Goal', treatmentData.goal)}${detail('Duration', treatmentData.duration)}${detail('Status', treatmentData.status)}</div>`),
-      clinicalPrintSections.medicines && section('Medicines / Products', selectedMedicines.length ? `<table><thead><tr><th style="width:36px">No.</th><th>Medicine / Product</th><th>Dose</th><th>Timing</th></tr></thead><tbody>${selectedMedicines.map((item, index) => `<tr><td>${index + 1}</td><td>${escapePrintHtml(item.medicine)}</td><td>${escapePrintHtml(item.dose || '—')}</td><td>${escapePrintHtml(item.timing || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>No medicines recorded.</p>'),
-      clinicalPrintSections.followup && section('Next Follow-up', `<div class="details">${detail('Date', followupData.date)}${detail('Time', followupData.time)}${detail('Notes', followupData.notes)}${detail('Status', followupData.status)}</div>`),
-      clinicalPrintSections.payment && section('Payment Details', `<div class="details">${detail('Invoice', paymentData.invoice)}${detail('Amount', paymentData.amount ? `₹ ${paymentData.amount}` : '')}${detail('Paid', paymentData.paidAmount ? `₹ ${paymentData.paidAmount}` : '')}${detail('Pending', paymentData.pendingAmount ? `₹ ${paymentData.pendingAmount}` : '')}${detail('Status', paymentData.status)}</div>`),
     ].filter(Boolean).join('');
+    const visitSections = selectedVisits.map((visit) => {
+      const consultationData = visit.consultationData ?? {};
+      const treatmentData = visit.treatmentData ?? {};
+      const followupData = visit.followupData ?? {};
+      const paymentData = visit.paymentData ?? {};
+      const selectedMedicines = Array.isArray(treatmentData.medicines)
+        ? treatmentData.medicines
+        : String(treatmentData.medicine ?? '').split(',').map((medicine, index) => ({
+          medicine: medicine.trim(),
+          dose: String(treatmentData.dose ?? '').split(',')[index]?.trim() ?? '',
+          timing: String(treatmentData.timing ?? '').split(',')[index]?.trim() ?? '',
+        })).filter((item) => item.medicine);
+      const visitTitle = `${formatResponseDate(visit.visitDate) || 'Undated visit'} · ${visit.appointmentData?.time || 'Time not recorded'} · ${visit.appointmentData?.type || 'Patient visit'}`;
+      return `<div class="visit-summary"><h1>${escapePrintHtml(visitTitle)}</h1>${[
+        clinicalPrintSections.symptoms && section('Symptoms / Chief Complaint', `<p>${escapePrintHtml(consultationData.complaint || 'Not recorded')}</p>`),
+        clinicalPrintSections.vitals && section('Vitals', `<p>${escapePrintHtml(consultationData.vitals || 'Not recorded')}</p>`),
+        clinicalPrintSections.diagnosis && section('Diagnosis', `<p>${escapePrintHtml(consultationData.diagnosis || 'Not recorded')}</p>`),
+        clinicalPrintSections.doctorNotes && section('Doctor Notes', `<p>${escapePrintHtml(consultationData.notes || 'Not recorded').replaceAll('\n', '<br>')}</p>`),
+        clinicalPrintSections.treatment && section('Treatment Plan', `<div class="details">${detail('Service', treatmentData.service)}${detail('Goal', treatmentData.goal)}${detail('Duration', treatmentData.duration)}${detail('Status', treatmentData.status)}</div>`),
+        clinicalPrintSections.medicines && section('Medicines / Products', selectedMedicines.length ? `<table><thead><tr><th style="width:36px">No.</th><th>Medicine / Product</th><th>Dose</th><th>Timing</th></tr></thead><tbody>${selectedMedicines.map((item, index) => `<tr><td>${index + 1}</td><td>${escapePrintHtml(item.medicine)}</td><td>${escapePrintHtml(item.dose || '—')}</td><td>${escapePrintHtml(item.timing || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>No medicines recorded.</p>'),
+        clinicalPrintSections.followup && section('Next Follow-up', `<div class="details">${detail('Date', followupData.date)}${detail('Time', followupData.time)}${detail('Notes', followupData.notes)}${detail('Status', followupData.status)}</div>`),
+        clinicalPrintSections.payment && section('Payment Details', `<div class="details">${detail('Invoice', paymentData.invoice)}${detail('Amount', paymentData.amount ? `₹ ${paymentData.amount}` : '')}${detail('Paid', paymentData.paidAmount ? `₹ ${paymentData.paidAmount}` : '')}${detail('Pending', paymentData.pendingAmount ? `₹ ${paymentData.pendingAmount}` : '')}${detail('Status', paymentData.status)}</div>`),
+      ].filter(Boolean).join('')}</div>`;
+    }).join('');
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapePrintHtml(selectedClient)} - Clinical Summary</title><style>*{box-sizing:border-box}body{margin:0;padding:28px 34px;color:#173b31;font-family:Arial,sans-serif;font-size:12px;line-height:1.5}.header{display:flex;justify-content:space-between;gap:20px;padding-bottom:14px;border-bottom:3px solid #0e5b52}.header h1{margin:0 0 4px;color:#0e5b52;font-size:22px}.header p{margin:0;color:#60776f}.clinic{text-align:right;font-weight:700}section{margin-top:17px;break-inside:avoid}h2{margin:0 0 8px;padding-bottom:5px;border-bottom:1px solid #d6e4df;color:#0e5b52;font-size:14px}p{margin:0;white-space:pre-wrap}.details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.detail{padding:8px;border:1px solid #dbe7e2;border-radius:6px}.detail span{display:block;margin-bottom:2px;color:#6a7f77;font-size:10px}.detail strong{overflow-wrap:anywhere}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #d6e4df;text-align:left;vertical-align:top}th{background:#edf7f3}.custom-note{margin-top:18px;padding:10px;border:1px solid #d6e4df;border-radius:6px;white-space:pre-wrap}.footer{margin-top:28px;padding-top:10px;border-top:1px solid #d6e4df;color:#758a82;font-size:10px;display:flex;justify-content:space-between}@page{margin:14mm}@media print{body{padding:0}th{background:#edf7f3!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><div><h1>${escapePrintHtml(clinicalPrintTitle || 'Clinical Summary')}</h1><p>Personalized consultation and treatment record</p></div><div class="clinic">Mom's Pathshala<br>Main Branch</div></div>${sections}${clinicalPrintNote.trim() ? `<div class="custom-note"><strong>Additional Instructions</strong><br>${escapePrintHtml(clinicalPrintNote).replaceAll('\n', '<br>')}</div>` : ''}<div class="footer"><span>Generated from Patient Journey</span><span>Doctor / Consultant Signature: __________________</span></div><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},300)});<\/script></body></html>`);
+    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapePrintHtml(selectedClient)} - Clinical Summary</title><style>*{box-sizing:border-box}body{margin:0;padding:28px 34px;color:#173b31;font-family:Arial,sans-serif;font-size:12px;line-height:1.5}.header{display:flex;justify-content:space-between;gap:20px;padding-bottom:14px;border-bottom:3px solid #0e5b52}.header h1{margin:0 0 4px;color:#0e5b52;font-size:22px}.header p{margin:0;color:#60776f}.clinic{text-align:right;font-weight:700}.visit-summary{margin-top:24px;padding-top:14px;border-top:2px solid #0e5b52;break-before:auto}.visit-summary>h1{margin:0;color:#0e5b52;font-size:17px}section{margin-top:17px;break-inside:avoid}h2{margin:0 0 8px;padding-bottom:5px;border-bottom:1px solid #d6e4df;color:#0e5b52;font-size:14px}p{margin:0;white-space:pre-wrap}.details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.detail{padding:8px;border:1px solid #dbe7e2;border-radius:6px}.detail span{display:block;margin-bottom:2px;color:#6a7f77;font-size:10px}.detail strong{overflow-wrap:anywhere}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #d6e4df;text-align:left;vertical-align:top}th{background:#edf7f3}.custom-note{margin-top:18px;padding:10px;border:1px solid #d6e4df;border-radius:6px;white-space:pre-wrap}.footer{margin-top:28px;padding-top:10px;border-top:1px solid #d6e4df;color:#758a82;font-size:10px;display:flex;justify-content:space-between}@page{margin:14mm}@media print{body{padding:0}th{background:#edf7f3!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><div><h1>${escapePrintHtml(clinicalPrintTitle || 'Clinical Summary')}</h1><p>${selectedVisits.length} selected patient journey${selectedVisits.length === 1 ? '' : 's'}</p></div><div class="clinic">Mom's Pathshala<br>Main Branch</div></div>${patientSection}${visitSections}${clinicalPrintNote.trim() ? `<div class="custom-note"><strong>Additional Instructions</strong><br>${escapePrintHtml(clinicalPrintNote).replaceAll('\n', '<br>')}</div>` : ''}<div class="footer"><span>Generated from Patient Journey</span><span>Doctor / Consultant Signature: __________________</span></div><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},300)});<\/script></body></html>`);
     printWindow.document.close();
   };
 
@@ -921,6 +1039,14 @@ export function ClientJourneyPage() {
         <Card title={selectedClient ? `${selectedClient} Journey` : 'Journey Stages'} subtitle={selectedClient ? 'Complete each stage in order; earlier records remain linked.' : 'Select a patient to begin.'}>
           {selectedClient ? (
             <>
+              {selectedWeightUpdates.length > 0 && (
+                <div className="patient-weight-summary">
+                  <div><span>Latest Weight</span><strong>{selectedWeightUpdates[0].value} {selectedWeightUpdates[0].unit || 'kg'}</strong><small>{formatResponseDate(selectedWeightUpdates[0].recordedAt)} · {selectedWeightUpdates[0].formTitle || 'Submitted form'}</small></div>
+                  <div className="patient-weight-history" aria-label={`${selectedClient} weight history`}>
+                    {selectedWeightUpdates.slice(0, 6).map((update) => <span key={update.id}><strong>{update.value} {update.unit || 'kg'}</strong><small>{formatResponseDate(update.recordedAt)}</small></span>)}
+                  </div>
+                </div>
+              )}
               <div className="journey-visit-history">
                 <div><strong>Date-wise Journeys</strong><span>{journeyVisits.length ? `${journeyVisits.length} visit journey${journeyVisits.length === 1 ? '' : 's'} saved` : 'No visit journey created yet'}</span></div>
                 <div className="journey-visit-tabs" role="tablist" aria-label={`${selectedClient} visit journeys`}>
@@ -931,6 +1057,10 @@ export function ClientJourneyPage() {
                     </button>
                   ))}
                 </div>
+                <div className="journey-history-pdf-action">
+                  <div><strong>Past clinical history</strong><span>{pastJourneyVisits.length ? `${pastJourneyVisits.length} earlier visit${pastJourneyVisits.length === 1 ? '' : 's'} before ${formatResponseDate(journey.visitDate)}` : 'No earlier visit is available before this date.'}</span></div>
+                  <button className="pill" type="button" disabled={!pastJourneyVisits.length} onClick={openPastJourneyPrint}>View Past Journey PDF</button>
+                </div>
               </div>
               <div className="journey-stages">
                 {STAGES.map(([id, label], index) => {
@@ -940,7 +1070,7 @@ export function ClientJourneyPage() {
               </div>
               <div className="journey-print-actions">
                 <div><strong>Patient handout</strong><span>Select consultation and treatment details for a customized print.</span></div>
-                <button className="pill" type="button" onClick={() => setClinicalPrintOpen(true)}>Customize Patient Print</button>
+                <button className="pill" type="button" onClick={openClinicalPrint}>Customize Patient Print</button>
               </div>
               {nextAction() !== 'completed' ? <button className="pill primary-action journey-next" type="button" onClick={() => runStage(nextAction())}>Continue to {STAGES.find(([id]) => id === nextAction())?.[1]}</button> : <div className="action-note"><strong>Journey completed.</strong> All required stages are recorded.</div>}
             </>
@@ -967,6 +1097,18 @@ export function ClientJourneyPage() {
                 </div>
                 <label className="field-block"><span>Print Title</span><input className="lead-input" value={clinicalPrintTitle} onChange={(event) => setClinicalPrintTitle(event.target.value)} /></label>
                 <div className="clinical-print-select-all">
+                  <strong>Journey dates</strong>
+                  <div><button className="pill" type="button" onClick={() => setClinicalPrintVisitIds(journeyVisits.map((visit) => visit.id))}>All journeys</button><button className="pill" type="button" onClick={() => setClinicalPrintVisitIds([])}>Clear</button></div>
+                </div>
+                <div className="clinical-print-visits">
+                  {[...journeyVisits].sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate))).map((visit) => (
+                    <label className={`clinical-print-option ${clinicalPrintVisitIds.includes(visit.id) ? 'selected' : ''}`} key={visit.id}>
+                      <input type="checkbox" checked={clinicalPrintVisitIds.includes(visit.id)} onChange={() => toggleClinicalPrintVisit(visit.id)} />
+                      <span><strong>{formatResponseDate(visit.visitDate)}</strong><small>{visit.appointmentData?.time || 'Time not recorded'} · {visit.appointmentData?.type || 'Patient visit'}</small></span>
+                    </label>
+                  ))}
+                </div>
+                <div className="clinical-print-select-all">
                   <strong>Include in print</strong>
                   <div><button className="pill" type="button" onClick={() => setClinicalPrintSections(Object.fromEntries(PRINT_SECTION_OPTIONS.map(([id]) => [id, true])))}>Select all</button><button className="pill" type="button" onClick={() => setClinicalPrintSections(Object.fromEntries(PRINT_SECTION_OPTIONS.map(([id]) => [id, false])))}>Clear all</button></div>
                 </div>
@@ -982,6 +1124,7 @@ export function ClientJourneyPage() {
               </div>
               <div className="clinical-print-preview" aria-live="polite">
                 <div className="clinical-preview-header"><div><strong>{clinicalPrintTitle || 'Clinical Summary'}</strong><span>Mom&apos;s Pathshala</span></div><small>Print preview</small></div>
+                <div className="clinical-preview-section"><strong>Selected Journey Dates</strong><p>{journeyVisits.filter((visit) => clinicalPrintVisitIds.includes(visit.id)).sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate))).map((visit) => `${formatResponseDate(visit.visitDate)} · ${visit.appointmentData?.time || 'Time not recorded'} · ${visit.appointmentData?.type || 'Patient visit'}`).join('\n') || 'Select at least one journey date.'}</p></div>
                 {clinicalPrintSections.patient && <div className="clinical-preview-section"><strong>Patient Details</strong><p>{clientId(selectedClientRecord) || 'No ID'} · {selectedClient}<br />{clientMobile(selectedClientRecord) || 'Mobile not saved'}</p></div>}
                 {clinicalPrintSections.symptoms && <div className="clinical-preview-section"><strong>Symptoms / Chief Complaint</strong><p>{journey.consultationData?.complaint || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.vitals && <div className="clinical-preview-section"><strong>Vitals</strong><p>{journey.consultationData?.vitals || 'Not recorded'}</p></div>}
@@ -997,7 +1140,7 @@ export function ClientJourneyPage() {
             </div>
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setClinicalPrintOpen(false)}>Cancel</button>
-              <button className="pill primary-action" type="button" disabled={!Object.values(clinicalPrintSections).some(Boolean) && !clinicalPrintNote.trim()} onClick={printClinicalSummary}>Print / Save PDF</button>
+              <button className="pill primary-action" type="button" disabled={!clinicalPrintVisitIds.length || (!Object.values(clinicalPrintSections).some(Boolean) && !clinicalPrintNote.trim())} onClick={printClinicalSummary}>Print / Save PDF</button>
             </div>
           </div>
         </div>
@@ -1009,7 +1152,7 @@ export function ClientJourneyPage() {
 
       {stageModal === 'forms' && <JourneyModal title="Required Form" client={selectedClient} onClose={() => setStageModal('')} onSave={saveRequiredForm} saveLabel={matchedFormResponses.length ? 'Mark Form Received' : 'Waiting for Submission'} saveDisabled={!matchedFormResponses.length}><label className="field-block"><span>Form</span><select className="lead-input" value={requiredForm} onChange={(event) => setRequiredForm(event.target.value)}>{formOptions.length ? formOptions.map((form) => <option key={form.id || form.slug || formTitle(form)} value={formTitle(form)}>{formTitle(form)}</option>) : <option value="">No forms created yet</option>}</select></label><div className="action-note"><strong>{matchedFormResponses.length ? `${matchedFormResponses.length} response(s) found` : 'Submission not found'}</strong>{matchedFormResponses.length ? ' Mobile number matched with submitted form responses below.' : ' Ask the patient to submit any created form using the same mobile number saved in the patient profile.'}</div><div className="matched-response-list full-field">{matchedFormResponses.length ? matchedFormResponses.map(({ response, form }) => <div className="matched-response-card" key={response.id}><div><strong>{response.formTitle || formTitle(form) || 'Submitted Form'}</strong><span>{formatResponseDate(response.submittedAt)}</span></div>{responsePreview(response, form).map(([label, value]) => <p key={`${response.id}-${label}`}><b>{label}:</b> {value}</p>)}</div>) : <div className="empty-state compact-empty"><strong>No matched response yet.</strong><p>Patient mobile: {selectedClientPhone || 'not saved'}</p></div>}</div></JourneyModal>}
 
-      {stageModal === 'treatment' && <JourneyModal title="Add Treatment Plan" client={selectedClient} onClose={() => setStageModal('')} onSave={saveTreatment} saveLabel="Save Treatment"><div className="quick-preset-row">{QUICK_TREATMENTS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickTreatment(preset)}>{preset.label}</button>)}</div>{treatmentTemplates.length > 0 && <label className="field-block full-field"><span>Use Template</span><select className="lead-input" defaultValue="" onChange={(event) => applyTreatmentTemplate(event.target.value)}><option value="">Select saved template...</option>{treatmentTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}</select></label>}<label className="field-block"><span>Service</span><select className="lead-input" value={treatmentForm.service} onChange={(event) => setTreatmentForm((value) => ({ ...value, service: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Goal</span><input className="lead-input" list="goal-presets" value={treatmentForm.goal} onChange={(event) => setTreatmentForm((value) => ({ ...value, goal: event.target.value }))} placeholder="Treatment goal" /><datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist></label><label className="field-block"><span>Duration</span><select className="lead-input" value={treatmentForm.duration} onChange={(event) => setTreatmentForm((value) => ({ ...value, duration: event.target.value }))}>{DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><div className="treatment-medicine-builder"><div className="medicine-builder-head"><div><strong>Medicines / Products</strong><span>Add multiple medicines with separate dose and timing.</span></div><button className="pill" type="button" onClick={() => syncTreatmentMedicineRows([...treatmentMedicineRows, { medicine: '', dose: '', timing: '' }])}>+ Add Medicine</button></div><datalist id="journey-medicine-options">{medicineCatalog.map((medicine) => <option key={medicine.Medicine} value={medicine.Medicine}>{medicine['Default Dose']}</option>)}</datalist>{treatmentMedicineRows.map((row, index) => <div className="treatment-medicine-row" key={index}><label className="field-block"><span>Medicine {index + 1}</span><input className="lead-input" list="journey-medicine-options" value={row.medicine} onChange={(event) => selectTreatmentMedicine(index, event.target.value)} placeholder={medicineCatalog.length ? 'Search medicine...' : 'Add medicines first'} /></label><label className="field-block"><span>Dose</span><input className="lead-input" value={row.dose} onChange={(event) => updateTreatmentMedicine(index, 'dose', event.target.value)} placeholder="Dose" /></label><label className="field-block"><span>Timing</span><input className="lead-input" value={row.timing} onChange={(event) => updateTreatmentMedicine(index, 'timing', event.target.value)} placeholder="After meals" /></label><button className="icon-btn" type="button" onClick={() => removeTreatmentMedicine(index)} aria-label={`Remove medicine ${index + 1}`}>x</button></div>)}</div></JourneyModal>}
+      {stageModal === 'treatment' && <JourneyModal title="Add Treatment Plan" client={selectedClient} onClose={() => setStageModal('')} onSave={saveTreatment} saveLabel="Save Treatment"><div className="quick-preset-row">{QUICK_TREATMENTS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickTreatment(preset)}>{preset.label}</button>)}</div>{treatmentTemplates.length > 0 && <label className="field-block full-field"><span>Use Template</span><select className="lead-input" defaultValue="" onChange={(event) => applyTreatmentTemplate(event.target.value)}><option value="">Select saved template...</option>{treatmentTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}</select></label>}<label className="field-block"><span>Service</span><select className="lead-input" value={treatmentForm.service} onChange={(event) => setTreatmentForm((value) => ({ ...value, service: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Goal</span><input className="lead-input" list="goal-presets" value={treatmentForm.goal} onChange={(event) => setTreatmentForm((value) => ({ ...value, goal: event.target.value }))} placeholder="Treatment goal" /><datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist></label><label className="field-block"><span>Duration</span><select className="lead-input" value={treatmentForm.duration} onChange={(event) => setTreatmentForm((value) => ({ ...value, duration: event.target.value }))}>{DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><div className="treatment-medicine-builder"><div className="medicine-builder-head"><div><strong>Medicines / Products</strong><span>Search the medicine master or add a missing medicine without leaving this treatment.</span></div><button className="pill" type="button" onClick={() => syncTreatmentMedicineRows([...treatmentMedicineRows, { medicine: '', dose: '', timing: '' }])}>+ Add Medicine</button></div>{treatmentMedicineRows.map((row, index) => <div className="treatment-medicine-row" key={index}><MedicineSearchInput index={index} value={row.medicine} catalog={medicineCatalog} onChange={(value) => updateTreatmentMedicine(index, 'medicine', value)} onSelect={(medicine) => selectTreatmentMedicine(index, medicine)} onAdd={() => addTreatmentMedicineToCatalog(index)} /><label className="field-block"><span>Dose</span><input className="lead-input" value={row.dose} onChange={(event) => updateTreatmentMedicine(index, 'dose', event.target.value)} placeholder="Dose" /></label><label className="field-block"><span>Timing</span><input className="lead-input" value={row.timing} onChange={(event) => updateTreatmentMedicine(index, 'timing', event.target.value)} placeholder="After meals" /></label><button className="icon-btn" type="button" onClick={() => removeTreatmentMedicine(index)} aria-label={`Remove medicine ${index + 1}`}>x</button></div>)}</div></JourneyModal>}
 
       {stageModal === 'billing' && <JourneyModal title="Add Payment" client={selectedClient} onClose={() => setStageModal('')} onSave={savePayment} saveLabel="Save Payment"><div className="quick-preset-row">{PAYMENT_AMOUNTS.map((amount) => <button className="pill" type="button" key={amount} onClick={() => setPaymentForm((value) => ({ ...value, amount, paidAmount: value.status === 'Paid' ? amount : value.paidAmount, pendingAmount: calculatePaymentPending(amount, value.status === 'Paid' ? amount : value.paidAmount, value.status) }))}>Rs {amount}</button>)}</div><label className="field-block"><span>Invoice</span><input className="lead-input" value={paymentForm.invoice} readOnly /></label><label className="field-block"><span>Total Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.amount} onChange={(event) => setPaymentForm((value) => ({ ...value, amount: event.target.value, paidAmount: value.status === 'Paid' ? event.target.value : value.paidAmount, pendingAmount: calculatePaymentPending(event.target.value, value.status === 'Paid' ? event.target.value : value.paidAmount, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Paid Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.paidAmount} onChange={(event) => setPaymentForm((value) => ({ ...value, paidAmount: event.target.value, pendingAmount: calculatePaymentPending(value.amount, event.target.value, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Pending Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.pendingAmount} readOnly placeholder="Auto calculated" /></label><label className="field-block"><span>Status</span><select className="lead-input" value={paymentForm.status} onChange={(event) => setPaymentForm((value) => { const paidAmount = event.target.value === 'Paid' ? value.amount : event.target.value === 'Pending' ? '' : value.paidAmount; return { ...value, status: event.target.value, paidAmount, pendingAmount: calculatePaymentPending(value.amount, paidAmount, event.target.value) }; })}><option>Paid</option><option>Partial</option><option>Pending</option></select></label><label className="field-block"><span>Paid On</span><input className="lead-input" type="date" value={paymentForm.paidOn} onChange={(event) => setPaymentForm((value) => ({ ...value, paidOn: event.target.value }))} /></label></JourneyModal>}
 

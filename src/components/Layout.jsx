@@ -30,6 +30,7 @@ const iconByPath = {
   '/treatments': ChartIcon,
   '/packages': MoneyIcon,
   '/coaching': UsersIcon,
+  '/attendance': UsersIcon,
   '/staff': UsersIcon,
   '/finance': MoneyIcon,
   '/accounts': MoneyIcon,
@@ -54,13 +55,33 @@ function getCurrentDateRange() {
   return `${format(start)} - ${format(today)}`;
 }
 
+function toIsoDate(date) {
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 10);
+}
+
+function defaultDateSelection() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(end.getDate() - 6);
+  return { start: toIsoDate(start), end: toIsoDate(end) };
+}
+
+function formatDateSelection(start, end) {
+  if (!start || !end) return 'Select dates';
+  const format = (value) => new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  return start === end ? format(start) : `${format(start)} - ${format(end)}`;
+}
+
 export function Layout() {
   const session = getAuthSession();
   const { currentBranch } = useBranch();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchText, setSearchText] = useState('');
+  const [dateSelection, setDateSelection] = useState(defaultDateSelection);
   const [dateRange, setDateRange] = useState(() => getCurrentDateRange());
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationSummary, setNotificationSummary] = useState({ followUps: 0, pendingPayments: 0 });
@@ -97,7 +118,8 @@ export function Layout() {
     event.preventDefault();
     const term = searchText.trim().toLowerCase();
     if (!term) return;
-    if (term.includes('package') || term.includes('program')) navigate('/operations?tab=packages');
+    if (term.includes('attendance') || term.includes('attandance') || term.includes('હાજરી')) navigate('/attendance');
+    else if (term.includes('package') || term.includes('program')) navigate('/operations?tab=packages');
     else if (term.includes('treatment') || term.includes('plan') || term.includes('panchakarma') || term.includes('skin') || term.includes('hair') || term.includes('garbha') || term.includes('weight')) navigate('/operations?tab=treatments');
     else if (term.includes('coach') || term.includes('student') || term.includes('batch') || term.includes('certificate')) navigate('/operations?tab=coaching');
     else if (term.includes('staff') || term.includes('role') || term.includes('permission')) navigate('/settings?tab=users');
@@ -205,11 +227,29 @@ export function Layout() {
             <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search leads, patients, stock, payments..." aria-label="Search" />
             <button className="kbd" type="submit">Go</button>
           </form>
-          <button className="date-pill" type="button" onClick={() => setDateRange((current) => (current === getCurrentDateRange() ? new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : getCurrentDateRange()))}>
+          <button className="date-pill" type="button" onClick={() => { setNotificationsOpen(false); setProfileOpen(false); setDatePickerOpen((current) => !current); }} aria-expanded={datePickerOpen} aria-haspopup="dialog">
             <CalendarIcon />
             <strong>{dateRange}</strong>
             <ChevronRight />
           </button>
+          {datePickerOpen && (
+            <div className="header-date-popover" role="dialog" aria-label="Choose dashboard date range">
+              <strong>Dashboard date range</strong>
+              <div className="header-date-fields">
+                <label><span>From</span><input type="date" value={dateSelection.start} max={dateSelection.end || undefined} onChange={(event) => setDateSelection((current) => ({ ...current, start: event.target.value }))} /></label>
+                <label><span>To</span><input type="date" value={dateSelection.end} min={dateSelection.start || undefined} onChange={(event) => setDateSelection((current) => ({ ...current, end: event.target.value }))} /></label>
+              </div>
+              <div className="header-date-actions">
+                <button className="pill" type="button" onClick={() => setDateSelection(defaultDateSelection())}>Last 7 days</button>
+                <button className="pill primary-action" type="button" disabled={!dateSelection.start || !dateSelection.end || dateSelection.start > dateSelection.end} onClick={() => {
+                  setDateRange(formatDateSelection(dateSelection.start, dateSelection.end));
+                  setDatePickerOpen(false);
+                  window.dispatchEvent(new CustomEvent('moms-pathshala:date-range-change', { detail: dateSelection }));
+                  if (location.pathname !== '/') navigate('/');
+                }}>Apply</button>
+              </div>
+            </div>
+          )}
           <button className="icon-btn" aria-label="Notifications" type="button" onClick={toggleNotifications} aria-expanded={notificationsOpen}>
             <BellIcon />
           </button>

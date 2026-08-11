@@ -9,6 +9,7 @@ export const navItems = [
   { path: '/treatments', label: 'Treatments', section: 'Care Programs' },
   { path: '/packages', label: 'Packages', section: 'Care Programs' },
   { path: '/coaching', label: 'Coaching', section: 'Care Programs' },
+  { path: '/attendance', label: 'Attendance', section: 'Care Programs' },
   { path: '/staff', label: 'Staff', section: 'Operations' },
   { path: '/operations', label: 'Operations', section: 'Operations' },
   { path: '/medicines', label: 'Medicines', section: 'Operations' },
