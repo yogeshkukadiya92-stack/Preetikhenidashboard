@@ -46,7 +46,7 @@ export function DashboardPage() {
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toLocalIsoDate(new Date()));
   const liveData = useMemo(() => loadLiveDashboardData(currentBranch), [currentBranch, dataRevision]);
-  const { kpis, leads, payments, todaySchedule, urgentTasks, appointments, clients, inventory, packages, staff, treatments } = liveData;
+  const { leads, payments, todaySchedule, urgentTasks, appointments, clients, inventory, packages, staff, treatments } = liveData;
   const normalizedPatients = useMemo(() => clients.map(normalizeDashboardPatient).filter((patient) => patient.name), [clients]);
   const patientResults = useMemo(() => {
     const query = patientSearch.trim().toLowerCase();
@@ -100,11 +100,49 @@ export function DashboardPage() {
   const filteredLeads = filterRowsByPreset(leads, datePreset, (lead) => lead.addedOn, customDateRange);
   const filteredPayments = filterRowsByPreset(payments, datePreset, (payment) => payment.paidOn, customDateRange);
   const filteredAppointments = filterRowsByPreset(appointments, datePreset, (appointment) => appointment[2] ?? appointment.date, customDateRange);
-  const paymentAging = buildPaymentAging(payments);
-  const leadSources = buildLeadSourcePerformance(filteredLeads.length ? filteredLeads : leads);
-  const staffWorkload = buildStaffWorkload(filteredAppointments.length ? filteredAppointments : appointments, staff);
+  const filteredOpenLeads = filteredLeads.filter((lead) => !['won', 'lost', 'closed'].includes(normalizeStatus(lead.status)));
+  const filteredFollowUps = filteredLeads.filter((lead) => normalizeStatus(lead.status).includes('follow'));
+  const filteredPendingPayments = filteredPayments.filter((payment) => paymentPendingAmount(payment) > 0);
+  const selectedRangeLabel = datePreset === 'Custom' && customDateRange
+    ? `${customDateRange.start} to ${customDateRange.end}`
+    : datePreset;
+  const kpis = [
+    {
+      label: datePreset === 'Today' ? "Today's Appointments" : 'Appointments',
+      value: String(filteredAppointments.length),
+      delta: filteredAppointments.length ? `${selectedRangeLabel} range` : 'No records in range',
+      accent: 'green',
+    },
+    {
+      label: 'Open Leads',
+      value: String(filteredOpenLeads.length),
+      delta: filteredOpenLeads.length ? `${filteredFollowUps.length} follow-up due` : 'No records in range',
+      accent: 'gold',
+    },
+    {
+      label: 'Total Billing',
+      value: `₹ ${filteredPayments.reduce((sum, payment) => sum + parseLiveAmount(payment?.amount ?? payment?.['Total Amount'] ?? payment?.Amount), 0).toLocaleString('en-IN')}`,
+      delta: filteredPayments.length ? `${filteredPayments.length} invoice(s)` : 'No records in range',
+      accent: 'green',
+    },
+    {
+      label: 'Pending Payments',
+      value: `₹ ${filteredPendingPayments.reduce((sum, payment) => sum + paymentPendingAmount(payment), 0).toLocaleString('en-IN')}`,
+      delta: filteredPendingPayments.length ? `${filteredPendingPayments.length} invoice(s)` : 'No records in range',
+      accent: 'teal',
+    },
+    {
+      label: 'Follow-ups Due',
+      value: String(filteredFollowUps.length),
+      delta: filteredFollowUps.length ? `${selectedRangeLabel} range` : 'No records in range',
+      accent: 'gold',
+    },
+  ];
+  const paymentAging = buildPaymentAging(filteredPayments);
+  const leadSources = buildLeadSourcePerformance(filteredLeads);
+  const staffWorkload = buildStaffWorkload(filteredAppointments, staff);
   const lowStockAlerts = buildLowStockAlerts(inventory);
-  const salesSummary = buildSalesSummary(filteredPayments.length ? filteredPayments : payments, packages, treatments);
+  const salesSummary = buildSalesSummary(filteredPayments, packages, treatments);
   const treatmentProgress = buildTreatmentProgress(treatments, clients);
   const reminders = buildClientReminders(clients);
   const actionQueue = buildActionQueue(urgentTasks, leads, payments, lowStockAlerts, reminders);
@@ -533,7 +571,7 @@ function parseLooseDate(value) {
   const raw = String(value).trim();
   if (!raw || raw.toLowerCase() === 'due') return null;
   if (raw.toLowerCase() === 'today') return new Date();
-  const date = new Date(raw);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00`) : new Date(raw);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -551,9 +589,11 @@ function filterRowsByPreset(rows, presetLabel, getDate, customRange = null) {
   const since = new Date();
   since.setHours(0, 0, 0, 0);
   since.setDate(since.getDate() - (preset.days - 1));
+  const until = new Date();
+  until.setHours(23, 59, 59, 999);
   return rows.filter((row) => {
     const date = parseLooseDate(getDate(row));
-    return date ? date >= since : preset.days !== 1;
+    return date ? date >= since && date <= until : false;
   });
 }
 
