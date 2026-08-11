@@ -25,6 +25,30 @@ function clientId(row) {
   return row?.clientId ?? row?.['Client ID'] ?? row?.ClientId ?? row?.ID ?? row?.id ?? '';
 }
 
+function clientVisitDate(row) {
+  if (Array.isArray(row)) return row.length >= 8 ? row[3] ?? '' : '';
+  return row?.visitDate ?? row?.['Visit Date'] ?? row?.createdAt ?? row?.date ?? '';
+}
+
+function dateTimeValue(date, time = '') {
+  if (!date) return 0;
+  const normalizedDate = String(date).slice(0, 10);
+  const normalizedTime = String(time || '00:00').slice(0, 5);
+  const value = new Date(`${normalizedDate}T${normalizedTime}`).getTime();
+  return Number.isFinite(value) ? value : 0;
+}
+
+function formatJourneyDateTime(date, time = '') {
+  const value = dateTimeValue(date, time);
+  if (!value) return 'No visit yet';
+  return new Date(value).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    ...(time ? { hour: '2-digit', minute: '2-digit', hour12: true } : {}),
+  });
+}
+
 function normalizePhoneNumber(value) {
   return String(value ?? '').replace(/\D/g, '').slice(-10);
 }
@@ -216,9 +240,9 @@ function normalizeJourneyPayment(entry) {
     ...entry,
     amount: totalAmount,
     paidAmount,
-    pendingAmount: entry.pendingAmount !== undefined && entry.pendingAmount !== ''
-      ? entry.pendingAmount
-      : calculatePaymentPending(totalAmount, paidAmount, status),
+    pendingAmount: totalAmount !== undefined && totalAmount !== ''
+      ? calculatePaymentPending(totalAmount, paidAmount, status)
+      : entry.pendingAmount,
   };
 }
 
@@ -398,10 +422,38 @@ export function ClientJourneyPage() {
     clientName(row).toLowerCase() === selectedClient.toLowerCase()
     || clientId(row).toLowerCase() === selectedClient.toLowerCase()
   )), [clients, selectedClient]);
-  const visibleClients = clientRecords.filter((row) => {
-    const haystack = [clientId(row), clientName(row), clientMobile(row)].join(' ').toLowerCase();
-    return haystack.includes(search.toLowerCase());
-  });
+  const clientVisitMeta = useMemo(() => {
+    const byName = new Map();
+    const remember = (name, date, time = '') => {
+      const key = normalizePersonName(name);
+      const value = dateTimeValue(date, time);
+      if (!key || !value || value <= (byName.get(key)?.value ?? 0)) return;
+      byName.set(key, { date: String(date).slice(0, 10), time: String(time ?? '').slice(0, 5), value });
+    };
+    appointments.forEach((row) => {
+      if (Array.isArray(row)) remember(row[0], row[2], row[3]);
+      else remember(row?.client ?? row?.Client ?? row?.name, row?.date ?? row?.['Visit Date'], row?.time);
+    });
+    clientRecords.forEach((row) => remember(clientName(row), clientVisitDate(row)));
+    Object.entries(journeys).forEach(([name, record]) => {
+      normalizeJourneyRecord(record).visits.forEach((visit) => remember(
+        name,
+        visit.appointmentData?.date ?? visit.visitDate,
+        visit.appointmentData?.time ?? '',
+      ));
+    });
+    return byName;
+  }, [appointments, clientRecords, journeys]);
+  const visibleClients = useMemo(() => clientRecords
+    .filter((row) => {
+      const haystack = [clientId(row), clientName(row), clientMobile(row)].join(' ').toLowerCase();
+      return haystack.includes(search.toLowerCase());
+    })
+    .sort((left, right) => {
+      const rightValue = clientVisitMeta.get(normalizePersonName(clientName(right)))?.value ?? 0;
+      const leftValue = clientVisitMeta.get(normalizePersonName(clientName(left)))?.value ?? 0;
+      return rightValue - leftValue || clientName(left).localeCompare(clientName(right));
+    }), [clientRecords, clientVisitMeta, search]);
   const patientJourneyRecord = normalizeJourneyRecord(journeys[selectedClient]);
   const journeyVisits = patientJourneyRecord.visits;
   const activeVisitId = journeyVisits.some((visit) => visit.id === selectedVisitId)
@@ -852,8 +904,15 @@ export function ClientJourneyPage() {
             {visibleClients.length ? visibleClients.map((row) => {
               const name = clientName(row);
               const id = clientId(row);
+              const visitMeta = clientVisitMeta.get(normalizePersonName(name));
               return (
-                <button className={`journey-client ${selectedClient === name ? 'active' : ''}`} type="button" key={id || name} onClick={() => setSelectedClient(name)}><strong>{id ? `${id} · ${name}` : name}</strong><span>{journeys[name] ? 'Journey in progress' : 'Ready for check-in'}</span></button>
+                <button className={`journey-client ${selectedClient === name ? 'active' : ''}`} type="button" key={id || name} onClick={() => setSelectedClient(name)}>
+                  <strong>{id ? `${id} · ${name}` : name}</strong>
+                  <span className="journey-client-meta">
+                    <small>{journeys[name] ? 'Journey in progress' : 'Ready for check-in'}</small>
+                    <time dateTime={visitMeta ? `${visitMeta.date}${visitMeta.time ? `T${visitMeta.time}` : ''}` : undefined}>{visitMeta ? formatJourneyDateTime(visitMeta.date, visitMeta.time) : 'No visit yet'}</time>
+                  </span>
+                </button>
               );
             }) : <div className="empty-state compact-empty"><strong>No patients found.</strong><p>Register the patient before booking an appointment.</p></div>}
           </div>

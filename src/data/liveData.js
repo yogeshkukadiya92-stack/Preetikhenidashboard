@@ -32,8 +32,6 @@ function paymentPaid(payment) {
 }
 
 function paymentPending(payment) {
-  const explicitPending = payment?.pendingAmount ?? payment?.['Pending Amount'];
-  if (explicitPending !== undefined && explicitPending !== '') return parseAmount(explicitPending);
   if (paymentStatus(payment) === 'paid') return 0;
   return Math.max(paymentTotal(payment) - paymentPaid(payment), 0);
 }
@@ -68,6 +66,7 @@ export function loadLiveDashboardData(branch) {
   const openLeads = leads.filter((lead) => !['Won', 'Lost', 'Closed'].includes(String(lead.status ?? '')));
   const followUps = leads.filter((lead) => String(lead.status ?? '').toLowerCase().includes('follow'));
   const pendingPayments = payments.filter((payment) => paymentPending(payment) > 0);
+  const totalBilling = payments.reduce((sum, payment) => sum + paymentTotal(payment), 0);
   const todaysAppointments = appointments.filter((row) => isToday(row[2]));
 
   return {
@@ -82,6 +81,7 @@ export function loadLiveDashboardData(branch) {
     kpis: [
       { label: "Today's Appointments", value: String(todaysAppointments.length), delta: todaysAppointments.length ? 'Scheduled today' : 'Awaiting records', accent: 'green' },
       { label: 'Open Leads', value: String(openLeads.length), delta: openLeads.length ? `${followUps.length} follow-up due` : 'Awaiting records', accent: 'gold' },
+      { label: 'Total Billing', value: `₹ ${totalBilling.toLocaleString('en-IN')}`, delta: payments.length ? `${payments.length} invoice(s)` : 'Awaiting records', accent: 'green' },
       { label: 'Pending Payments', value: `₹ ${pendingPayments.reduce((sum, payment) => sum + paymentPending(payment), 0).toLocaleString('en-IN')}`, delta: pendingPayments.length ? `${pendingPayments.length} invoice(s)` : 'Awaiting records', accent: 'teal' },
       { label: 'Follow-ups Due', value: String(followUps.length), delta: followUps.length ? 'Needs attention' : 'Awaiting records', accent: 'gold' },
     ],

@@ -21,8 +21,6 @@ function paymentPaidAmount(payment) {
 }
 
 function paymentPendingAmount(payment) {
-  const explicitPending = payment?.pendingAmount ?? payment?.['Pending Amount'];
-  if (explicitPending !== undefined && explicitPending !== '') return parseLiveAmount(explicitPending);
   if (normalizeStatus(payment?.status) === 'paid') return 0;
   return Math.max(parseLiveAmount(payment?.amount ?? payment?.['Total Amount']) - paymentPaidAmount(payment), 0);
 }
@@ -97,7 +95,7 @@ export function DashboardPage() {
 
   const kpiRoute = (label) => {
     if (label.includes('Appointment')) return '/appointments';
-    if (label.includes('Payment')) return '/payments';
+    if (label.includes('Payment') || label.includes('Billing')) return '/payments';
     return '/crm';
   };
   const quickActions = [
@@ -193,7 +191,7 @@ export function DashboardPage() {
       </section>
 
       <section className="kpis">
-        {kpis.slice(0, 4).map((kpi) => (
+        {kpis.map((kpi) => (
           <article className="kpi action-card" key={kpi.label} role="button" tabIndex={0} onClick={() => navigate(kpiRoute(kpi.label))} onKeyDown={(event) => { if (event.key === 'Enter') navigate(kpiRoute(kpi.label)); }}>
             <div className="kpi-head">
               <KpiIcon accent={kpi.accent} />

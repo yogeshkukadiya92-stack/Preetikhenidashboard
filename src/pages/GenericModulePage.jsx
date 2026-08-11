@@ -88,7 +88,7 @@ function SearchableFieldPicker({ value, options, placeholder, onChange, onSelect
   );
 }
 
-export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, searchableFieldOptions = {}, fieldTypes = {}, rowActions = null, filterPresets = [], viewPresets = [], normalizeRows = (value) => value }) {
+export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, searchableFieldOptions = {}, fieldTypes = {}, rowActions = null, filterPresets = [], viewPresets = [], normalizeRows = (value) => value, sortRows = null }) {
   const { branchKey } = useBranch();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRow, setSelectedRow] = useState(null);
@@ -140,7 +140,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
     const columnIndex = columns.indexOf(activeFilter);
     if (columnIndex === -1) return row.join(' ').toLowerCase().includes(filterText.toLowerCase());
     return String(row[columnIndex] ?? '').toLowerCase().includes(filterText.toLowerCase());
-  });
+  }).sort(typeof sortRows === 'function' ? sortRows : () => 0);
 
   const rowToMap = (row) => Object.fromEntries(columns.map((column, index) => [column, row[index] ?? '']));
 

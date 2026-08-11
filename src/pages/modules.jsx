@@ -207,9 +207,9 @@ function normalizePaymentRecord(entry) {
   const totalAmount = source['Total Amount'] ?? source.totalAmount ?? source.Amount ?? source.amount ?? '';
   const paidAmount = source['Paid Amount'] ?? source.paidAmount ?? (String(status).toLowerCase() === 'paid' ? totalAmount : '');
   const sourcePendingAmount = source['Pending Amount'] ?? source.pendingAmount;
-  const pendingAmount = sourcePendingAmount !== undefined && sourcePendingAmount !== ''
-    ? sourcePendingAmount
-    : calculatePendingAmount(totalAmount, paidAmount, status);
+  const pendingAmount = totalAmount !== undefined && totalAmount !== ''
+    ? calculatePendingAmount(totalAmount, paidAmount, status)
+    : sourcePendingAmount;
   return {
     client: source.Client ?? source.client ?? '',
     invoice: source.Invoice ?? source.invoice ?? '',
@@ -373,6 +373,17 @@ function normalizeAppointmentRows(rows = []) {
     if (row.length >= 7) return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[6] ?? row[5] ?? 'Pending'];
     return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[5] ?? 'Pending'];
   });
+}
+
+function compareAppointmentsNewestFirst(left, right) {
+  const timestamp = (row) => {
+    const date = normalizeDateInput(row?.[2]);
+    if (!date) return 0;
+    const time = /^\d{1,2}:\d{2}/.test(String(row?.[3] ?? '')) ? String(row[3]).slice(0, 5) : '00:00';
+    const value = new Date(`${date}T${time}`).getTime();
+    return Number.isFinite(value) ? value : 0;
+  };
+  return timestamp(right) - timestamp(left);
 }
 
 function normalizePhoneNumber(value) {
@@ -908,7 +919,10 @@ function ImportExportModule({
     },
     {
       label: 'Pending',
-      value: `₹${rows.reduce((sum, row) => sum + parseMoney(rowToValues(row)['Pending Amount']), 0).toLocaleString('en-IN')}`,
+      value: `₹${rows.reduce((sum, row) => {
+        const values = rowToValues(row);
+        return sum + calculatePendingAmount(values['Total Amount'], values['Paid Amount'], values.Status);
+      }, 0).toLocaleString('en-IN')}`,
     },
     { label: 'Invoices', value: rows.length },
   ] : stats;
@@ -4012,6 +4026,7 @@ export function AppointmentsPage() {
       searchableFieldOptions={{ Client: patientOptions }}
       fieldTypes={{ Mobile: 'tel', Date: 'date', Time: 'time' }}
       normalizeRows={normalizeAppointmentRows}
+      sortRows={compareAppointmentsNewestFirst}
       filterPresets={[
         { label: 'Date wise', column: 'Date' },
         { label: 'Type wise', column: 'Type' },
