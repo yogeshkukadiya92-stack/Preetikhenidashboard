@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, StatusPill } from '../components/ui.jsx';
 import { useBranch } from '../context/BranchContext.jsx';
+import { useParams } from 'react-router-dom';
 
 const ATTENDANCE_STATUSES = ['Present', 'Absent', 'Late', 'Excused'];
 
@@ -89,6 +90,21 @@ function validZoomUrl(value) {
   } catch { return false; }
 }
 
+function attendanceSlug(title) {
+  const base = String(title || 'attendance').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 36) || 'attendance';
+  return `${base}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+async function attendanceRequest(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Attendance form service is unavailable.');
+  return body;
+}
+
 function downloadCsv(sessions) {
   const rows = [['Date', 'Time', 'Session', 'Group', 'Mode', 'Name', 'Mobile', 'Status', 'Note']];
   sessions.forEach((session) => session.records.forEach((record) => rows.push([
@@ -114,6 +130,8 @@ export function AttendancePage() {
   const [newMember, setNewMember] = useState({ name: '', mobile: '' });
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('Create a session and mark attendance.');
+  const [publicForm, setPublicForm] = useState(null);
+  const [publishing, setPublishing] = useState(false);
   const zoomCsvInputRef = useRef(null);
 
   const patients = useMemo(() => loadValue(patientsKey, []).map(patientDetails).filter((patient) => patient.name), [patientsKey]);
@@ -140,6 +158,17 @@ export function AttendancePage() {
       window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
     };
   }, [sessionsKey]);
+
+  useEffect(() => {
+    if (!publicForm?.slug) return;
+    const linkedSession = sessions.find((session) => session.publicSlug === publicForm.slug);
+    if (!linkedSession?.records?.length) return;
+    setRoster((current) => {
+      const known = new Set(current.flatMap((record) => [record.id, record.mobile && `mobile:${record.mobile}`].filter(Boolean)));
+      const additions = linkedSession.records.filter((record) => !known.has(record.id) && (!record.mobile || !known.has(`mobile:${record.mobile}`)));
+      return additions.length ? [...current, ...additions] : current;
+    });
+  }, [publicForm, sessions]);
 
   const addMember = (person = newMember, source = sessionForm.group === 'Patients' ? 'Patient' : 'Student') => {
     const name = String(person.name ?? '').trim();
@@ -198,11 +227,44 @@ export function AttendancePage() {
   const saveSession = () => {
     if (!sessionForm.title.trim()) return setMessage('Enter a class/session name before saving.');
     if (!roster.length) return setMessage('Add at least one student or patient to the roster.');
-    const session = { id: `attendance_${Date.now()}`, ...sessionForm, title: sessionForm.title.trim(), records: roster, createdAt: new Date().toISOString() };
-    setSessions((current) => [session, ...current]);
+    const session = { id: publicForm?.sessionId || `attendance_${Date.now()}`, ...sessionForm, title: sessionForm.title.trim(), records: roster, publicSlug: publicForm?.slug || '', createdAt: new Date().toISOString() };
+    setSessions((current) => publicForm?.sessionId
+      ? current.map((item) => item.id === publicForm.sessionId ? session : item)
+      : [session, ...current]);
     setRoster([]);
     setSessionForm((current) => ({ ...current, title: '', date: localDate(), time: localTime(), notes: '' }));
     setMessage(`Attendance saved for ${session.title}: ${currentPresent}/${roster.length} present.`);
+    setPublicForm(null);
+  };
+
+  const createPublicAttendanceForm = async () => {
+    const title = sessionForm.title.trim();
+    if (!title) return setMessage('Enter a class/session name before creating its public attendance form.');
+    setPublishing(true);
+    const slug = attendanceSlug(title);
+    const sessionId = `attendance_${Date.now()}`;
+    const form = { slug, sessionId, title, group: sessionForm.group, date: sessionForm.date, time: sessionForm.time, mode: sessionForm.mode, notes: sessionForm.notes };
+    try {
+      await attendanceRequest(`/api/attendance/forms/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(form) });
+      const session = { id: sessionId, ...sessionForm, title, records: roster, publicSlug: slug, createdAt: new Date().toISOString() };
+      setSessions((current) => [session, ...current.filter((item) => item.id !== sessionId)]);
+      setPublicForm(form);
+      setMessage('Public attendance form is ready. Share the link; every submission will be marked Present.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const publicUrl = publicForm ? `${window.location.origin}/public/attendance/${publicForm.slug}` : '';
+  const copyPublicUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setMessage('Public attendance link copied.');
+    } catch {
+      setMessage('Copy was blocked. Select and copy the link manually.');
+    }
   };
 
   return (
@@ -227,6 +289,15 @@ export function AttendancePage() {
           <label className="field-block"><span>Session notes</span><input className="lead-input" value={sessionForm.notes} onChange={(event) => setSessionForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Topic, teacher, or batch note" /></label>
           <label className="field-block attendance-zoom-link"><span>Zoom Meeting Link</span><div className="attendance-link-input"><input className="lead-input" type="url" value={sessionForm.zoomLink} onChange={(event) => setSessionForm((current) => ({ ...current, zoomLink: event.target.value, mode: event.target.value ? 'Online' : current.mode }))} placeholder="https://zoom.us/j/..." /><button className="pill" type="button" disabled={!validZoomUrl(sessionForm.zoomLink)} onClick={() => window.open(sessionForm.zoomLink, '_blank', 'noopener,noreferrer')}>Open Zoom</button></div></label>
           <label className="field-block"><span>Minimum minutes for Present</span><input className="lead-input" type="number" min="1" value={sessionForm.minimumMinutes} onChange={(event) => setSessionForm((current) => ({ ...current, minimumMinutes: event.target.value }))} /><small className="field-help">Less time is marked Late; no Zoom match is marked Absent.</small></label>
+        </div>
+
+        <div className="attendance-public-builder">
+          <div><strong>Shareable Attendance Form</strong><span>Create a link that anyone can open. A submitted response is automatically marked Present in this session.</span></div>
+          {!publicForm ? (
+            <button className="pill primary-action" type="button" disabled={publishing || !sessionForm.title.trim()} onClick={createPublicAttendanceForm}>{publishing ? 'Creating...' : 'Create Public Form'}</button>
+          ) : (
+            <div className="attendance-public-link"><input className="lead-input" readOnly value={publicUrl} aria-label="Public attendance link" /><button className="pill" type="button" onClick={copyPublicUrl}>Copy Link</button><a className="pill" href={publicUrl} target="_blank" rel="noreferrer">Open Form</a></div>
+          )}
         </div>
 
         <div className="attendance-roster-tools">
@@ -271,4 +342,48 @@ export function AttendancePage() {
       </Card>
     </section>
   );
+}
+
+export function PublicAttendancePage() {
+  const { slug } = useParams();
+  const [state, setState] = useState({ loading: true, form: null, error: '' });
+  const [person, setPerson] = useState({ name: '', mobile: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    attendanceRequest(`/api/attendance/forms/${encodeURIComponent(slug)}`)
+      .then(({ form }) => active && setState({ loading: false, form, error: '' }))
+      .catch((error) => active && setState({ loading: false, form: null, error: error.message }));
+    return () => { active = false; };
+  }, [slug]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!person.name.trim()) return;
+    setSubmitting(true);
+    try {
+      await attendanceRequest(`/api/attendance/forms/${encodeURIComponent(slug)}/responses`, {
+        method: 'POST',
+        body: JSON.stringify({ id: `public_attendance_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: person.name.trim(), mobile: person.mobile.trim(), submittedAt: new Date().toISOString() }),
+      });
+      setSubmitted(true);
+    } catch (error) {
+      setState((current) => ({ ...current, error: error.message }));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return <main className="public-form-page">
+    <div className="public-form-brand"><span className="public-brand-mark" aria-hidden="true">M</span><span>Mom&apos;s Pathshala</span></div>
+    <div className="public-form-card attendance-public-card">
+      {state.loading ? <div className="public-form-state"><strong>Loading attendance form...</strong><p>Please wait a moment.</p></div>
+        : submitted ? <div className="public-form-state attendance-success"><strong>Attendance marked!</strong><p>{person.name}, your attendance for {state.form?.title} has been recorded as Present.</p></div>
+          : state.form ? <><div className="public-form-title"><span>Attendance form</span><h1>{state.form.title}</h1><p>{state.form.date} · {state.form.time} · {state.form.mode}{state.form.notes ? ` · ${state.form.notes}` : ''}</p></div><form className="public-form attendance-checkin-form" onSubmit={submit}><label className="field-block"><span>Your name *</span><input className="lead-input" value={person.name} onChange={(event) => setPerson((current) => ({ ...current, name: event.target.value }))} autoComplete="name" required /></label><label className="field-block"><span>Mobile number</span><input className="lead-input" type="tel" value={person.mobile} onChange={(event) => setPerson((current) => ({ ...current, mobile: event.target.value }))} autoComplete="tel" placeholder="Optional" /></label>{state.error && <p className="login-error" role="alert">{state.error}</p>}<div className="public-form-actions"><button className="pill primary-action" type="submit" disabled={submitting || !person.name.trim()}>{submitting ? 'Marking...' : 'Mark My Attendance'}</button></div></form></>
+            : <div className="public-form-state"><strong>Attendance form not found</strong><p>{state.error || 'This link is invalid or no longer available.'}</p></div>}
+    </div>
+    <p className="public-form-footer">Powered by Mom&apos;s Pathshala</p>
+  </main>;
 }

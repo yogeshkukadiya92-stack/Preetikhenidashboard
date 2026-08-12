@@ -6,7 +6,7 @@ import { DashboardPage } from './pages/DashboardPage.jsx';
 import { FormsPage, PublicFormPage } from './pages/forms.jsx';
 import { LoginPage } from './pages/LoginPage.jsx';
 import { ClientJourneyPage } from './pages/ClientJourneyPage.jsx';
-import { AttendancePage } from './pages/AttendancePage.jsx';
+import { AttendancePage, PublicAttendancePage } from './pages/AttendancePage.jsx';
 import {
   AccountsPage,
   AppointmentsPage,
@@ -37,6 +37,7 @@ export function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/public/forms/:slug" element={<PublicFormPage />} />
+        <Route path="/public/attendance/:slug" element={<PublicAttendancePage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
             <Route path="/" element={<DashboardPage />} />

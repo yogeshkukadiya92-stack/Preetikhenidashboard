@@ -1006,6 +1006,10 @@ textarea:focus-visible,
 .appointment-filter-bar .field-block { gap: 5px; }
 .appointment-filter-bar .pill { min-height: 40px; }
 .appointment-filter-count { align-self: center; color: var(--muted); font-size: 0.76rem; font-weight: 700; white-space: nowrap; }
+.data-row.recently-added-row {
+  background: rgba(15, 118, 99, 0.09);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
 .compact-action-card .filter-pills {
   margin-top: 2px;
 }
@@ -1503,6 +1507,11 @@ body {
 .attendance-session-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .attendance-zoom-link { grid-column: span 2; }
 .attendance-link-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.attendance-public-builder { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-top: 14px; padding: 13px; border: 1px solid #bcded1; border-radius: 11px; background: #f1faf6; }
+.attendance-public-builder > div:first-child { display: grid; gap: 3px; }
+.attendance-public-builder span { color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.attendance-public-link { display: grid !important; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 7px !important; min-width: min(560px, 62vw); }
+.attendance-public-link .pill { text-decoration: none; white-space: nowrap; }
 .attendance-roster-tools { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .attendance-roster-tools > div:first-child { display: grid; gap: 3px; }
 .attendance-roster-tools span { color: var(--muted); font-size: .76rem; }
@@ -1616,6 +1625,9 @@ body {
 .public-form-state .pill { margin-top: 16px; }
 .success-state { border-top: 4px solid var(--form-accent, #1f6b4a); }
 .public-form-footer { margin: 14px auto 0; text-align: center; color: var(--muted); font-size: 0.76rem; }
+.attendance-public-card { --form-accent: #1f6b4a; }
+.attendance-checkin-form { display: grid; gap: 16px; }
+.attendance-success strong { color: #17633f; }
 .public-form-preview-frame { padding: 22px; border: 1px solid var(--border); border-radius: 12px; background: #eef6f3; }
 .form-notice { margin: 16px 26px 0; padding: 9px 10px; border: 1px solid #e4c46e; border-radius: 9px; background: #fff8df; color: #6d571b; font-size: 0.8rem; }
 .file-input { padding: 8px; }
@@ -2146,6 +2158,8 @@ body {
   .header-date-fields { grid-template-columns: 1fr; }
   .attendance-session-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .attendance-zoom-link { grid-column: 1 / -1; }
+  .attendance-public-builder { align-items: stretch; flex-direction: column; }
+  .attendance-public-link { min-width: 0; grid-template-columns: 1fr auto auto; }
   .attendance-roster-row { grid-template-columns: 30px minmax(0, 1fr) 125px 42px; }
   .attendance-roster-row > input { grid-column: 2 / 4; }
   .profile { justify-content: space-between; }
@@ -2301,6 +2315,8 @@ body {
   .public-form-title h1 { font-size: 1.36rem; }
   .public-form-actions { align-items: stretch; flex-direction: column-reverse; }
   .public-form-actions .pill { width: 100%; justify-content: center; }
+  .attendance-public-link { grid-template-columns: 1fr 1fr; }
+  .attendance-public-link input { grid-column: 1 / -1; }
   .builder-command-bar { align-items: stretch; }
   .builder-command-bar .card-action-group { width: 100%; justify-content: flex-start; }
   .builder-command-bar .card-action-group > .pill,

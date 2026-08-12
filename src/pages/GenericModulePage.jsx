@@ -92,6 +92,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const { branchKey } = useBranch();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRow, setSelectedRow] = useState(null);
+  const [recentlyAddedRow, setRecentlyAddedRow] = useState(null);
   const storageKey = branchKey(`${title}:rows:v3`);
   const [tableRows, setTableRows] = useState(() => normalizeRows(loadSavedRows(storageKey, rows)));
   const [actionMessage, setActionMessage] = useState('Ready.');
@@ -151,7 +152,11 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
     const columnIndex = columns.indexOf(activeFilter);
     if (columnIndex === -1) return row.join(' ').toLowerCase().includes(filterText.toLowerCase());
     return String(row[columnIndex] ?? '').toLowerCase().includes(filterText.toLowerCase());
-  }).sort(typeof sortRows === 'function' ? sortRows : () => 0);
+  }).sort((left, right) => {
+    if (left === recentlyAddedRow) return -1;
+    if (right === recentlyAddedRow) return 1;
+    return typeof sortRows === 'function' ? sortRows(left, right) : 0;
+  });
 
   const rowToMap = (row) => Object.fromEntries(columns.map((column, index) => [column, row[index] ?? '']));
 
@@ -230,9 +235,11 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
       setActionMessage('Please fill at least one field before saving.');
       return;
     }
-    setTableRows((current) => [draftRow, ...current]);
-    setActionMessage(`${draftRow[0] || title} added.`);
-    setSelectedRow(draftRow[0] || title);
+    const savedRow = [...draftRow];
+    setTableRows((current) => [savedRow, ...current]);
+    setRecentlyAddedRow(savedRow);
+    setActionMessage(`${savedRow[0] || title} added and shown at the top.`);
+    setSelectedRow(savedRow[0] || title);
     setAddOpen(false);
   };
 
@@ -357,7 +364,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
           </div>
           {filteredRows.length ? (
             filteredRows.map((row, index) => (
-              <div className="data-row" key={index}>
+              <div className={`data-row${row === recentlyAddedRow ? ' recently-added-row' : ''}`} key={index}>
                 {row.map((cell, cellIndex) => <div data-label={columns[cellIndex]} key={`${columns[cellIndex]}-${index}`}>{cell}</div>)}
                 <div>
                   {rowActions ? rowActions(row, setSelectedRow, setActionMessage, setTableRows) : (
