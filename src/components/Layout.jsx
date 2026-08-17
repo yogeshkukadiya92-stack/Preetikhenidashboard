@@ -277,7 +277,7 @@ export function Layout() {
             <div className="avatar" aria-hidden="true" />
             <div className="meta">
               <strong>Mom's Pathshala</strong>
-              <span>{location.pathname === '/' ? 'Administrator' : 'Team Operator'}</span>
+              <span>{session?.role || (session?.isAdmin ? 'Administrator' : 'Team Operator')}</span>
             </div>
             <ChevronRight />
           </button>
