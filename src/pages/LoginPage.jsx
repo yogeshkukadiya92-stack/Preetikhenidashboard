@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ADMIN_EMAIL, createAuthSession, getAuthSession, getLandingPath, verifyCredentials } from '../data/auth.js';
-import { hydrateCloudState, pauseCloudSync } from '../data/cloudStore.js';
+import { hydrateCloudState, pauseCloudSync, resumeCloudSync } from '../data/cloudStore.js';
 
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30_000;
@@ -43,7 +43,13 @@ export function LoginPage() {
       setSubmitting(true);
       setError('');
       pauseCloudSync();
-      await hydrateCloudState().catch(() => {});
+      try {
+        await hydrateCloudState();
+      } catch {
+        // Local sign-in remains available when cloud hydration is temporarily unavailable.
+      } finally {
+        resumeCloudSync();
+      }
       const identity = await verifyCredentials(email, password);
       if (identity) {
         const session = createAuthSession(identity, remember);

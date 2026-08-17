@@ -43,6 +43,10 @@ export function pauseCloudSync(durationMs = LOGIN_HYDRATION_PAUSE_MS) {
   syncPausedUntil = Math.max(syncPausedUntil, Date.now() + durationMs);
 }
 
+export function resumeCloudSync() {
+  syncPausedUntil = 0;
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = API_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
