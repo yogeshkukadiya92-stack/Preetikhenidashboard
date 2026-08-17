@@ -29,6 +29,14 @@ function normalizePhone(value) {
   return String(value ?? '').replace(/\D/g, '').slice(-10);
 }
 
+function normalizeName(value) {
+  return String(value ?? '').trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function fieldMatches(field, pattern) {
+  return pattern.test(String(field?.label ?? '').trim());
+}
+
 function patientName(row) {
   if (Array.isArray(row)) return row.length >= 7 ? row[1] ?? '' : row[0] ?? '';
   return row?.name ?? row?.Client ?? row?.client ?? '';
@@ -46,27 +54,38 @@ function patientId(row) {
 
 function applyPatientDataMappings(form, response) {
   const fields = Array.isArray(form?.fields) ? form.fields : [];
-  const mobileField = fields.find((field) => field.dataTarget === 'patient_mobile');
+  const mobileField = fields.find((field) => field.dataTarget === 'patient_mobile')
+    ?? fields.find((field) => field.type === 'phone' || fieldMatches(field, /mobile|phone|contact|મોબાઇલ|ફોન|मोबाइल|फोन/i));
+  const nameField = fields.find((field) => field.dataTarget === 'patient_name')
+    ?? fields.find((field) => fieldMatches(field, /patient\s*name|client\s*name|full\s*name|^name\b|નામ|नाम/i));
   const mobile = normalizePhone(response.answers?.[mobileField?.id]);
-  if (!mobile) return { status: 'skipped', reason: 'Patient mobile mapping is missing or empty.' };
+  const submittedName = String(response.answers?.[nameField?.id] ?? '').trim();
+  if (!mobile && !submittedName) return { status: 'skipped', reason: 'Patient mobile or name is missing.' };
 
   const patients = readJson(PATIENTS_KEY, readJson(LEGACY_PATIENTS_KEY, []));
-  const patient = Array.isArray(patients) ? patients.find((row) => normalizePhone(patientMobile(row)) === mobile) : null;
-  if (!patient) return { status: 'unmatched', mobile };
+  const patient = Array.isArray(patients) ? patients.find((row) => (
+    (mobile && normalizePhone(patientMobile(row)) === mobile)
+    || (!mobile && normalizeName(patientName(row)) === normalizeName(submittedName))
+  )) : null;
+  if (!patient) return { status: 'unmatched', mobile, patientName: submittedName };
 
-  const mappedFields = fields.filter((field) => field.dataTarget === 'patient_weight');
+  const mappedFields = fields.flatMap((field) => {
+    if (field.dataTarget === 'patient_weight' || (field.type === 'number' && fieldMatches(field, /weight|વજન|वजन/i))) return [{ field, type: 'weight', unit: 'kg' }];
+    if (field.dataTarget === 'patient_waist' || (field.type === 'number' && fieldMatches(field, /waist|tummy|abdomen|inch|કમર|પેટ|कमर|पेट/i))) return [{ field, type: 'waist', unit: 'inch' }];
+    return [];
+  });
   const current = readJson(PATIENT_UPDATES_KEY, []);
-  const updates = mappedFields.flatMap((field) => {
+  const updates = mappedFields.flatMap(({ field, type, unit }) => {
     const numericValue = Number(String(response.answers?.[field.id] ?? '').replace(/[^\d.-]/g, ''));
     if (!Number.isFinite(numericValue) || numericValue <= 0) return [];
     return [{
       id: `${response.id}:${field.id}`,
       patientId: patientId(patient),
       patientName: patientName(patient),
-      mobile,
-      type: 'weight',
+      mobile: mobile || normalizePhone(patientMobile(patient)),
+      type,
       value: numericValue,
-      unit: 'kg',
+      unit,
       recordedAt: response.submittedAt,
       formId: form.id,
       formTitle: form.title,

@@ -49,6 +49,7 @@ const PATIENT_DATA_TARGETS = [
   { value: 'patient_mobile', label: 'Patient mobile (match patient)' },
   { value: 'patient_name', label: 'Patient name' },
   { value: 'patient_weight', label: 'Weight history (kg)' },
+  { value: 'patient_waist', label: 'Waist / tummy history (inch)' },
 ];
 const OPTION_PRESETS = [
   { label: 'Yes / No', options: ['Yes', 'No'] },
@@ -519,8 +520,8 @@ export function FormRenderer({ form, mode = 'public', onSubmitted }) {
         <strong>Response submitted</strong>
         <p>{form.confirmationMessage}</p>
         {result.patientData?.status === 'updated' && <p className="form-data-sync-success">Patient matched. {result.patientData.count} mapped value updated in {result.patientData.patientName}'s record.</p>}
-        {result.patientData?.status === 'unmatched' && <p className="field-error">Response saved, but no patient matched mobile number {result.patientData.mobile}.</p>}
-        {result.patientData?.status === 'skipped' && form.fields?.some((field) => field.dataTarget) && <p className="field-error">Response saved, but patient data was not updated. Map and fill a Patient mobile field.</p>}
+        {result.patientData?.status === 'unmatched' && <p className="field-error">Response saved, but no patient matched {result.patientData.mobile ? `mobile number ${result.patientData.mobile}` : `name ${result.patientData.patientName}`}.</p>}
+        {result.patientData?.status === 'skipped' && form.fields?.some((field) => field.dataTarget) && <p className="field-error">Response saved, but patient data was not updated. Map and fill a Patient mobile or Patient name field.</p>}
         {result.warning && <p className="field-error">Saved to the shared workspace. External delivery needs attention.</p>}
         {form.allowMultiple && (
           <button className="pill" type="button" onClick={() => { setAnswers({}); setRespondentEmail(''); setErrors({}); setResult(null); setCurrentPage(0); }}>Submit another response</button>

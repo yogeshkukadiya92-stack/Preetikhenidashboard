@@ -106,6 +106,14 @@ function normalizePhone(value) {
   return String(value ?? '').replace(/\D/g, '').slice(-10);
 }
 
+function normalizeName(value) {
+  return String(value ?? '').trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function fieldMatches(field, pattern) {
+  return pattern.test(String(field?.label ?? '').trim());
+}
+
 function patientDetails(row) {
   if (Array.isArray(row)) {
     return row.length >= 7
@@ -121,30 +129,43 @@ function patientDetails(row) {
 
 async function applyPatientDataMappings(db, form, submittedResponse) {
   const fields = Array.isArray(form?.fields) ? form.fields : [];
-  const mobileField = fields.find((field) => field.dataTarget === 'patient_mobile');
+  const mobileField = fields.find((field) => field.dataTarget === 'patient_mobile')
+    ?? fields.find((field) => field.type === 'phone' || fieldMatches(field, /mobile|phone|contact|મોબાઇલ|ફોન|मोबाइल|फोन/i));
+  const nameField = fields.find((field) => field.dataTarget === 'patient_name')
+    ?? fields.find((field) => fieldMatches(field, /patient\s*name|client\s*name|full\s*name|^name\b|નામ|नाम/i));
   const mobile = normalizePhone(submittedResponse.answers?.[mobileField?.id]);
-  if (!mobile) return;
+  const submittedName = String(submittedResponse.answers?.[nameField?.id] ?? '').trim();
+  if (!mobile && !submittedName) return;
 
   const patientResult = await db.query(
     'select value from app_state where branch = $1 and key = $2 limit 1',
     [WORKSPACE_BRANCH, PATIENTS_STATE_KEY],
   );
   const patients = Array.isArray(patientResult.rows[0]?.value) ? patientResult.rows[0].value : [];
-  const matchedRow = patients.find((row) => normalizePhone(patientDetails(row).mobile) === mobile);
+  const matchedRow = patients.find((row) => {
+    const details = patientDetails(row);
+    return (mobile && normalizePhone(details.mobile) === mobile)
+      || (!mobile && normalizeName(details.name) === normalizeName(submittedName));
+  });
   if (!matchedRow) return;
   const patient = patientDetails(matchedRow);
 
-  const updates = fields.filter((field) => field.dataTarget === 'patient_weight').flatMap((field) => {
+  const mappedFields = fields.flatMap((field) => {
+    if (field.dataTarget === 'patient_weight' || (field.type === 'number' && fieldMatches(field, /weight|વજન|वजन/i))) return [{ field, type: 'weight', unit: 'kg' }];
+    if (field.dataTarget === 'patient_waist' || (field.type === 'number' && fieldMatches(field, /waist|tummy|abdomen|inch|કમર|પેટ|कमर|पेट/i))) return [{ field, type: 'waist', unit: 'inch' }];
+    return [];
+  });
+  const updates = mappedFields.flatMap(({ field, type, unit }) => {
     const value = Number(String(submittedResponse.answers?.[field.id] ?? '').replace(/[^\d.-]/g, ''));
     if (!Number.isFinite(value) || value <= 0) return [];
     return [{
       id: `${submittedResponse.id}:${field.id}`,
       patientId: patient.id,
       patientName: patient.name,
-      mobile,
-      type: 'weight',
+      mobile: mobile || normalizePhone(patient.mobile),
+      type,
       value,
-      unit: 'kg',
+      unit,
       recordedAt: submittedResponse.submittedAt ?? new Date().toISOString(),
       formId: form.id,
       formTitle: form.title,

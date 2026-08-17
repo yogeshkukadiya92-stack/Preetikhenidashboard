@@ -5365,6 +5365,49 @@ export function ReportsPage() {
     ? formRows
     : formRows.filter((row) => (row[2] !== '—' ? `id:${row[2]}` : `name:${row[1]}`) === formFilter);
 
+  const patientMetricUpdates = loadSavedArray(branchKey('patient-form-updates:v1'), []);
+  const weightUpdates = patientMetricUpdates.filter((item) => item?.type === 'weight' && Number(item.value) > 0);
+  const metricGroups = new Map();
+  patientMetricUpdates.forEach((item) => {
+    if (!['weight', 'waist'].includes(item?.type) || !(Number(item.value) > 0)) return;
+    const key = String(item.patientId || item.mobile || item.patientName || '').trim().toLocaleLowerCase();
+    if (!key) return;
+    const group = metricGroups.get(key) ?? { name: item.patientName || 'Unknown patient', weight: [], waist: [] };
+    group[item.type].push(item);
+    metricGroups.set(key, group);
+  });
+  const formatMetricDate = (value) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'Date not saved' : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const formatMetricHistory = (items, unit) => items
+    .slice()
+    .sort((a, b) => String(a.recordedAt ?? '').localeCompare(String(b.recordedAt ?? '')))
+    .map((item) => `${formatMetricDate(item.recordedAt)}: ${Number(item.value).toLocaleString('en-IN')} ${unit}`)
+    .join(' → ');
+  const weightRows = Array.from(metricGroups.values()).flatMap((group) => {
+    const weights = group.weight.slice().sort((a, b) => String(a.recordedAt ?? '').localeCompare(String(b.recordedAt ?? '')));
+    if (!weights.length) return [];
+    const first = Number(weights[0].value);
+    const latest = weights[weights.length - 1];
+    const current = Number(latest.value);
+    const loss = first - current;
+    const lossLabel = loss > 0 ? `${loss.toLocaleString('en-IN')} kg` : loss < 0 ? `${Math.abs(loss).toLocaleString('en-IN')} kg gained` : '0 kg';
+    return [[
+      group.name,
+      `${first.toLocaleString('en-IN')} kg`,
+      `${current.toLocaleString('en-IN')} kg`,
+      formatMetricHistory(weights, 'kg'),
+      group.waist.length ? formatMetricHistory(group.waist, 'inch') : '—',
+      lossLabel,
+      formatMetricDate(latest.recordedAt),
+    ]];
+  }).sort((a, b) => a[0].localeCompare(b[0]));
+  const totalWeightLost = Array.from(metricGroups.values()).reduce((sum, group) => {
+    const values = group.weight.slice().sort((a, b) => String(a.recordedAt ?? '').localeCompare(String(b.recordedAt ?? ''))).map((item) => Number(item.value));
+    return values.length > 1 ? sum + Math.max(0, values[0] - values[values.length - 1]) : sum;
+  }, 0);
+
   const inventoryReportRow = (row) => Array.isArray(row)
     ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '']
     : [row.item ?? row.Item ?? row.name ?? '', row.category ?? row.Category ?? '', row.quantity ?? row.Quantity ?? '', row.expiry ?? row.Expiry ?? '', row.status ?? row.Status ?? ''];
@@ -5423,6 +5466,7 @@ export function ReportsPage() {
     finance_accounts: { id: 'accounts', title: 'Accounts Report', columns: ['Item', 'Type', 'Amount', 'Mode', 'Status'], rows: accountRows },
     finance_summary: { id: 'revenue-summary', title: 'Revenue & Business Summary', columns: ['Category', 'Details', 'Amount'], rows: summaryRows },
     forms: { id: 'forms', title: 'Form Responses Report', columns: ['Name', 'Form', 'Form ID', 'Submitted', 'Phone', 'Status'], rows: filteredFormRows },
+    weight: { id: 'weight-progress', title: 'Weight Progress Report', columns: ['Patient Name', 'Starting Weight', 'Current Weight', 'Weight History', 'Waist / Tummy History', 'Total Weight Loss', 'Latest Update'], rows: weightRows },
     inventory: { id: 'inventory', title: 'Inventory Report', columns: ['Item', 'Category', 'Quantity', 'Expiry', 'Status'], rows: inventoryRows },
   };
 
@@ -5465,6 +5509,12 @@ export function ReportsPage() {
       { label: 'Total Responses', value: filteredFormRows.length },
       { label: 'Pending', value: filteredFormRows.filter((r) => r[5] === 'Pending').length },
       { label: 'Contacted', value: filteredFormRows.filter((r) => r[5] === 'Contacted').length },
+    ];
+    if (activeReport === 'weight') return [
+      { label: 'Patients Tracked', value: weightRows.length },
+      { label: 'Weight Entries', value: weightUpdates.length },
+      { label: 'Total Weight Lost', value: `${totalWeightLost.toLocaleString('en-IN')} kg` },
+      { label: 'Waist Entries', value: patientMetricUpdates.filter((item) => item?.type === 'waist').length },
     ];
     if (activeReport === 'inventory') return [
       { label: 'Total Items', value: inventoryRows.length },
@@ -5573,7 +5623,7 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
       <div className="module-hero">
         <div>
           <h1>Reports</h1>
-          <p>Generate and export detailed reports — Treatment, Appointments, Finance, Forms, and Inventory.</p>
+          <p>Generate and export detailed reports — Treatment, Appointments, Finance, Forms, Weight Progress, and Inventory.</p>
           <p className="subtle">Shared cloud workspace</p>
         </div>
         <div className="module-stats">
@@ -5592,6 +5642,7 @@ thead th,tbody tr:nth-child(even) td,.stat{-webkit-print-color-adjust:exact;prin
           { id: 'appointments', label: 'Appointments' },
           { id: 'finance', label: 'Finance' },
           { id: 'forms', label: 'Forms' },
+          { id: 'weight', label: 'Weight Progress' },
           { id: 'inventory', label: 'Inventory' },
         ].map((tab) => (
           <button
