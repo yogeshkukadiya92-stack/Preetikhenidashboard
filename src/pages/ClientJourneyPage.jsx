@@ -160,6 +160,7 @@ const PRINT_SECTION_OPTIONS = [
   ['vitals', 'Vitals'],
   ['diagnosis', 'Diagnosis'],
   ['doctorNotes', 'Doctor Notes'],
+  ['pregnancyHistory', 'Pregnancy / Garbhsanskar History'],
   ['treatment', 'Treatment Plan'],
   ['medicines', 'Medicines, Dose & Timing'],
   ['followup', 'Next Follow-up'],
@@ -933,6 +934,7 @@ export function ClientJourneyPage() {
       const treatmentData = visit.treatmentData ?? {};
       const followupData = visit.followupData ?? {};
       const paymentData = visit.paymentData ?? {};
+      const pregnancyHistory = Array.isArray(visit.pregnancyHistory) ? visit.pregnancyHistory : [];
       const selectedMedicines = Array.isArray(treatmentData.medicines)
         ? treatmentData.medicines
         : String(treatmentData.medicine ?? '').split(',').map((medicine, index) => ({
@@ -946,6 +948,7 @@ export function ClientJourneyPage() {
         clinicalPrintSections.vitals && section('Vitals', `<p>${escapePrintHtml(consultationData.vitals || 'Not recorded')}</p>`),
         clinicalPrintSections.diagnosis && section('Diagnosis', `<p>${escapePrintHtml(consultationData.diagnosis || 'Not recorded')}</p>`),
         clinicalPrintSections.doctorNotes && section('Doctor Notes', `<p>${escapePrintHtml(consultationData.notes || 'Not recorded').replaceAll('\n', '<br>')}</p>`),
+        clinicalPrintSections.pregnancyHistory && section('Pregnancy / Garbhsanskar History', pregnancyHistory.length ? pregnancyHistory.map((entry) => `<div class="detail"><span>${escapePrintHtml(formatResponseDate(entry.date) || 'Undated')} · ${escapePrintHtml(entry.pregnancyStage || 'Stage not recorded')}</span><strong>${escapePrintHtml(entry.gynecName ? `Gynec: ${entry.gynecName}` : 'Gynec not recorded')}</strong><p>${escapePrintHtml(entry.gynecAdvice || 'No gynec advice recorded')}</p>${entry.tests ? `<p><b>Reports / Tests:</b> ${escapePrintHtml(entry.tests)}</p>` : ''}${entry.medicines ? `<p><b>Medicines / Supplements:</b> ${escapePrintHtml(entry.medicines)}</p>` : ''}${entry.garbhsanskarAdvice ? `<p><b>Garbhsanskar Plan:</b> ${escapePrintHtml(entry.garbhsanskarAdvice)}</p>` : ''}${entry.nextFollowup ? `<p><b>Next Follow-up:</b> ${escapePrintHtml(formatResponseDate(entry.nextFollowup))}</p>` : ''}</div>`).join('') : '<p>No pregnancy history recorded.</p>'),
         clinicalPrintSections.treatment && section('Treatment Plan', `<div class="details">${detail('Service', treatmentData.service)}${detail('Goal', treatmentData.goal)}${detail('Duration', treatmentData.duration)}${detail('Status', treatmentData.status)}</div>`),
         clinicalPrintSections.medicines && section('Medicines / Products', selectedMedicines.length ? `<table><thead><tr><th style="width:36px">No.</th><th>Medicine / Product</th><th>Dose</th><th>Timing</th></tr></thead><tbody>${selectedMedicines.map((item, index) => `<tr><td>${index + 1}</td><td>${escapePrintHtml(item.medicine)}</td><td>${escapePrintHtml(item.dose || '—')}</td><td>${escapePrintHtml(item.timing || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>No medicines recorded.</p>'),
         clinicalPrintSections.followup && section('Next Follow-up', `<div class="details">${detail('Date', followupData.date)}${detail('Time', followupData.time)}${detail('Notes', followupData.notes)}${detail('Status', followupData.status)}</div>`),
@@ -1202,6 +1205,7 @@ export function ClientJourneyPage() {
                 {clinicalPrintSections.vitals && <div className="clinical-preview-section"><strong>Vitals</strong><p>{journey.consultationData?.vitals || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.diagnosis && <div className="clinical-preview-section"><strong>Diagnosis</strong><p>{journey.consultationData?.diagnosis || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.doctorNotes && <div className="clinical-preview-section"><strong>Doctor Notes</strong><p>{journey.consultationData?.notes || 'Not recorded'}</p></div>}
+                {clinicalPrintSections.pregnancyHistory && <div className="clinical-preview-section"><strong>Pregnancy / Garbhsanskar History</strong><p>{Array.isArray(journey.pregnancyHistory) && journey.pregnancyHistory.length ? journey.pregnancyHistory.map((entry) => `${formatResponseDate(entry.date)} · ${entry.pregnancyStage || 'Stage not recorded'}\n${entry.gynecAdvice || entry.garbhsanskarAdvice || 'No advice recorded'}`).join('\n\n') : 'Not recorded'}</p></div>}
                 {clinicalPrintSections.treatment && <div className="clinical-preview-section"><strong>Treatment Plan</strong><p>{[journey.treatmentData?.service, journey.treatmentData?.goal, journey.treatmentData?.duration].filter(Boolean).join(' · ') || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.medicines && <div className="clinical-preview-section"><strong>Medicines, Dose & Timing</strong>{clinicalPreviewMedicines.length ? <div className="clinical-preview-medicine-list" role="table" aria-label="Selected medicines">{clinicalPreviewMedicines.map((item, index) => <div className="clinical-preview-medicine-row" role="row" key={`${item.medicine}-${index}`}><b aria-label={`Medicine ${index + 1}`}>{index + 1}</b><span role="cell"><strong>{item.medicine}</strong><small>{item.dose || 'Dose not recorded'} · {item.timing || 'Timing not recorded'}</small></span></div>)}</div> : <p>No medicines recorded</p>}</div>}
                 {clinicalPrintSections.followup && <div className="clinical-preview-section"><strong>Next Follow-up</strong><p>{journey.followupData?.date ? `${journey.followupData.date} · ${journey.followupData.time || 'Time pending'}` : 'Not scheduled'}</p></div>}
