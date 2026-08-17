@@ -540,6 +540,11 @@ export function ClientJourneyPage() {
     ? selectedVisitId
     : patientJourneyRecord.activeVisitId || journeyVisits.at(-1)?.id || '';
   const journey = journeyVisits.find((visit) => visit.id === activeVisitId) ?? {};
+  const activeVisitIndex = journeyVisits.findIndex((visit) => visit.id === activeVisitId);
+  const previousConsultationVisit = (activeVisitIndex >= 0 ? journeyVisits.slice(0, activeVisitIndex) : journeyVisits)
+    .slice()
+    .reverse()
+    .find((visit) => visit?.consultationData);
   const pregnancyHistoryEntries = useMemo(() => journeyVisits.flatMap((visit) => (
     Array.isArray(visit.pregnancyHistory) ? visit.pregnancyHistory.map((entry) => ({
       ...entry,
@@ -631,7 +636,8 @@ export function ClientJourneyPage() {
   }, [selectedClient, activeVisitId, journey.forms, hasCurrentVisitFormResponse, requiredForm]);
 
   const openConsultation = () => {
-    setConsultation(journey.consultationData ?? { complaint: '', diagnosis: '', notes: '', vitals: '' });
+    const savedConsultation = journey.consultationData ?? previousConsultationVisit?.consultationData;
+    setConsultation(savedConsultation ? { ...savedConsultation } : { complaint: '', diagnosis: '', notes: '', vitals: '' });
     setConsultationOpen(true);
   };
 
@@ -971,6 +977,7 @@ export function ClientJourneyPage() {
       const now = new Date().toISOString();
       setJourneys((currentJourneys) => {
         const record = normalizeJourneyRecord(currentJourneys[selectedClient]);
+        const previousConsultation = record.visits.slice().reverse().find((visit) => visit?.consultationData);
         return {
           ...currentJourneys,
           [selectedClient]: {
@@ -982,6 +989,10 @@ export function ClientJourneyPage() {
               appointment: true,
               appointmentData: appointmentForm,
               appointmentAt: now,
+              ...(previousConsultation?.consultationData ? {
+                consultationData: { ...previousConsultation.consultationData },
+                consultationCarriedForwardFrom: previousConsultation.id,
+              } : {}),
             }],
             activeVisitId: visitId,
           },
