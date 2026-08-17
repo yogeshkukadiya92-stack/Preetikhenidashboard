@@ -2,6 +2,7 @@ const originalSetItem = window.Storage.prototype.setItem;
 let syncInstalled = false;
 let refreshInstalled = false;
 let syncPausedUntil = 0;
+const syncChains = new Map();
 const PENDING_KEY = 'moms-pathshala:cloud-pending:v2';
 const REFRESH_INTERVAL_MS = 15_000;
 const API_REQUEST_TIMEOUT_MS = 10_000;
@@ -69,7 +70,7 @@ async function request(path, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
-export async function syncCloudValue(key, value) {
+async function performCloudSync(key, value) {
   if (!shouldSync(key)) return;
   let parsedValue;
   try { parsedValue = JSON.parse(value); } catch { parsedValue = value; }
@@ -78,6 +79,16 @@ export async function syncCloudValue(key, value) {
     body: JSON.stringify({ branch: 'workspace', value: parsedValue }),
   });
   clearPending(key, value);
+}
+
+export function syncCloudValue(key, value) {
+  if (!shouldSync(key)) return Promise.resolve();
+  const previous = syncChains.get(key) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(() => performCloudSync(key, value));
+  syncChains.set(key, next);
+  return next.finally(() => {
+    if (syncChains.get(key) === next) syncChains.delete(key);
+  });
 }
 
 export async function hydrateCloudState() {
