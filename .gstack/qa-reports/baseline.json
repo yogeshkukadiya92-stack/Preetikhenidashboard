@@ -1,0 +1,20 @@
+{
+  "date": "2026-08-17",
+  "url": "https://dashboard.shreeayurvedhospital.in",
+  "healthScore": 92,
+  "issues": [
+    { "id": "SECURITY-001", "title": "Internal state APIs lack server-side authentication", "severity": "critical", "category": "security" },
+    { "id": "INTEGRATION-001", "title": "Integration buttons simulate connection state", "severity": "high", "category": "functional" },
+    { "id": "TESTING-001", "title": "No automated test framework", "severity": "medium", "category": "quality" }
+  ],
+  "categoryScores": {
+    "console": 100,
+    "links": 100,
+    "visual": 96,
+    "functional": 92,
+    "ux": 94,
+    "performance": 88,
+    "content": 96,
+    "accessibility": 90
+  }
+}
