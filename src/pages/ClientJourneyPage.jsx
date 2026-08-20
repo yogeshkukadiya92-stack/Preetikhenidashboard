@@ -1305,10 +1305,6 @@ export function ClientJourneyPage() {
 
       {stageModal === 'treatment' && (
         <JourneyModal title={journey.treatment ? 'Edit Treatment Plan' : 'Add Treatment Plan'} client={selectedClient} onClose={() => setStageModal('')} onSave={saveTreatment} saveLabel={journey.treatment ? 'Update Treatment' : 'Save Treatment'}>
-          <div className="quick-preset-row">
-            {!journey.treatment && previousTreatmentVisit?.treatmentData && <button className="pill primary-action" type="button" onClick={applyPreviousTreatment}>Use Last Treatment</button>}
-            {QUICK_TREATMENTS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickTreatment(preset)}>{preset.label}</button>)}
-          </div>
           <div className="treatment-template-tools">
             <label className="field-block">
               <span>Use Template</span>
@@ -1322,6 +1318,7 @@ export function ClientJourneyPage() {
               <input className="lead-input" value={treatmentTemplateName} onChange={(event) => setTreatmentTemplateName(event.target.value)} placeholder="e.g. Weight Loss 30 Days" />
             </label>
             <div className="template-actions">
+              {!journey.treatment && previousTreatmentVisit?.treatmentData && <button className="pill primary-action" type="button" onClick={applyPreviousTreatment}>Use Last Treatment</button>}
               <button className="pill" type="button" disabled={!treatmentTemplateName.trim()} onClick={saveTreatmentTemplate}>Save Template</button>
               <button className="pill danger" type="button" disabled={selectedTreatmentTemplate === ''} onClick={deleteTreatmentTemplate}>Delete</button>
             </div>
