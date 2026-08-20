@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ADMIN_EMAIL, createAuthSession, getAuthSession, getLandingPath, verifyCredentials } from '../data/auth.js';
+import { ADMIN_EMAIL, canAccessPath, createAuthSession, getAuthSession, getLandingPath, getLastProtectedPath, verifyCredentials } from '../data/auth.js';
 import { hydrateCloudState, pauseCloudSync, resumeCloudSync } from '../data/cloudStore.js';
 
 const MAX_ATTEMPTS = 5;
@@ -20,12 +20,15 @@ export function LoginPage() {
 
   useEffect(() => {
     const session = getAuthSession();
-    if (session) navigate(getLandingPath(session), { replace: true });
+    if (!session) return;
+    const savedPath = getLastProtectedPath();
+    const targetPath = savedPath && canAccessPath(session, savedPath.split('?')[0]) ? savedPath : getLandingPath(session);
+    navigate(targetPath, { replace: true });
   }, [navigate]);
 
   const destination = location.state?.from
     ? `${location.state.from.pathname}${location.state.from.search ?? ''}`
-    : '/';
+    : getLastProtectedPath() || '/';
 
   const submit = async (event) => {
     event.preventDefault();

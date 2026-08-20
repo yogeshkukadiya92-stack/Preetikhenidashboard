@@ -1,5 +1,6 @@
 const SESSION_KEY = 'moms-pathshala:auth-session:v1';
 const LEGACY_SUPABASE_SESSION_KEY = 'moms-pathshala:supabase-session:v1';
+const LAST_PATH_KEY = 'moms-pathshala:last-protected-path:v1';
 export const STAFF_USERS_KEY = 'moms-pathshala:Main Branch:users:rows:v3';
 const configuredEmail = String(import.meta.env.VITE_ADMIN_EMAIL ?? 'shreeayurved09@gmail.com').trim().toLowerCase();
 const configuredPasswordHash = String(import.meta.env.VITE_ADMIN_PASSWORD_SHA256 ?? '').trim().toLowerCase();
@@ -108,9 +109,20 @@ export function getLandingPath(session) {
   return session.permissions?.[0] ?? '/login';
 }
 
+export function rememberLastProtectedPath(path) {
+  const value = String(path ?? '').trim();
+  if (!value || value === '/login' || value.startsWith('/public/')) return;
+  window.sessionStorage.setItem(LAST_PATH_KEY, value);
+}
+
+export function getLastProtectedPath() {
+  return window.sessionStorage.getItem(LAST_PATH_KEY) || '';
+}
+
 export function clearAuthSession() {
   window.sessionStorage.removeItem(SESSION_KEY);
   window.localStorage.removeItem(SESSION_KEY);
+  window.sessionStorage.removeItem(LAST_PATH_KEY);
   window.sessionStorage.removeItem(LEGACY_SUPABASE_SESSION_KEY);
   window.localStorage.removeItem(LEGACY_SUPABASE_SESSION_KEY);
 }
