@@ -381,6 +381,9 @@ export function ClientJourneyPage() {
   const [consultationTemplates, setConsultationTemplates] = useState(() => loadValue(consultationTemplatesKey, []));
   const [consultationTemplateName, setConsultationTemplateName] = useState('');
   const [selectedConsultationTemplate, setSelectedConsultationTemplate] = useState('');
+  const [treatmentTemplates, setTreatmentTemplates] = useState(() => loadValue(treatmentTemplatesKey, loadValue('ayurflow:treatment-templates:v1', [])));
+  const [treatmentTemplateName, setTreatmentTemplateName] = useState('');
+  const [selectedTreatmentTemplate, setSelectedTreatmentTemplate] = useState('');
   const [symptomChoice, setSymptomChoice] = useState('');
   const [customSymptoms, setCustomSymptoms] = useState(() => loadValue(customSymptomsKey, []));
   const [doctorNoteChoice, setDoctorNoteChoice] = useState('');
@@ -414,7 +417,6 @@ export function ClientJourneyPage() {
   const [selectedClinicalPrintTemplate, setSelectedClinicalPrintTemplate] = useState('');
   const appointments = loadValue(appointmentsKey, []);
   const payments = loadValue(paymentsKey, []);
-  const treatmentTemplates = loadValue(treatmentTemplatesKey, loadValue('ayurflow:treatment-templates:v1', []));
   const [localForms, setLocalForms] = useState(() => loadForms());
   const [localResponses, setLocalResponses] = useState(() => loadAllLocalResponses());
   const [patientFormUpdates, setPatientFormUpdates] = useState(() => loadValue(patientFormUpdatesKey, []));
@@ -468,6 +470,10 @@ export function ClientJourneyPage() {
   useEffect(() => {
     window.localStorage.setItem(consultationTemplatesKey, JSON.stringify(consultationTemplates));
   }, [consultationTemplates, consultationTemplatesKey]);
+
+  useEffect(() => {
+    window.localStorage.setItem(treatmentTemplatesKey, JSON.stringify(treatmentTemplates));
+  }, [treatmentTemplates, treatmentTemplatesKey]);
 
   useEffect(() => {
     window.localStorage.setItem(customSymptomsKey, JSON.stringify(customSymptoms));
@@ -751,9 +757,11 @@ export function ClientJourneyPage() {
   };
 
   const applyTreatmentTemplate = (indexValue) => {
+    setSelectedTreatmentTemplate(indexValue);
     if (indexValue === '') return;
     const template = treatmentTemplates[Number(indexValue)];
     if (!template) return;
+    setTreatmentTemplateName(template.name ?? '');
     setTreatmentForm((value) => ({
       ...value,
       service: template.service ?? value.service,
@@ -771,6 +779,39 @@ export function ClientJourneyPage() {
           timing: String(template.timing ?? '').split(',')[index]?.trim() ?? '',
         })).filter((row) => row.medicine);
     setTreatmentMedicineRows(medicines.length ? medicines : [{ medicine: '', dose: '', timing: '' }]);
+  };
+
+  const saveTreatmentTemplate = () => {
+    const name = treatmentTemplateName.trim();
+    if (!name) return;
+    const medicines = treatmentMedicineRows.filter((row) => row.medicine.trim());
+    const template = {
+      name,
+      service: treatmentForm.service,
+      goal: treatmentForm.goal,
+      duration: treatmentForm.duration,
+      medicine: medicines.map((row) => row.medicine).join(', '),
+      dose: medicines.map((row) => row.dose).join(', '),
+      timing: medicines.map((row) => row.timing).join(', '),
+      medicines,
+      updatedAt: new Date().toISOString(),
+    };
+    setTreatmentTemplates((current) => {
+      const existingIndex = current.findIndex((item) => String(item.name ?? '').toLowerCase() === name.toLowerCase());
+      if (existingIndex < 0) return [template, ...current];
+      return current.map((item, index) => index === existingIndex ? template : item);
+    });
+    setSelectedTreatmentTemplate('');
+  };
+
+  const deleteTreatmentTemplate = () => {
+    if (selectedTreatmentTemplate === '') return;
+    const index = Number(selectedTreatmentTemplate);
+    const template = treatmentTemplates[index];
+    if (!template || !window.confirm(`Delete "${template.name}" treatment template?`)) return;
+    setTreatmentTemplates((current) => current.filter((_, templateIndex) => templateIndex !== index));
+    setSelectedTreatmentTemplate('');
+    setTreatmentTemplateName('');
   };
 
   const syncTreatmentMedicineRows = (rows) => {
@@ -1239,7 +1280,34 @@ export function ClientJourneyPage() {
 
       {stageModal === 'forms' && <JourneyModal title="Required Form" client={selectedClient} onClose={() => setStageModal('')} onSave={saveRequiredForm} saveLabel={matchedFormResponses.length ? 'Mark Form Received' : 'Waiting for Submission'} saveDisabled={!matchedFormResponses.length}><label className="field-block"><span>Form</span><select className="lead-input" value={requiredForm} onChange={(event) => setRequiredForm(event.target.value)}>{formOptions.length ? formOptions.map((form) => <option key={form.id || form.slug || formTitle(form)} value={formTitle(form)}>{formTitle(form)}</option>) : <option value="">No forms created yet</option>}</select></label><div className="action-note"><strong>{matchedFormResponses.length ? `${matchedFormResponses.length} response(s) found` : 'Submission not found'}</strong>{matchedFormResponses.length ? ' Mobile number matched with submitted form responses below.' : ' Ask the patient to submit any created form using the same mobile number saved in the patient profile.'}</div><div className="matched-response-list full-field">{matchedFormResponses.length ? matchedFormResponses.map(({ response, form }) => <div className="matched-response-card" key={response.id}><div><strong>{response.formTitle || formTitle(form) || 'Submitted Form'}</strong><span>{formatResponseDate(response.submittedAt)}</span></div>{responsePreview(response, form).map(([label, value]) => <p key={`${response.id}-${label}`}><b>{label}:</b> {value}</p>)}</div>) : <div className="empty-state compact-empty"><strong>No matched response yet.</strong><p>Patient mobile: {selectedClientPhone || 'not saved'}</p></div>}</div></JourneyModal>}
 
-      {stageModal === 'treatment' && <JourneyModal title="Add Treatment Plan" client={selectedClient} onClose={() => setStageModal('')} onSave={saveTreatment} saveLabel="Save Treatment"><div className="quick-preset-row">{QUICK_TREATMENTS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickTreatment(preset)}>{preset.label}</button>)}</div>{treatmentTemplates.length > 0 && <label className="field-block full-field"><span>Use Template</span><select className="lead-input" defaultValue="" onChange={(event) => applyTreatmentTemplate(event.target.value)}><option value="">Select saved template...</option>{treatmentTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}</select></label>}<label className="field-block"><span>Service</span><select className="lead-input" value={treatmentForm.service} onChange={(event) => setTreatmentForm((value) => ({ ...value, service: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Goal</span><input className="lead-input" list="goal-presets" value={treatmentForm.goal} onChange={(event) => setTreatmentForm((value) => ({ ...value, goal: event.target.value }))} placeholder="Treatment goal" /><datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist></label><label className="field-block"><span>Duration</span><select className="lead-input" value={treatmentForm.duration} onChange={(event) => setTreatmentForm((value) => ({ ...value, duration: event.target.value }))}>{DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><div className="treatment-medicine-builder"><div className="medicine-builder-head"><div><strong>Medicines / Products</strong><span>Search the medicine master or add a missing medicine without leaving this treatment.</span></div><button className="pill" type="button" onClick={() => syncTreatmentMedicineRows([...treatmentMedicineRows, { medicine: '', dose: '', timing: '' }])}>+ Add Medicine</button></div>{treatmentMedicineRows.map((row, index) => <div className="treatment-medicine-row" key={index}><MedicineSearchInput index={index} value={row.medicine} catalog={medicineCatalog} onChange={(value) => updateTreatmentMedicine(index, 'medicine', value)} onSelect={(medicine) => selectTreatmentMedicine(index, medicine)} onAdd={() => addTreatmentMedicineToCatalog(index)} /><label className="field-block"><span>Dose</span><input className="lead-input" value={row.dose} onChange={(event) => updateTreatmentMedicine(index, 'dose', event.target.value)} placeholder="Dose" /></label><label className="field-block"><span>Timing</span><input className="lead-input" value={row.timing} onChange={(event) => updateTreatmentMedicine(index, 'timing', event.target.value)} placeholder="After meals" /></label><button className="icon-btn" type="button" onClick={() => removeTreatmentMedicine(index)} aria-label={`Remove medicine ${index + 1}`}>x</button></div>)}</div></JourneyModal>}
+      {stageModal === 'treatment' && (
+        <JourneyModal title="Add Treatment Plan" client={selectedClient} onClose={() => setStageModal('')} onSave={saveTreatment} saveLabel="Save Treatment">
+          <div className="quick-preset-row">
+            {QUICK_TREATMENTS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickTreatment(preset)}>{preset.label}</button>)}
+          </div>
+          <div className="treatment-template-tools">
+            <label className="field-block">
+              <span>Use Template</span>
+              <select className="lead-input" value={selectedTreatmentTemplate} onChange={(event) => applyTreatmentTemplate(event.target.value)}>
+                <option value="">{treatmentTemplates.length ? 'Select saved template...' : 'No templates saved yet'}</option>
+                {treatmentTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}
+              </select>
+            </label>
+            <label className="field-block">
+              <span>Template Name</span>
+              <input className="lead-input" value={treatmentTemplateName} onChange={(event) => setTreatmentTemplateName(event.target.value)} placeholder="e.g. Weight Loss 30 Days" />
+            </label>
+            <div className="template-actions">
+              <button className="pill" type="button" disabled={!treatmentTemplateName.trim()} onClick={saveTreatmentTemplate}>Save Template</button>
+              <button className="pill danger" type="button" disabled={selectedTreatmentTemplate === ''} onClick={deleteTreatmentTemplate}>Delete</button>
+            </div>
+          </div>
+          <label className="field-block"><span>Service</span><select className="lead-input" value={treatmentForm.service} onChange={(event) => setTreatmentForm((value) => ({ ...value, service: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <label className="field-block"><span>Goal</span><input className="lead-input" list="goal-presets" value={treatmentForm.goal} onChange={(event) => setTreatmentForm((value) => ({ ...value, goal: event.target.value }))} placeholder="Treatment goal" /><datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist></label>
+          <label className="field-block"><span>Duration</span><select className="lead-input" value={treatmentForm.duration} onChange={(event) => setTreatmentForm((value) => ({ ...value, duration: event.target.value }))}>{DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <div className="treatment-medicine-builder"><div className="medicine-builder-head"><div><strong>Medicines / Products</strong><span>Search the medicine master or add a missing medicine without leaving this treatment.</span></div><button className="pill" type="button" onClick={() => syncTreatmentMedicineRows([...treatmentMedicineRows, { medicine: '', dose: '', timing: '' }])}>+ Add Medicine</button></div>{treatmentMedicineRows.map((row, index) => <div className="treatment-medicine-row" key={index}><MedicineSearchInput index={index} value={row.medicine} catalog={medicineCatalog} onChange={(value) => updateTreatmentMedicine(index, 'medicine', value)} onSelect={(medicine) => selectTreatmentMedicine(index, medicine)} onAdd={() => addTreatmentMedicineToCatalog(index)} /><label className="field-block"><span>Dose</span><input className="lead-input" value={row.dose} onChange={(event) => updateTreatmentMedicine(index, 'dose', event.target.value)} placeholder="Dose" /></label><label className="field-block"><span>Timing</span><input className="lead-input" value={row.timing} onChange={(event) => updateTreatmentMedicine(index, 'timing', event.target.value)} placeholder="After meals" /></label><button className="icon-btn" type="button" onClick={() => removeTreatmentMedicine(index)} aria-label={`Remove medicine ${index + 1}`}>x</button></div>)}</div>
+        </JourneyModal>
+      )}
 
       {stageModal === 'billing' && <JourneyModal title="Add Payment" client={selectedClient} onClose={() => setStageModal('')} onSave={savePayment} saveLabel="Save Payment"><div className="quick-preset-row">{PAYMENT_AMOUNTS.map((amount) => <button className="pill" type="button" key={amount} onClick={() => setPaymentForm((value) => ({ ...value, amount, paidAmount: value.status === 'Paid' ? amount : value.paidAmount, pendingAmount: calculatePaymentPending(amount, value.status === 'Paid' ? amount : value.paidAmount, value.status) }))}>Rs {amount}</button>)}</div><label className="field-block"><span>Invoice</span><input className="lead-input" value={paymentForm.invoice} readOnly /></label><label className="field-block"><span>Total Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.amount} onChange={(event) => setPaymentForm((value) => ({ ...value, amount: event.target.value, paidAmount: value.status === 'Paid' ? event.target.value : value.paidAmount, pendingAmount: calculatePaymentPending(event.target.value, value.status === 'Paid' ? event.target.value : value.paidAmount, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Paid Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.paidAmount} onChange={(event) => setPaymentForm((value) => ({ ...value, paidAmount: event.target.value, pendingAmount: calculatePaymentPending(value.amount, event.target.value, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Pending Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.pendingAmount} readOnly placeholder="Auto calculated" /></label><label className="field-block"><span>Status</span><select className="lead-input" value={paymentForm.status} onChange={(event) => setPaymentForm((value) => { const paidAmount = event.target.value === 'Paid' ? value.amount : event.target.value === 'Pending' ? '' : value.paidAmount; return { ...value, status: event.target.value, paidAmount, pendingAmount: calculatePaymentPending(value.amount, paidAmount, event.target.value) }; })}><option>Paid</option><option>Partial</option><option>Pending</option></select></label><label className="field-block"><span>Paid On</span><input className="lead-input" type="date" value={paymentForm.paidOn} onChange={(event) => setPaymentForm((value) => ({ ...value, paidOn: event.target.value }))} /></label></JourneyModal>}
 
