@@ -4,7 +4,7 @@ let refreshInstalled = false;
 let syncPausedUntil = 0;
 const syncChains = new Map();
 const PENDING_KEY = 'moms-pathshala:cloud-pending:v2';
-const REFRESH_INTERVAL_MS = 15_000;
+const REFRESH_INTERVAL_MS = 5_000;
 const API_REQUEST_TIMEOUT_MS = 10_000;
 const LOGIN_HYDRATION_PAUSE_MS = API_REQUEST_TIMEOUT_MS + 2_000;
 
