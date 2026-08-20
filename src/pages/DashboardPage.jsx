@@ -222,55 +222,6 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <section className="dashboard-controls" aria-label="Dashboard filters">
-        <div>
-          <span className="control-label">Date range</span>
-          <div className="segmented-control" role="group" aria-label="Date range">
-            {DATE_PRESETS.map((preset) => (
-              <button
-                className={datePreset === preset.label ? 'active' : ''}
-                type="button"
-                key={preset.label}
-                onClick={() => { setDatePreset(preset.label); setCustomDateRange(null); }}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="branch-select">
-          <span className="control-label">Workspace</span>
-          <strong>{currentBranch}</strong>
-        </div>
-      </section>
-
-      <section className="kpis">
-        {kpis.map((kpi) => (
-          <article className="kpi action-card" key={kpi.label} role="button" tabIndex={0} onClick={() => navigate(kpiRoute(kpi.label))} onKeyDown={(event) => { if (event.key === 'Enter') navigate(kpiRoute(kpi.label)); }}>
-            <div className="kpi-head">
-              <KpiIcon accent={kpi.accent} />
-              <div>
-                <h3>{kpi.label}</h3>
-                <div className="value">{kpi.value}</div>
-              </div>
-            </div>
-            <div className="delta">{kpi.delta}</div>
-            <div className="kpi-footer">
-              <ChevronRight />
-              View Details
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <section className="dashboard-action-strip" aria-label="Dashboard actions">
-        <p className="command-message">Fast entry actions are grouped here; analytics stay behind More insights so daily work stays clean.</p>
-        <div className="sheet-actions toolbar-actions">
-          <ActionMenu label="Actions" items={quickActions} />
-          <button className="pill" type="button" onClick={() => setMoreInsightsOpen(true)}>More insights <ChevronRight /></button>
-        </div>
-      </section>
-
       <section className="appointment-calendar-card" aria-labelledby="appointment-calendar-title">
         <div className="appointment-calendar-head">
           <div>
@@ -364,6 +315,55 @@ export function DashboardPage() {
               </div>
             )}
           </aside>
+        </div>
+      </section>
+
+      <section className="dashboard-controls" aria-label="Dashboard filters">
+        <div>
+          <span className="control-label">Date range</span>
+          <div className="segmented-control" role="group" aria-label="Date range">
+            {DATE_PRESETS.map((preset) => (
+              <button
+                className={datePreset === preset.label ? 'active' : ''}
+                type="button"
+                key={preset.label}
+                onClick={() => { setDatePreset(preset.label); setCustomDateRange(null); }}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="branch-select">
+          <span className="control-label">Workspace</span>
+          <strong>{currentBranch}</strong>
+        </div>
+      </section>
+
+      <section className="kpis">
+        {kpis.map((kpi) => (
+          <article className="kpi action-card" key={kpi.label} role="button" tabIndex={0} onClick={() => navigate(kpiRoute(kpi.label))} onKeyDown={(event) => { if (event.key === 'Enter') navigate(kpiRoute(kpi.label)); }}>
+            <div className="kpi-head">
+              <KpiIcon accent={kpi.accent} />
+              <div>
+                <h3>{kpi.label}</h3>
+                <div className="value">{kpi.value}</div>
+              </div>
+            </div>
+            <div className="delta">{kpi.delta}</div>
+            <div className="kpi-footer">
+              <ChevronRight />
+              View Details
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <section className="dashboard-action-strip" aria-label="Dashboard actions">
+        <p className="command-message">Fast entry actions are grouped here; analytics stay behind More insights so daily work stays clean.</p>
+        <div className="sheet-actions toolbar-actions">
+          <ActionMenu label="Actions" items={quickActions} />
+          <button className="pill" type="button" onClick={() => setMoreInsightsOpen(true)}>More insights <ChevronRight /></button>
         </div>
       </section>
 
