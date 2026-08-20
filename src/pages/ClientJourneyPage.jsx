@@ -551,6 +551,10 @@ export function ClientJourneyPage() {
     .slice()
     .reverse()
     .find((visit) => visit?.consultationData);
+  const previousTreatmentVisit = (activeVisitIndex >= 0 ? journeyVisits.slice(0, activeVisitIndex) : journeyVisits)
+    .slice()
+    .reverse()
+    .find((visit) => visit?.treatmentData);
   const pregnancyHistoryEntries = useMemo(() => journeyVisits.flatMap((visit) => (
     Array.isArray(visit.pregnancyHistory) ? visit.pregnancyHistory.map((entry) => ({
       ...entry,
@@ -756,29 +760,42 @@ export function ClientJourneyPage() {
     setTreatmentForm((value) => ({ ...value, ...preset }));
   };
 
+  const treatmentRowsFromData = (data) => {
+    if (Array.isArray(data?.medicines)) return data.medicines.filter((row) => row?.medicine);
+    return String(data?.medicine ?? '').split(',').map((medicine, index) => ({
+      medicine: medicine.trim(),
+      dose: String(data?.dose ?? '').split(',')[index]?.trim() ?? '',
+      timing: String(data?.timing ?? '').split(',')[index]?.trim() ?? '',
+    })).filter((row) => row.medicine);
+  };
+
+  const applyTreatmentData = (data) => {
+    if (!data) return;
+    setTreatmentForm((value) => ({
+      ...value,
+      service: data.service ?? value.service,
+      goal: data.goal ?? value.goal,
+      duration: data.duration ?? value.duration,
+      medicine: data.medicine ?? value.medicine,
+      dose: data.dose ?? value.dose,
+      timing: data.timing ?? value.timing,
+      status: data.status ?? value.status,
+    }));
+    const medicines = treatmentRowsFromData(data);
+    setTreatmentMedicineRows(medicines.length ? medicines : [{ medicine: '', dose: '', timing: '' }]);
+  };
+
+  const applyPreviousTreatment = () => {
+    applyTreatmentData(previousTreatmentVisit?.treatmentData);
+  };
+
   const applyTreatmentTemplate = (indexValue) => {
     setSelectedTreatmentTemplate(indexValue);
     if (indexValue === '') return;
     const template = treatmentTemplates[Number(indexValue)];
     if (!template) return;
     setTreatmentTemplateName(template.name ?? '');
-    setTreatmentForm((value) => ({
-      ...value,
-      service: template.service ?? value.service,
-      goal: template.goal ?? value.goal,
-      duration: template.duration ?? value.duration,
-      medicine: template.medicine ?? value.medicine,
-      dose: template.dose ?? value.dose,
-      timing: template.timing ?? value.timing,
-    }));
-    const medicines = Array.isArray(template.medicines)
-      ? template.medicines
-      : String(template.medicine ?? '').split(',').map((medicine, index) => ({
-          medicine: medicine.trim(),
-          dose: String(template.dose ?? '').split(',')[index]?.trim() ?? '',
-          timing: String(template.timing ?? '').split(',')[index]?.trim() ?? '',
-        })).filter((row) => row.medicine);
-    setTreatmentMedicineRows(medicines.length ? medicines : [{ medicine: '', dose: '', timing: '' }]);
+    applyTreatmentData(template);
   };
 
   const saveTreatmentTemplate = () => {
@@ -868,13 +885,7 @@ export function ClientJourneyPage() {
       const savedTreatment = journey.treatmentData;
       const nextForm = savedTreatment ?? { service: 'Consultation', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' };
       setTreatmentForm(nextForm);
-      const medicines = Array.isArray(savedTreatment?.medicines)
-        ? savedTreatment.medicines
-        : String(savedTreatment?.medicine ?? '').split(',').map((medicine, index) => ({
-            medicine: medicine.trim(),
-            dose: String(savedTreatment?.dose ?? '').split(',')[index]?.trim() ?? '',
-            timing: String(savedTreatment?.timing ?? '').split(',')[index]?.trim() ?? '',
-          })).filter((row) => row.medicine);
+      const medicines = treatmentRowsFromData(savedTreatment);
       setTreatmentMedicineRows(medicines.length ? medicines : [{ medicine: '', dose: '', timing: '' }]);
     }
     if (stage === 'followup') {
@@ -1056,6 +1067,7 @@ export function ClientJourneyPage() {
     if (!treatmentForm.goal.trim()) return;
     const current = loadValue(operationsKey, {});
     const medicines = treatmentMedicineRows.filter((row) => row.medicine.trim());
+    const previousTreatmentData = journey.treatmentData;
     const treatmentData = {
       ...treatmentForm,
       medicines,
@@ -1064,7 +1076,18 @@ export function ClientJourneyPage() {
       timing: medicines.map((row) => row.timing).join(', '),
     };
     const row = [selectedClient, treatmentForm.service, treatmentData.medicine, treatmentData.dose, treatmentData.timing, treatmentForm.goal, treatmentForm.duration, treatmentForm.status];
-    window.localStorage.setItem(operationsKey, JSON.stringify({ ...current, treatments: [row, ...(current.treatments ?? [])] }));
+    const sameSavedTreatmentRow = (savedRow) => Array.isArray(savedRow)
+      && savedRow[0] === selectedClient
+      && savedRow[1] === previousTreatmentData?.service
+      && savedRow[2] === previousTreatmentData?.medicine
+      && savedRow[3] === previousTreatmentData?.dose
+      && savedRow[4] === previousTreatmentData?.timing
+      && savedRow[5] === previousTreatmentData?.goal
+      && savedRow[6] === previousTreatmentData?.duration
+      && savedRow[7] === previousTreatmentData?.status;
+    const existingRows = Array.isArray(current.treatments) ? current.treatments : [];
+    const nextRows = previousTreatmentData ? existingRows.filter((savedRow) => !sameSavedTreatmentRow(savedRow)) : existingRows;
+    window.localStorage.setItem(operationsKey, JSON.stringify({ ...current, treatments: [row, ...nextRows] }));
     updateJourney({ treatment: true, treatmentData, treatmentAt: new Date().toISOString() });
     setStageModal('');
   };
@@ -1192,7 +1215,7 @@ export function ClientJourneyPage() {
               <div className="journey-stages">
                 {STAGES.map(([id, label], index) => {
                   const complete = stageDone(id);
-                  return <div className={`journey-stage ${complete ? 'complete' : ''}`} key={id}><span className="journey-index">{complete ? '✓' : index + 1}</span><div><strong>{label}</strong><small>{stageDetail(id, complete)}</small></div>{id !== 'registration' && <button className="pill" type="button" onClick={() => runStage(id)}>{complete ? 'Open' : id === 'consultation' ? 'Consult' : id === 'followup' ? 'Schedule' : 'Start'}</button>}</div>;
+                  return <div className={`journey-stage ${complete ? 'complete' : ''}`} key={id}><span className="journey-index">{complete ? '✓' : index + 1}</span><div><strong>{label}</strong><small>{stageDetail(id, complete)}</small></div>{id !== 'registration' && <button className="pill" type="button" onClick={() => runStage(id)}>{complete ? (id === 'treatment' ? 'Edit' : 'Open') : id === 'consultation' ? 'Consult' : id === 'followup' ? 'Schedule' : 'Start'}</button>}</div>;
                 })}
               </div>
               <div className="journey-print-actions">
@@ -1281,8 +1304,9 @@ export function ClientJourneyPage() {
       {stageModal === 'forms' && <JourneyModal title="Required Form" client={selectedClient} onClose={() => setStageModal('')} onSave={saveRequiredForm} saveLabel={matchedFormResponses.length ? 'Mark Form Received' : 'Waiting for Submission'} saveDisabled={!matchedFormResponses.length}><label className="field-block"><span>Form</span><select className="lead-input" value={requiredForm} onChange={(event) => setRequiredForm(event.target.value)}>{formOptions.length ? formOptions.map((form) => <option key={form.id || form.slug || formTitle(form)} value={formTitle(form)}>{formTitle(form)}</option>) : <option value="">No forms created yet</option>}</select></label><div className="action-note"><strong>{matchedFormResponses.length ? `${matchedFormResponses.length} response(s) found` : 'Submission not found'}</strong>{matchedFormResponses.length ? ' Mobile number matched with submitted form responses below.' : ' Ask the patient to submit any created form using the same mobile number saved in the patient profile.'}</div><div className="matched-response-list full-field">{matchedFormResponses.length ? matchedFormResponses.map(({ response, form }) => <div className="matched-response-card" key={response.id}><div><strong>{response.formTitle || formTitle(form) || 'Submitted Form'}</strong><span>{formatResponseDate(response.submittedAt)}</span></div>{responsePreview(response, form).map(([label, value]) => <p key={`${response.id}-${label}`}><b>{label}:</b> {value}</p>)}</div>) : <div className="empty-state compact-empty"><strong>No matched response yet.</strong><p>Patient mobile: {selectedClientPhone || 'not saved'}</p></div>}</div></JourneyModal>}
 
       {stageModal === 'treatment' && (
-        <JourneyModal title="Add Treatment Plan" client={selectedClient} onClose={() => setStageModal('')} onSave={saveTreatment} saveLabel="Save Treatment">
+        <JourneyModal title={journey.treatment ? 'Edit Treatment Plan' : 'Add Treatment Plan'} client={selectedClient} onClose={() => setStageModal('')} onSave={saveTreatment} saveLabel={journey.treatment ? 'Update Treatment' : 'Save Treatment'}>
           <div className="quick-preset-row">
+            {!journey.treatment && previousTreatmentVisit?.treatmentData && <button className="pill primary-action" type="button" onClick={applyPreviousTreatment}>Use Last Treatment</button>}
             {QUICK_TREATMENTS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickTreatment(preset)}>{preset.label}</button>)}
           </div>
           <div className="treatment-template-tools">
