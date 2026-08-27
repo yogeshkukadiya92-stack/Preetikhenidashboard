@@ -242,6 +242,13 @@ app.put('/api/forms/:slug', asyncHandler(async (request, response) => {
   response.json({ form: { ...form, slug } });
 }));
 
+app.get('/api/forms', asyncHandler(async (_request, response) => {
+  const db = getPool();
+  if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
+  const result = await db.query('select form from public_forms order by updated_at desc');
+  response.json({ forms: result.rows.map((row) => row.form) });
+}));
+
 app.get('/api/forms/:slug', asyncHandler(async (request, response) => {
   const db = getPool();
   if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });

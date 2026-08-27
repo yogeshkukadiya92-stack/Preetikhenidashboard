@@ -1926,6 +1926,12 @@ body {
 }
 
 .consultation-modal { width: min(760px, calc(100vw - 28px)); }
+.consultation-modal .clinical-textarea {
+  min-height: 150px;
+  padding: 12px 14px;
+  line-height: 1.55;
+  resize: vertical;
+}
 .diet-plan-modal {
   width: min(1120px, calc(100vw - 28px));
 }

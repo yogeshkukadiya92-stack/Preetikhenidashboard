@@ -1,3 +1,5 @@
+import { mergeFormsById } from './formSync.js';
+
 const FORMS_KEY = 'moms-pathshala:forms:v2';
 const LEGACY_FORMS_KEY = 'ayurflow:forms:v1';
 const RESPONSES_KEY = 'moms-pathshala:form-responses:v2';
@@ -156,6 +158,24 @@ export function saveForms(forms) {
   return writeJson(FORMS_KEY, forms.map(normalizeForm));
 }
 
+export async function loadSharedForms() {
+  const localForms = loadForms();
+  if (!apiBase) return { forms: localForms, source: 'local' };
+  try {
+    const payload = await apiRequest('/forms');
+    const remoteForms = (Array.isArray(payload) ? payload : payload?.forms ?? []).map(normalizeForm);
+    const deletedIds = new Set(remoteForms.filter((form) => form.status === 'Deleted').map((form) => form.id));
+    const forms = mergeFormsById(
+      localForms.filter((form) => !deletedIds.has(form.id)),
+      remoteForms.filter((form) => form.status !== 'Deleted'),
+    );
+    saveForms(forms);
+    return { forms, source: 'api' };
+  } catch (error) {
+    return { forms: localForms, source: 'local', warning: error.message };
+  }
+}
+
 export function loadLocalResponses(formId) {
   const responses = readJson(RESPONSES_KEY, []);
   if (!Array.isArray(responses)) return [];
@@ -190,6 +210,19 @@ export async function publishForm(form) {
     return { form: normalizeForm(payload?.form ?? payload ?? normalized), delivery: 'api' };
   } catch (error) {
     return { form: normalized, delivery: 'local', warning: error.message };
+  }
+}
+
+export async function deleteSharedForm(form) {
+  if (!apiBase || !form?.slug) return { delivery: 'local' };
+  try {
+    await apiRequest(`/forms/${encodeURIComponent(form.slug)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...normalizeForm(form), status: 'Deleted', updatedAt: new Date().toISOString() }),
+    });
+    return { delivery: 'api' };
+  } catch (error) {
+    return { delivery: 'local', warning: error.message };
   }
 }
 

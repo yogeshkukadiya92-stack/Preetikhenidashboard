@@ -2206,10 +2206,10 @@ export function ClientsPage() {
         { label: 'Treatment Plans', value: String(savedTreatmentRows.length) },
         { label: 'Services', value: getSavedServiceNames().length },
       ]}
-      headers={['Client ID', 'Client', 'Mobile', 'Visit Date', 'Birthday', 'Age', 'Address', 'Service', 'File Charge', 'Payment Mode']}
+      headers={['Client ID', 'Client', 'Mobile', 'Visit Date', 'Birthday', 'Age', 'Gender', 'Address', 'Service', 'File Charge', 'Payment Mode']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
-      fieldOptions={{ Service: getSavedServiceNames(), 'Payment Mode': ['Cash', 'GPay'] }}
+      fieldOptions={{ Gender: ['Female', 'Male', 'Other'], Service: getSavedServiceNames(), 'Payment Mode': ['Cash', 'GPay'] }}
       fieldTypes={{ Mobile: 'tel', Age: 'number', Birthday: 'date', 'Visit Date': 'date', 'File Charge': 'number' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
@@ -2228,6 +2228,7 @@ export function ClientsPage() {
         'Visit Date': row.visitDate,
         Birthday: row.birthday,
         Age: row.age,
+        Gender: row.gender,
         Address: row.address,
         Service: row.service || row.program,
         'File Charge': row.fileCharge,
@@ -2257,6 +2258,7 @@ export function ClientsPage() {
           mobile: source.Mobile ?? source.mobile ?? source.Phone ?? source.phone ?? '',
           visitDate,
           age: ageFromBirthday(birthday) || source.Age || source.age || '',
+          gender: source.Gender ?? source.gender ?? source.Sex ?? source.sex ?? '',
           address: source.Address ?? source.address ?? '',
           service: source.Service ?? source.service ?? source.Program ?? source.program ?? '',
           program: source.Program ?? source.program ?? source.Service ?? source.service ?? '',

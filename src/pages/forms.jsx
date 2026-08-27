@@ -3,12 +3,14 @@ import { useParams } from 'react-router-dom';
 import { ActionMenu, Card, Tag } from '../components/ui.jsx';
 import {
   deleteLocalResponse,
+  deleteSharedForm,
   getPublicFormUrl,
   hasFormsApi,
   loadForms,
   loadLocalResponses,
   loadPublicForm,
   loadResponses,
+  loadSharedForms,
   publishForm,
   saveForms,
   submitFormResponse,
@@ -731,6 +733,26 @@ export function FormsPage() {
     if (!saveForms(forms)) setMessage('Browser storage is full. Export responses or connect the Forms API.');
   }, [forms]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      const result = await loadSharedForms();
+      if (cancelled) return;
+      setForms(result.forms);
+      if (result.warning) setMessage('Shared forms could not be refreshed. Showing forms saved on this device.');
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
+    const refreshId = window.setInterval(refresh, 15_000);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
+      window.clearInterval(refreshId);
+    };
+  }, []);
+
   const selectedField = draftForm?.fields.find((field) => field.id === selectedFieldId) ?? null;
   const responseCounts = useMemo(() => Object.fromEntries(forms.map((form) => [form.id, loadLocalResponses(form.id).length])), [forms, view]);
 
@@ -841,16 +863,16 @@ export function FormsPage() {
       status,
       updatedAt: new Date().toISOString(),
     };
-    setForms((current) => current.some((form) => form.id === savedForm.id)
-      ? current.map((form) => (form.id === savedForm.id ? savedForm : form))
-      : [savedForm, ...current]);
+    const nextForms = forms.some((form) => form.id === savedForm.id)
+      ? forms.map((form) => (form.id === savedForm.id ? savedForm : form))
+      : [savedForm, ...forms];
+    setForms(nextForms);
+    saveForms(nextForms);
     setDraftForm(savedForm);
-    if (status === 'Published') {
-      const result = await publishForm(savedForm);
-      setMessage(result.warning ? 'Published to the shared workspace. External form API needs attention.' : `Published. Public link: ${getPublicFormUrl(savedForm)}`);
-    } else {
-      setMessage('Draft saved.');
-    }
+    const result = await publishForm(savedForm);
+    if (result.warning) setMessage('Saved on this device, but not in the shared workspace. Check the connection and save again.');
+    else if (status === 'Published') setMessage(`Published and synced. Public link: ${getPublicFormUrl(savedForm)}`);
+    else setMessage('Draft saved and synced across devices.');
     setView('list');
   };
 
@@ -858,15 +880,12 @@ export function FormsPage() {
     const status = form.status === 'Published' ? 'Draft' : 'Published';
     const updated = { ...form, status, updatedAt: new Date().toISOString() };
     setForms((current) => current.map((item) => (item.id === form.id ? updated : item)));
-    if (status === 'Published') {
-      const result = await publishForm(updated);
-      setMessage(result.warning ? 'Form saved, but the public link is not ready yet. Check the server connection and publish again.' : `${form.title} published and ready to share.`);
-      return;
-    }
-    setMessage(`${form.title} unpublished.`);
+    const result = await publishForm(updated);
+    if (result.warning) setMessage('Status changed on this device, but could not sync to the shared workspace.');
+    else setMessage(status === 'Published' ? `${form.title} published and ready to share.` : `${form.title} unpublished and synced.`);
   };
 
-  const duplicateForm = (form) => {
+  const duplicateForm = async (form) => {
     const duplicate = cloneForm({
       ...form,
       id: makeUid('form'),
@@ -878,13 +897,15 @@ export function FormsPage() {
     });
     duplicate.fields = duplicate.fields.map((field) => ({ ...field, id: makeUid('field'), condition: { ...field.condition, enabled: false, fieldId: '' } }));
     setForms((current) => [duplicate, ...current]);
-    setMessage('Form duplicated as a draft.');
+    const result = await publishForm(duplicate);
+    setMessage(result.warning ? 'Form duplicated on this device, but shared sync failed.' : 'Form duplicated as a shared draft.');
   };
 
-  const deleteForm = (form) => {
+  const deleteForm = async (form) => {
     if (!window.confirm(`Delete "${form.title}"? Existing responses will remain available in storage.`)) return;
     setForms((current) => current.filter((item) => item.id !== form.id));
-    setMessage('Form deleted.');
+    const result = await deleteSharedForm(form);
+    setMessage(result.warning ? 'Form deleted on this device, but shared deletion failed.' : 'Form deleted from the shared workspace.');
   };
 
   const copyPublicLink = async (form) => {
