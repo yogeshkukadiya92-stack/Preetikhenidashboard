@@ -181,6 +181,7 @@ const STAGES = [
 ];
 
 const DIAGNOSIS_OPTIONS = ['General consultation', 'Obesity', 'Prediabetes', 'Type 2 diabetes', 'Hypertension', 'Dyslipidemia', 'Hypothyroidism', 'PCOS', 'Digestive disorder', 'Joint disorder', 'Skin disorder', 'Hair disorder', 'Stress-related condition'];
+const NOTE_OPTIONS = ['Diet and lifestyle counselling given', 'Continue current medicines', 'Lab tests advised', 'Hydration and sleep guidance given', 'Review after 7 days', 'Review after 15 days', 'Review after 30 days'];
 const VITAL_OPTIONS = ['BP 120/80, Pulse 72', 'BP 130/80, Pulse 76', 'BP 140/90, Pulse 80', 'Vitals stable'];
 const SERVICE_OPTIONS = ['Consultation', 'Follow-up', 'Weight Loss', 'Skin Care', 'Hair Treatment', 'Panchakarma', 'Garbhasanskar', 'Diet Counseling', 'Therapy Session'];
 const DURATION_OPTIONS = ['7 days', '15 days', '30 days', '45 days', '60 days', '90 days', '120 days'];
@@ -204,7 +205,8 @@ const PRINT_SECTION_OPTIONS = [
   ['vitals', 'Vitals'],
   ['diagnosis', 'Diagnosis'],
   ['investigation', 'Investigation'],
-  ['doctorNotes', 'History & Examination'],
+  ['history', 'History & Examination'],
+  ['doctorNotes', 'Doctor Notes'],
   ['pregnancyHistory', 'Pregnancy / Garbhsanskar History'],
   ['treatment', 'Treatment Plan'],
   ['medicines', 'Medicines, Dose & Timing'],
@@ -420,7 +422,7 @@ export function ClientJourneyPage() {
   const [selectedVisitId, setSelectedVisitId] = useState('');
   const [search, setSearch] = useState('');
   const [consultationOpen, setConsultationOpen] = useState(false);
-  const [consultation, setConsultation] = useState({ complaint: '', diagnosis: '', investigation: '', notes: '', vitals: '' });
+  const [consultation, setConsultation] = useState({ complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
   const [consultationTemplates, setConsultationTemplates] = useState(() => loadValue(consultationTemplatesKey, []));
   const [consultationTemplateName, setConsultationTemplateName] = useState('');
   const [selectedConsultationTemplate, setSelectedConsultationTemplate] = useState('');
@@ -429,6 +431,9 @@ export function ClientJourneyPage() {
   const [selectedTreatmentTemplate, setSelectedTreatmentTemplate] = useState('');
   const [selectedPastTreatmentService, setSelectedPastTreatmentService] = useState('');
   const [pastTreatmentApplied, setPastTreatmentApplied] = useState(false);
+  const customDoctorNotesKey = branchKey('consultation-custom-doctor-notes:v1');
+  const [doctorNoteChoice, setDoctorNoteChoice] = useState('');
+  const [customDoctorNotes, setCustomDoctorNotes] = useState(() => loadValue(customDoctorNotesKey, []));
   const [pregnancyHistoryOpen, setPregnancyHistoryOpen] = useState(false);
   const [pregnancyHistoryForm, setPregnancyHistoryForm] = useState(() => ({
     date: currentSlot().date,
@@ -519,6 +524,10 @@ export function ClientJourneyPage() {
   useEffect(() => {
     window.localStorage.setItem(clinicalPrintTemplatesKey, JSON.stringify(clinicalPrintTemplates));
   }, [clinicalPrintTemplates, clinicalPrintTemplatesKey]);
+
+  useEffect(() => {
+    window.localStorage.setItem(customDoctorNotesKey, JSON.stringify(customDoctorNotes));
+  }, [customDoctorNotes, customDoctorNotesKey]);
 
   useEffect(() => {
     if (!formOptions.length) return;
@@ -689,7 +698,7 @@ export function ClientJourneyPage() {
 
   const openConsultation = () => {
     const savedConsultation = journey.consultationData ?? previousConsultationVisit?.consultationData;
-    setConsultation(savedConsultation ? { investigation: '', ...savedConsultation } : { complaint: '', diagnosis: '', investigation: '', notes: '', vitals: '' });
+    setConsultation(savedConsultation ? { investigation: '', doctorNotes: '', ...savedConsultation } : { complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
     setConsultationOpen(true);
   };
 
@@ -719,9 +728,28 @@ export function ClientJourneyPage() {
   };
 
   const saveConsultation = () => {
-    if (!consultation.complaint.trim() && !consultation.notes.trim() && !consultation.diagnosis.trim() && !consultation.investigation.trim()) return;
+    if (!consultation.complaint.trim() && !consultation.notes.trim() && !consultation.doctorNotes.trim() && !consultation.diagnosis.trim() && !consultation.investigation.trim()) return;
     updateJourney({ consultation: true, consultationData: consultation, consultedAt: new Date().toISOString() });
     setConsultationOpen(false);
+  };
+
+  const addDoctorNote = (selectedNote = doctorNoteChoice) => {
+    const note = String(selectedNote ?? '').trim().replace(/\s+/g, ' ');
+    if (!note) return;
+    const current = String(consultation.doctorNotes ?? '').split('\n').map((item) => item.trim()).filter(Boolean);
+    if (!current.some((item) => item.toLowerCase() === note.toLowerCase())) current.push(note);
+    if (![...NOTE_OPTIONS, ...customDoctorNotes].some((item) => item.toLowerCase() === note.toLowerCase())) {
+      setCustomDoctorNotes((items) => [...items, note]);
+    }
+    setConsultation((value) => ({ ...value, doctorNotes: current.join('\n') }));
+    setDoctorNoteChoice('');
+  };
+
+  const removeDoctorNote = (note) => {
+    setConsultation((value) => ({
+      ...value,
+      doctorNotes: String(value.doctorNotes ?? '').split('\n').map((item) => item.trim()).filter((item) => item && item !== note).join('\n'),
+    }));
   };
 
   const applyConsultationTemplate = (indexValue) => {
@@ -730,7 +758,7 @@ export function ClientJourneyPage() {
     const template = consultationTemplates[Number(indexValue)];
     if (!template) return;
     setConsultationTemplateName(template.name ?? '');
-    setConsultation({ complaint: template.complaint ?? '', diagnosis: template.diagnosis ?? '', investigation: template.investigation ?? '', notes: template.notes ?? '', vitals: template.vitals ?? '' });
+    setConsultation({ complaint: template.complaint ?? '', diagnosis: template.diagnosis ?? '', investigation: template.investigation ?? '', notes: template.notes ?? '', doctorNotes: template.doctorNotes ?? '', vitals: template.vitals ?? '' });
   };
 
   const saveConsultationTemplate = () => {
@@ -750,6 +778,7 @@ export function ClientJourneyPage() {
       diagnosis: preset.diagnosis,
       investigation: '',
       notes: preset.notes,
+      doctorNotes: '',
       vitals: preset.vitals,
     });
     setConsultationTemplateName(preset.label);
@@ -960,7 +989,7 @@ export function ClientJourneyPage() {
     setClinicalPrintTitle(template.title || 'Consultation & Treatment Summary');
     setClinicalPrintNote(template.note ?? '');
     setClinicalPrintSections(Object.fromEntries(
-      PRINT_SECTION_OPTIONS.map(([id]) => [id, Boolean(template.sections?.[id])]),
+      PRINT_SECTION_OPTIONS.map(([id]) => [id, Boolean(id === 'history' ? template.sections?.history ?? template.sections?.doctorNotes : template.sections?.[id])]),
     ));
   };
 
@@ -1026,7 +1055,8 @@ export function ClientJourneyPage() {
         clinicalPrintSections.vitals && section('Vitals', `<p>${escapePrintHtml(consultationData.vitals || 'Not recorded')}</p>`),
         clinicalPrintSections.diagnosis && section('Diagnosis', `<p>${escapePrintHtml(consultationData.diagnosis || 'Not recorded')}</p>`),
         clinicalPrintSections.investigation && section('Investigation', listSection(consultationData.investigation)),
-        clinicalPrintSections.doctorNotes && section('History & Examination', `<p>${escapePrintHtml(consultationData.notes || 'Not recorded')}</p>`),
+        clinicalPrintSections.history && section('History & Examination', `<p>${escapePrintHtml(consultationData.notes || 'Not recorded')}</p>`),
+        clinicalPrintSections.doctorNotes && section('Doctor Notes', `<p>${escapePrintHtml(consultationData.doctorNotes || 'Not recorded')}</p>`),
         clinicalPrintSections.pregnancyHistory && section('Pregnancy / Garbhsanskar History', pregnancyHistory.length ? pregnancyHistory.map((entry) => `<div class="detail"><span>${escapePrintHtml(formatResponseDate(entry.date) || 'Undated')} · ${escapePrintHtml(entry.pregnancyStage || 'Stage not recorded')}</span><strong>${escapePrintHtml(entry.gynecName ? `Gynec: ${entry.gynecName}` : 'Gynec not recorded')}</strong><p>${escapePrintHtml(entry.gynecAdvice || 'No gynec advice recorded')}</p>${entry.tests ? `<p><b>Reports / Tests:</b> ${escapePrintHtml(entry.tests)}</p>` : ''}${entry.medicines ? `<p><b>Medicines / Supplements:</b> ${escapePrintHtml(entry.medicines)}</p>` : ''}${entry.garbhsanskarAdvice ? `<p><b>Garbhsanskar Plan:</b> ${escapePrintHtml(entry.garbhsanskarAdvice)}</p>` : ''}${entry.nextFollowup ? `<p><b>Next Follow-up:</b> ${escapePrintHtml(formatResponseDate(entry.nextFollowup))}</p>` : ''}</div>`).join('') : '<p>No pregnancy history recorded.</p>'),
         clinicalPrintSections.treatment && section('Treatment Plan', `<div class="details">${detail('Service', treatmentData.service)}${detail('Goal', treatmentData.goal)}${detail('Duration', treatmentData.duration)}${detail('Status', treatmentData.status)}</div>`),
         clinicalPrintSections.medicines && section('Medicines / Products', selectedMedicines.length ? `<table><thead><tr><th style="width:36px">No.</th><th>Medicine / Product</th><th>Dose</th><th>Timing</th></tr></thead><tbody>${selectedMedicines.map((item, index) => `<tr><td>${index + 1}</td><td>${escapePrintHtml(item.medicine)}</td><td>${escapePrintHtml(item.dose || '—')}</td><td>${escapePrintHtml(item.timing || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>No medicines recorded.</p>'),
@@ -1301,7 +1331,8 @@ export function ClientJourneyPage() {
                 {clinicalPrintSections.vitals && <div className="clinical-preview-section"><strong>Vitals</strong><p>{journey.consultationData?.vitals || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.diagnosis && <div className="clinical-preview-section"><strong>Diagnosis</strong><p>{journey.consultationData?.diagnosis || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.investigation && <div className="clinical-preview-section"><strong>Investigation</strong>{clinicalListItems(journey.consultationData?.investigation).length ? <ul className="clinical-preview-list">{clinicalListItems(journey.consultationData?.investigation).map((item) => <li key={item}>{item}</li>)}</ul> : <p>Not recorded</p>}</div>}
-                {clinicalPrintSections.doctorNotes && <div className="clinical-preview-section"><strong>History &amp; Examination</strong><p>{journey.consultationData?.notes || 'Not recorded'}</p></div>}
+                {clinicalPrintSections.history && <div className="clinical-preview-section"><strong>History &amp; Examination</strong><p>{journey.consultationData?.notes || 'Not recorded'}</p></div>}
+                {clinicalPrintSections.doctorNotes && <div className="clinical-preview-section"><strong>Doctor Notes</strong><p>{journey.consultationData?.doctorNotes || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.pregnancyHistory && <div className="clinical-preview-section"><strong>Pregnancy / Garbhsanskar History</strong><p>{Array.isArray(journey.pregnancyHistory) && journey.pregnancyHistory.length ? journey.pregnancyHistory.map((entry) => `${formatResponseDate(entry.date)} · ${entry.pregnancyStage || 'Stage not recorded'}\n${entry.gynecAdvice || entry.garbhsanskarAdvice || 'No advice recorded'}`).join('\n\n') : 'Not recorded'}</p></div>}
                 {clinicalPrintSections.treatment && <div className="clinical-preview-section"><strong>Treatment Plan</strong><p>{[journey.treatmentData?.service, journey.treatmentData?.goal, journey.treatmentData?.duration].filter(Boolean).join(' · ') || 'Not recorded'}</p></div>}
                 {clinicalPrintSections.medicines && <div className="clinical-preview-section"><strong>Medicines, Dose & Timing</strong>{clinicalPreviewMedicines.length ? <div className="clinical-preview-medicine-list" role="table" aria-label="Selected medicines">{clinicalPreviewMedicines.map((item, index) => <div className="clinical-preview-medicine-row" role="row" key={`${item.medicine}-${index}`}><b aria-label={`Medicine ${index + 1}`}>{index + 1}</b><span role="cell"><strong>{item.medicine}</strong><small>{item.dose || 'Dose not recorded'} · {item.timing || 'Timing not recorded'}</small></span></div>)}</div> : <p>No medicines recorded</p>}</div>}
@@ -1389,6 +1420,7 @@ export function ClientJourneyPage() {
               <SearchablePresetInput label="Vitals" value={consultation.vitals} options={VITAL_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, vitals: value }))} placeholder="Search or enter measured vitals" />
               <SearchablePresetInput label="Diagnosis" value={consultation.diagnosis} options={DIAGNOSIS_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, diagnosis: value }))} placeholder="Type 1-2 keywords, e.g. diabetes" />
               <label className="field-block full-field"><span>Investigation</span><textarea className="lead-input" rows="3" value={consultation.investigation ?? ''} onChange={(event) => setConsultation((current) => ({ ...current, investigation: event.target.value }))} placeholder="Optional investigation, lab test, imaging, report, or any note..." /></label>
+              <div className="doctor-note-builder full-field"><SearchablePresetInput label="Doctor Notes" value={doctorNoteChoice} options={[...NOTE_OPTIONS, ...customDoctorNotes]} onChange={setDoctorNoteChoice} onSelect={addDoctorNote} onCommit={addDoctorNote} placeholder="Search or type a new doctor note..." helperText="Multiple notes select કરો અથવા નવી note લખીને Add New/Enter દબાવો." action={<button className="pill symptom-add-button" type="button" onClick={() => addDoctorNote()} disabled={!doctorNoteChoice.trim()}>+ Add New</button>} /><div className="consultation-chips">{String(consultation.doctorNotes ?? '').split('\n').map((item) => item.trim()).filter(Boolean).map((note) => <button className="tag symptom-chip" type="button" key={note} onClick={() => removeDoctorNote(note)}>{note} x</button>)}</div></div>
             </div>
             <div className="modal-actions"><button className="pill" type="button" onClick={() => setConsultationOpen(false)}>Cancel</button><button className="pill primary-action" type="button" onClick={saveConsultation}>Complete Consultation</button></div>
           </div>
