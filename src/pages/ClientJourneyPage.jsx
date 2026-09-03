@@ -67,6 +67,17 @@ function patientIdentity(name, row) {
   return `${name}${id ? ` (#${id})` : ''}${demographics ? `, ${demographics}` : ''}`;
 }
 
+function clinicalMedicines(treatmentData = {}) {
+  if (Array.isArray(treatmentData.medicines)) {
+    return treatmentData.medicines.filter((item) => item?.medicine);
+  }
+  return String(treatmentData.medicine ?? '').split(',').map((medicine, index) => ({
+    medicine: medicine.trim(),
+    dose: String(treatmentData.dose ?? '').split(',')[index]?.trim() ?? '',
+    timing: String(treatmentData.timing ?? '').split(',')[index]?.trim() ?? '',
+  })).filter((item) => item.medicine);
+}
+
 function clientVisitDate(row) {
   if (Array.isArray(row)) return row.length >= 8 ? row[3] ?? '' : '';
   return row?.visitDate ?? row?.['Visit Date'] ?? row?.createdAt ?? row?.date ?? '';
@@ -395,6 +406,52 @@ function SearchablePresetInput({ label, value, options, onChange, onSelect, onCo
   );
 }
 
+function ClinicalAutocompleteTextarea({ label, value, options, onChange, rows }) {
+  const [focused, setFocused] = useState(false);
+  const currentLine = String(value ?? '').split('\n').at(-1)?.trim() ?? '';
+  const query = currentLine.toLowerCase();
+  const matches = query
+    ? options.filter((option) => option.toLowerCase().includes(query) && option.toLowerCase() !== query).slice(0, 7)
+    : [];
+
+  const selectOption = (option) => {
+    const lines = String(value ?? '').split('\n');
+    lines[lines.length - 1] = option;
+    onChange(lines.join('\n'));
+    setFocused(false);
+  };
+
+  return (
+    <label className="field-block full-field clinical-autocomplete">
+      <span>{label}</span>
+      <textarea
+        className="lead-input clinical-textarea"
+        rows={rows}
+        value={value}
+        onChange={(event) => { onChange(event.target.value); setFocused(true); }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setFocused(false);
+          if (event.key === 'Enter' && matches[0] && !event.shiftKey) {
+            event.preventDefault();
+            selectOption(matches[0]);
+          }
+        }}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={focused && Boolean(query)}
+        aria-autocomplete="list"
+      />
+      {focused && query && (
+        <div className="clinical-autocomplete-results" role="listbox">
+          {matches.map((option) => <button type="button" role="option" key={option} onMouseDown={(event) => event.preventDefault()} onClick={() => selectOption(option)}>{option}</button>)}
+        </div>
+      )}
+    </label>
+  );
+}
+
 function MedicineSearchInput({ index, value, catalog, onChange, onSelect, onAdd }) {
   const [focused, setFocused] = useState(false);
   const query = String(value ?? '').trim().toLowerCase();
@@ -686,13 +743,21 @@ export function ClientJourneyPage() {
       visitDate: visit.visitDate,
     })) : []
   )).sort((a, b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''))), [journeyVisits]);
-  const clinicalPreviewMedicines = Array.isArray(journey.treatmentData?.medicines)
-    ? journey.treatmentData.medicines.filter((item) => item?.medicine)
-    : String(journey.treatmentData?.medicine ?? '').split(',').map((medicine, index) => ({
-      medicine: medicine.trim(),
-      dose: String(journey.treatmentData?.dose ?? '').split(',')[index]?.trim() ?? '',
-      timing: String(journey.treatmentData?.timing ?? '').split(',')[index]?.trim() ?? '',
-    })).filter((item) => item.medicine);
+  const selectedClinicalPrintVisits = useMemo(() => journeyVisits
+    .filter((visit) => clinicalPrintVisitIds.includes(visit.id))
+    .sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate))), [journeyVisits, clinicalPrintVisitIds]);
+  const consultationSuggestions = useMemo(() => {
+    const collectLines = (value) => String(value ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
+    const allVisits = Object.values(journeys).flatMap((record) => normalizeJourneyRecord(record).visits);
+    const optionsFor = (field) => {
+      const values = [
+        ...allVisits.map((visit) => visit.consultationData?.[field]),
+        ...consultationTemplates.map((template) => template?.[field]),
+      ].flatMap(collectLines);
+      return [...new Map(values.map((item) => [item.toLocaleLowerCase(), item])).values()];
+    };
+    return { complaint: optionsFor('complaint'), notes: optionsFor('notes') };
+  }, [journeys, consultationTemplates]);
   useEffect(() => {
     const record = normalizeJourneyRecord(journeys[selectedClient]);
     setSelectedVisitId(record.activeVisitId || record.visits.at(-1)?.id || '');
@@ -1128,13 +1193,7 @@ export function ClientJourneyPage() {
       const followupData = visit.followupData ?? {};
       const paymentData = visit.paymentData ?? {};
       const pregnancyHistory = Array.isArray(visit.pregnancyHistory) ? visit.pregnancyHistory : [];
-      const selectedMedicines = Array.isArray(treatmentData.medicines)
-        ? treatmentData.medicines
-        : String(treatmentData.medicine ?? '').split(',').map((medicine, index) => ({
-          medicine: medicine.trim(),
-          dose: String(treatmentData.dose ?? '').split(',')[index]?.trim() ?? '',
-          timing: String(treatmentData.timing ?? '').split(',')[index]?.trim() ?? '',
-        })).filter((item) => item.medicine);
+      const selectedMedicines = clinicalMedicines(treatmentData);
       const visitTitle = `${formatResponseDate(visit.visitDate) || 'Undated visit'} · ${visit.appointmentData?.time || 'Time not recorded'} · ${visit.appointmentData?.type || 'Patient visit'}`;
       return `<div class="visit-summary"><h1>${escapePrintHtml(visitTitle)}</h1>${[
         clinicalPrintSections.symptoms && section('Presenting Complaints', `<p>${escapePrintHtml(consultationData.complaint || 'Not recorded')}</p>`),
@@ -1435,19 +1494,31 @@ export function ClientJourneyPage() {
               </div>
               <div className="clinical-print-preview" aria-live="polite">
                 <div className="clinical-preview-header"><div><strong>{clinicalPrintTitle || 'Clinical Summary'}</strong><span>Mom&apos;s Pathshala</span></div><small>Print preview</small></div>
-                <div className="clinical-preview-section"><strong>Selected Journey Dates</strong><p>{journeyVisits.filter((visit) => clinicalPrintVisitIds.includes(visit.id)).sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate))).map((visit) => `${formatResponseDate(visit.visitDate)} · ${visit.appointmentData?.time || 'Time not recorded'} · ${visit.appointmentData?.type || 'Patient visit'}`).join('\n') || 'Select at least one journey date.'}</p></div>
+                <div className="clinical-preview-section"><strong>Selected Journey Dates</strong><p>{selectedClinicalPrintVisits.map((visit) => `${formatResponseDate(visit.visitDate)} · ${visit.appointmentData?.time || 'Time not recorded'} · ${visit.appointmentData?.type || 'Patient visit'}`).join('\n') || 'Select at least one journey date.'}</p></div>
                 {clinicalPrintSections.patient && <div className="clinical-preview-section"><strong>{patientIdentity(selectedClient, selectedClientRecord)}</strong><p>{clientMobile(selectedClientRecord) || 'Mobile not saved'} · {new Date().toLocaleDateString('en-GB').replaceAll('/', '-')}</p></div>}
-                {clinicalPrintSections.symptoms && <div className="clinical-preview-section"><strong>Presenting Complaints</strong><p>{journey.consultationData?.complaint || 'Not recorded'}</p></div>}
-                {clinicalPrintSections.vitals && <div className="clinical-preview-section"><strong>Vitals</strong><p>{journey.consultationData?.vitals || 'Not recorded'}</p></div>}
-                {clinicalPrintSections.diagnosis && <div className="clinical-preview-section"><strong>Diagnosis</strong><p>{journey.consultationData?.diagnosis || 'Not recorded'}</p></div>}
-                {clinicalPrintSections.investigation && <div className="clinical-preview-section"><strong>Investigation</strong>{clinicalListItems(journey.consultationData?.investigation).length ? <ul className="clinical-preview-list">{clinicalListItems(journey.consultationData?.investigation).map((item) => <li key={item}>{item}</li>)}</ul> : <p>Not recorded</p>}</div>}
-                {clinicalPrintSections.history && <div className="clinical-preview-section"><strong>History &amp; Examination</strong><p>{journey.consultationData?.notes || 'Not recorded'}</p></div>}
-                {clinicalPrintSections.doctorNotes && <div className="clinical-preview-section"><strong>Doctor Notes</strong><p>{journey.consultationData?.doctorNotes || 'Not recorded'}</p></div>}
-                {clinicalPrintSections.pregnancyHistory && <div className="clinical-preview-section"><strong>Pregnancy / Garbhsanskar History</strong><p>{Array.isArray(journey.pregnancyHistory) && journey.pregnancyHistory.length ? journey.pregnancyHistory.map((entry) => `${formatResponseDate(entry.date)} · ${entry.pregnancyStage || 'Stage not recorded'}\n${entry.gynecAdvice || entry.garbhsanskarAdvice || 'No advice recorded'}`).join('\n\n') : 'Not recorded'}</p></div>}
-                {clinicalPrintSections.treatment && <div className="clinical-preview-section"><strong>Treatment Plan</strong><p>{[journey.treatmentData?.service, journey.treatmentData?.goal, journey.treatmentData?.duration].filter(Boolean).join(' · ') || 'Not recorded'}</p></div>}
-                {clinicalPrintSections.medicines && <div className="clinical-preview-section"><strong>Medicines, Dose & Timing</strong>{clinicalPreviewMedicines.length ? <div className="clinical-preview-medicine-list" role="table" aria-label="Selected medicines">{clinicalPreviewMedicines.map((item, index) => <div className="clinical-preview-medicine-row" role="row" key={`${item.medicine}-${index}`}><b aria-label={`Medicine ${index + 1}`}>{index + 1}</b><span role="cell"><strong>{item.medicine}</strong><small>{item.dose || 'Dose not recorded'} · {item.timing || 'Timing not recorded'}</small></span></div>)}</div> : <p>No medicines recorded</p>}</div>}
-                {clinicalPrintSections.followup && <div className="clinical-preview-section"><strong>Next Follow-up</strong><p>{journey.followupData?.date ? `${journey.followupData.date} · ${journey.followupData.time || 'Time pending'}` : 'Not scheduled'}</p></div>}
-                {clinicalPrintSections.payment && <div className="clinical-preview-section"><strong>Payment Details</strong><p>{journey.paymentData?.amount ? `₹ ${journey.paymentData.amount} · ${journey.paymentData.status || ''}` : 'Not recorded'}</p></div>}
+                {selectedClinicalPrintVisits.map((visit) => {
+                  const consultationData = visit.consultationData ?? {};
+                  const treatmentData = visit.treatmentData ?? {};
+                  const followupData = visit.followupData ?? {};
+                  const paymentData = visit.paymentData ?? {};
+                  const pregnancyHistory = Array.isArray(visit.pregnancyHistory) ? visit.pregnancyHistory : [];
+                  const medicines = clinicalMedicines(treatmentData);
+                  const visitTitle = `${formatResponseDate(visit.visitDate)} · ${visit.appointmentData?.time || 'Time not recorded'} · ${visit.appointmentData?.type || 'Patient visit'}`;
+                  return <div className="clinical-preview-visit" key={visit.id}>
+                    <h3>{visitTitle}</h3>
+                    {clinicalPrintSections.symptoms && <div className="clinical-preview-section"><strong>Presenting Complaints</strong><p>{consultationData.complaint || 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.vitals && <div className="clinical-preview-section"><strong>Vitals</strong><p>{consultationData.vitals || 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.diagnosis && <div className="clinical-preview-section"><strong>Diagnosis</strong><p>{consultationData.diagnosis || 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.investigation && <div className="clinical-preview-section"><strong>Investigation</strong>{clinicalListItems(consultationData.investigation).length ? <ul className="clinical-preview-list">{clinicalListItems(consultationData.investigation).map((item, index) => <li key={`${visit.id}-investigation-${index}`}>{item}</li>)}</ul> : <p>Not recorded</p>}</div>}
+                    {clinicalPrintSections.history && <div className="clinical-preview-section"><strong>History &amp; Examination</strong><p>{consultationData.notes || 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.doctorNotes && <div className="clinical-preview-section"><strong>Doctor Notes</strong><p>{consultationData.doctorNotes || 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.pregnancyHistory && <div className="clinical-preview-section"><strong>Pregnancy / Garbhsanskar History</strong><p>{pregnancyHistory.length ? pregnancyHistory.map((entry) => `${formatResponseDate(entry.date)} · ${entry.pregnancyStage || 'Stage not recorded'}\n${entry.gynecAdvice || entry.garbhsanskarAdvice || 'No advice recorded'}`).join('\n\n') : 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.treatment && <div className="clinical-preview-section"><strong>Treatment Plan</strong><p>{[treatmentData.service, treatmentData.goal, treatmentData.duration, treatmentData.status].filter(Boolean).join(' · ') || 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.medicines && <div className="clinical-preview-section"><strong>Medicines, Dose &amp; Timing</strong>{medicines.length ? <div className="clinical-preview-medicine-list" role="table" aria-label={`Medicines for ${visitTitle}`}>{medicines.map((item, index) => <div className="clinical-preview-medicine-row" role="row" key={`${visit.id}-${item.medicine}-${index}`}><b aria-label={`Medicine ${index + 1}`}>{index + 1}</b><span role="cell"><strong>{item.medicine}</strong><small>{item.dose || 'Dose not recorded'} · {item.timing || 'Timing not recorded'}</small></span></div>)}</div> : <p>No medicines recorded</p>}</div>}
+                    {clinicalPrintSections.followup && <div className="clinical-preview-section"><strong>Next Follow-up</strong><p>{followupData.date ? `${followupData.date} · ${followupData.time || 'Time pending'}${followupData.notes ? ` · ${followupData.notes}` : ''}` : 'Not scheduled'}</p></div>}
+                    {clinicalPrintSections.payment && <div className="clinical-preview-section"><strong>Payment Details</strong><p>{paymentData.amount ? `₹ ${paymentData.amount} · ${paymentData.status || 'Status not recorded'}` : 'Not recorded'}</p></div>}
+                  </div>;
+                })}
                 {clinicalPrintNote.trim() && <div className="clinical-preview-section"><strong>Additional Instructions</strong><p>{clinicalPrintNote}</p></div>}
                 {!Object.values(clinicalPrintSections).some(Boolean) && !clinicalPrintNote.trim() && <div className="empty-state compact-empty"><strong>No sections selected.</strong><p>Select at least one item to create a useful patient print.</p></div>}
               </div>
@@ -1544,8 +1615,8 @@ export function ClientJourneyPage() {
                 <label className="field-block"><span>Template Name</span><input className="lead-input" value={consultationTemplateName} onChange={(event) => setConsultationTemplateName(event.target.value)} placeholder="e.g. Diabetes Follow-up" /></label>
                 <button className="pill" type="button" disabled={!consultationTemplateName.trim()} onClick={saveConsultationTemplate}>Save Template</button>
               </div>
-              <label className="field-block full-field"><span>Presenting Complaints</span><textarea className="lead-input clinical-textarea" rows="7" value={consultation.complaint} onChange={(event) => setConsultation((current) => ({ ...current, complaint: event.target.value }))} placeholder={'Enter each presenting complaint on a new line...\ne.g. Dimness of vision\nBE'} /></label>
-              <label className="field-block full-field"><span>History &amp; Examination</span><textarea className="lead-input clinical-textarea" rows="8" value={consultation.notes} onChange={(event) => setConsultation((current) => ({ ...current, notes: event.target.value }))} placeholder={'Enter history and examination findings line by line...\ne.g. Using glasses\nNuclear cataract BE'} /></label>
+              <ClinicalAutocompleteTextarea label="Presenting Complaints" rows="7" value={consultation.complaint} options={consultationSuggestions.complaint} onChange={(complaint) => setConsultation((current) => ({ ...current, complaint }))} />
+              <ClinicalAutocompleteTextarea label="History & Examination" rows="8" value={consultation.notes} options={consultationSuggestions.notes} onChange={(notes) => setConsultation((current) => ({ ...current, notes }))} />
               <SearchablePresetInput label="Vitals" value={consultation.vitals} options={VITAL_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, vitals: value }))} placeholder="Search or enter measured vitals" />
               <SearchablePresetInput label="Diagnosis" value={consultation.diagnosis} options={DIAGNOSIS_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, diagnosis: value }))} placeholder="Type 1-2 keywords, e.g. diabetes" />
               <label className="field-block full-field"><span>Investigation</span><textarea className="lead-input" rows="3" value={consultation.investigation ?? ''} onChange={(event) => setConsultation((current) => ({ ...current, investigation: event.target.value }))} placeholder="Optional investigation, lab test, imaging, report, or any note..." /></label>
