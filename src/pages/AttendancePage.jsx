@@ -123,18 +123,28 @@ function downloadCsv(sessions) {
 export function AttendancePage() {
   const { branchKey } = useBranch();
   const sessionsKey = branchKey('attendance-sessions:v1');
+  const formsKey = branchKey('attendance-forms:v1');
   const patientsKey = branchKey('ayurflow-clients:rows:v3');
   const [sessions, setSessions] = useState(() => loadValue(sessionsKey, []));
+  const [attendanceForms, setAttendanceForms] = useState(() => loadValue(formsKey, []));
   const [sessionForm, setSessionForm] = useState(() => ({ title: '', group: 'Students', date: localDate(), time: localTime(), mode: 'Offline', zoomLink: '', minimumMinutes: 20, notes: '' }));
   const [roster, setRoster] = useState([]);
   const [newMember, setNewMember] = useState({ name: '', mobile: '' });
   const [search, setSearch] = useState('');
-  const [message, setMessage] = useState('Create a session and mark attendance.');
+  const [message, setMessage] = useState('');
   const [publicForm, setPublicForm] = useState(null);
   const [publishing, setPublishing] = useState(false);
+  const [selectedAttendanceForm, setSelectedAttendanceForm] = useState(null);
+  const [editingAttendanceForm, setEditingAttendanceForm] = useState(null);
   const zoomCsvInputRef = useRef(null);
+  const sessionCardRef = useRef(null);
 
   const patients = useMemo(() => loadValue(patientsKey, []).map(patientDetails).filter((patient) => patient.name), [patientsKey]);
+  const patientMatches = useMemo(() => {
+    const query = `${newMember.name} ${newMember.mobile}`.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (query.length < 2) return [];
+    return patients.filter((patient) => `${patient.name} ${patient.mobile}`.toLowerCase().includes(query)).slice(0, 6);
+  }, [newMember, patients]);
   const filteredSessions = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return sessions;
@@ -150,14 +160,21 @@ export function AttendancePage() {
   }, [sessions, sessionsKey]);
 
   useEffect(() => {
-    const refresh = () => setSessions(loadValue(sessionsKey, []));
+    try { window.localStorage.setItem(formsKey, JSON.stringify(attendanceForms)); } catch { setMessage('Attendance forms could not be saved. Browser storage is unavailable.'); }
+  }, [attendanceForms, formsKey]);
+
+  useEffect(() => {
+    const refresh = () => {
+      setSessions(loadValue(sessionsKey, []));
+      setAttendanceForms(loadValue(formsKey, []));
+    };
     window.addEventListener('storage', refresh);
     window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
     return () => {
       window.removeEventListener('storage', refresh);
       window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
     };
-  }, [sessionsKey]);
+  }, [formsKey, sessionsKey]);
 
   useEffect(() => {
     if (!publicForm?.slug) return;
@@ -193,6 +210,23 @@ export function AttendancePage() {
 
   const updateRecord = (id, key, value) => setRoster((current) => current.map((record) => record.id === id ? { ...record, [key]: value } : record));
   const markEveryone = (status) => setRoster((current) => current.map((record) => ({ ...record, status })));
+
+  const blankAttendanceForm = () => ({ id: `attendance_form_${Date.now()}`, title: '', group: 'Students', mode: 'Offline', notes: '', zoomLink: '', minimumMinutes: 20 });
+  const saveAttendanceForm = () => {
+    const title = editingAttendanceForm?.title?.trim();
+    if (!title) return;
+    const form = { ...editingAttendanceForm, title, updatedAt: new Date().toISOString() };
+    setAttendanceForms((current) => [form, ...current.filter((item) => item.id !== form.id)]);
+    setEditingAttendanceForm(null);
+    setMessage(`${title} attendance form saved.`);
+  };
+  const startMarkingAttendance = (form) => {
+    setSessionForm((current) => ({ ...current, title: form.title, group: form.group, mode: form.mode, notes: form.notes || '', zoomLink: form.zoomLink || '', minimumMinutes: form.minimumMinutes || 20, date: localDate(), time: localTime() }));
+    setRoster([]);
+    setSelectedAttendanceForm(null);
+    setMessage(`${form.title} selected. Add members and mark attendance.`);
+    window.requestAnimationFrame(() => sessionCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
 
   const importZoomAttendance = async (file) => {
     if (!file) return;
@@ -278,8 +312,16 @@ export function AttendancePage() {
         </div>
       </div>
 
-      <div className="action-note" role="status">{message}</div>
-      <Card title="New Attendance Session" subtitle="Set the class details, build the roster, then mark and save attendance.">
+      {message && <div className="action-note attendance-message" role="status"><span>{message}</span><button type="button" aria-label="Dismiss message" onClick={() => setMessage('')}>×</button></div>}
+      <Card title="Attendance Forms" subtitle="Choose a form to edit it or start marking attendance." action={<button className="pill primary-action" type="button" onClick={() => setEditingAttendanceForm(blankAttendanceForm())}>Create form</button>}>
+        <div className="attendance-form-grid">
+          {attendanceForms.map((form) => <button className="attendance-form-card" type="button" key={form.id} onClick={() => setSelectedAttendanceForm(form)}><span className="attendance-form-icon" aria-hidden="true">✓</span><span><strong>{form.title}</strong><small>{form.group} · {form.mode}</small>{form.notes && <small>{form.notes}</small>}</span><b aria-hidden="true">›</b></button>)}
+          {!attendanceForms.length && <div className="empty-state compact-empty attendance-forms-empty"><strong>No attendance forms yet</strong><p>Create forms for different batches, classes or patient groups.</p><button className="pill" type="button" onClick={() => setEditingAttendanceForm(blankAttendanceForm())}>Create first form</button></div>}
+        </div>
+      </Card>
+
+      <div ref={sessionCardRef}>
+      <Card title="Mark Attendance" subtitle="Choose a saved form above or enter one-time session details.">
         <div className="attendance-session-form">
           <label className="field-block"><span>Class / Session name *</span><input className="lead-input" value={sessionForm.title} onChange={(event) => setSessionForm((current) => ({ ...current, title: event.target.value }))} placeholder="e.g. Garbhasanskar Batch A" /></label>
           <label className="field-block"><span>Attendance for</span><select className="lead-input" value={sessionForm.group} onChange={(event) => setSessionForm((current) => ({ ...current, group: event.target.value }))}><option>Students</option><option>Patients</option><option>Mixed Group</option></select></label>
@@ -287,28 +329,36 @@ export function AttendancePage() {
           <label className="field-block"><span>Time</span><input className="lead-input" type="time" value={sessionForm.time} onChange={(event) => setSessionForm((current) => ({ ...current, time: event.target.value }))} /></label>
           <label className="field-block"><span>Mode</span><select className="lead-input" value={sessionForm.mode} onChange={(event) => setSessionForm((current) => ({ ...current, mode: event.target.value }))}><option>Offline</option><option>Online</option><option>Hybrid</option></select></label>
           <label className="field-block"><span>Session notes</span><input className="lead-input" value={sessionForm.notes} onChange={(event) => setSessionForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Topic, teacher, or batch note" /></label>
-          <label className="field-block attendance-zoom-link"><span>Zoom Meeting Link</span><div className="attendance-link-input"><input className="lead-input" type="url" value={sessionForm.zoomLink} onChange={(event) => setSessionForm((current) => ({ ...current, zoomLink: event.target.value, mode: event.target.value ? 'Online' : current.mode }))} placeholder="https://zoom.us/j/..." /><button className="pill" type="button" disabled={!validZoomUrl(sessionForm.zoomLink)} onClick={() => window.open(sessionForm.zoomLink, '_blank', 'noopener,noreferrer')}>Open Zoom</button></div></label>
-          <label className="field-block"><span>Minimum minutes for Present</span><input className="lead-input" type="number" min="1" value={sessionForm.minimumMinutes} onChange={(event) => setSessionForm((current) => ({ ...current, minimumMinutes: event.target.value }))} /><small className="field-help">Less time is marked Late; no Zoom match is marked Absent.</small></label>
         </div>
 
-        <div className="attendance-public-builder">
-          <div><strong>Shareable Attendance Form</strong><span>Create a link that anyone can open. A submitted response is automatically marked Present in this session.</span></div>
-          {!publicForm ? (
-            <button className="pill primary-action" type="button" disabled={publishing || !sessionForm.title.trim()} onClick={createPublicAttendanceForm}>{publishing ? 'Creating...' : 'Create Public Form'}</button>
-          ) : (
-            <div className="attendance-public-link"><input className="lead-input" readOnly value={publicUrl} aria-label="Public attendance link" /><button className="pill" type="button" onClick={copyPublicUrl}>Copy Link</button><a className="pill" href={publicUrl} target="_blank" rel="noreferrer">Open Form</a></div>
-          )}
-        </div>
+        <details className="attendance-advanced">
+          <summary><span><strong>Online & sharing options</strong><small>Zoom import and public self check-in</small></span></summary>
+          <div className="attendance-advanced-content">
+            <div className="attendance-online-grid">
+              <label className="field-block attendance-zoom-link"><span>Zoom meeting link</span><div className="attendance-link-input"><input className="lead-input" type="url" value={sessionForm.zoomLink} onChange={(event) => setSessionForm((current) => ({ ...current, zoomLink: event.target.value, mode: event.target.value ? 'Online' : current.mode }))} placeholder="https://zoom.us/j/..." /><button className="pill" type="button" disabled={!validZoomUrl(sessionForm.zoomLink)} onClick={() => window.open(sessionForm.zoomLink, '_blank', 'noopener,noreferrer')}>Open</button></div></label>
+              <label className="field-block"><span>Present after</span><div className="attendance-minutes-input"><input className="lead-input" type="number" min="1" value={sessionForm.minimumMinutes} onChange={(event) => setSessionForm((current) => ({ ...current, minimumMinutes: event.target.value }))} /><span>minutes</span></div><small className="field-help">Shorter joins are marked Late.</small></label>
+            </div>
+            <div className="attendance-public-builder">
+              <div><strong>Public self check-in</strong><span>Create a shareable link. Each submission is marked Present.</span></div>
+              {!publicForm ? (
+                <button className="pill" type="button" disabled={publishing || !sessionForm.title.trim()} onClick={createPublicAttendanceForm}>{publishing ? 'Creating…' : 'Create link'}</button>
+              ) : (
+                <div className="attendance-public-link"><input className="lead-input" readOnly value={publicUrl} aria-label="Public attendance link" /><button className="pill" type="button" onClick={copyPublicUrl}>Copy</button><a className="pill" href={publicUrl} target="_blank" rel="noreferrer">Open</a></div>
+              )}
+            </div>
+          </div>
+        </details>
 
         <div className="attendance-roster-tools">
           <div><strong>Attendance Roster</strong><span>{roster.length} member{roster.length === 1 ? '' : 's'} · {currentPresent} present</span></div>
-          <div className="card-action-group"><input ref={zoomCsvInputRef} className="hidden-file-input" type="file" accept=".csv,text/csv" onChange={(event) => { importZoomAttendance(event.target.files?.[0]); event.target.value = ''; }} /><button className="pill" type="button" onClick={importPatients} disabled={!patients.length}>Import Patients</button><button className="pill" type="button" disabled={!roster.length} onClick={() => zoomCsvInputRef.current?.click()}>Import Zoom CSV</button><button className="pill" type="button" disabled={!roster.length} onClick={() => markEveryone('Present')}>Mark all Present</button><button className="pill" type="button" disabled={!roster.length} onClick={() => markEveryone('Absent')}>Mark all Absent</button></div>
+          <div className="card-action-group"><input ref={zoomCsvInputRef} className="hidden-file-input" type="file" accept=".csv,text/csv" onChange={(event) => { importZoomAttendance(event.target.files?.[0]); event.target.value = ''; }} /><button className="pill" type="button" onClick={importPatients} disabled={!patients.length}>Import patients</button><button className="pill" type="button" disabled={!roster.length} onClick={() => zoomCsvInputRef.current?.click()}>Import Zoom CSV</button><button className="pill" type="button" disabled={!roster.length} onClick={() => markEveryone('Present')}>All present</button><button className="pill" type="button" disabled={!roster.length} onClick={() => markEveryone('Absent')}>All absent</button></div>
         </div>
 
         <div className="attendance-add-member">
-          <input className="lead-input" value={newMember.name} onChange={(event) => setNewMember((current) => ({ ...current, name: event.target.value }))} placeholder="Student / patient name" />
-          <input className="lead-input" type="tel" value={newMember.mobile} onChange={(event) => setNewMember((current) => ({ ...current, mobile: event.target.value }))} placeholder="Mobile (optional)" />
-          <button className="pill" type="button" disabled={!newMember.name.trim()} onClick={() => addMember()}>+ Add to Roster</button>
+          <label className="sr-only" htmlFor="attendance-member-name">Student or patient name</label><input id="attendance-member-name" className="lead-input" value={newMember.name} onChange={(event) => setNewMember((current) => ({ ...current, name: event.target.value }))} placeholder="Student or patient name" onKeyDown={(event) => { if (event.key === 'Enter' && newMember.name.trim()) addMember(); }} />
+          <label className="sr-only" htmlFor="attendance-member-mobile">Mobile number</label><input id="attendance-member-mobile" className="lead-input" type="tel" value={newMember.mobile} onChange={(event) => setNewMember((current) => ({ ...current, mobile: event.target.value }))} placeholder="Mobile (optional)" />
+          <button className="pill" type="button" disabled={!newMember.name.trim()} onClick={() => addMember()}>Add member</button>
+          {patientMatches.length > 0 && <div className="attendance-patient-results" role="listbox" aria-label="Matching patients">{patientMatches.map((patient) => <button type="button" role="option" key={patient.id || `${patient.name}-${patient.mobile}`} onClick={() => addMember(patient, 'Patient')}><span><strong>{patient.name}</strong><small>{patient.mobile || 'No mobile number'}</small></span><b>Add</b></button>)}</div>}
         </div>
 
         <div className="attendance-roster">
@@ -321,10 +371,11 @@ export function AttendancePage() {
               <button className="icon-btn" type="button" onClick={() => setRoster((current) => current.filter((item) => item.id !== record.id))} aria-label={`Remove ${record.name}`}>x</button>
             </div>
           ))}
-          {!roster.length && <div className="empty-state compact-empty"><strong>Roster is empty.</strong><p>Add students manually or import registered patients.</p></div>}
+          {!roster.length && <div className="empty-state compact-empty"><strong>No one added yet</strong><p>Enter a name above or import registered patients.</p></div>}
         </div>
-        <div className="attendance-save-bar"><span>{roster.length ? `${currentPresent} present · ${roster.length - currentPresent} other` : 'No attendance marked yet'}</span><button className="pill primary-action" type="button" onClick={saveSession}>Save Attendance</button></div>
+        <div className="attendance-save-bar"><span>{roster.length ? `${currentPresent} present · ${roster.length - currentPresent} other` : 'Add at least one member to continue'}</span><button className="pill primary-action" type="button" disabled={!sessionForm.title.trim() || !roster.length} onClick={saveSession}>Save attendance</button></div>
       </Card>
+      </div>
 
       <Card title="Attendance History" subtitle="Search previous sessions and review every marked record." action={<button className="pill" type="button" disabled={!sessions.length} onClick={() => downloadCsv(sessions)}>Export CSV</button>}>
         <input className="lead-input attendance-history-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by session, student, patient, date, or mode..." />
@@ -340,6 +391,10 @@ export function AttendancePage() {
           {!filteredSessions.length && <div className="empty-state compact-empty"><strong>No attendance sessions found.</strong><p>Saved sessions will appear here date-wise.</p></div>}
         </div>
       </Card>
+
+      {selectedAttendanceForm && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedAttendanceForm(null)}><div className="modal-shell modal-small attendance-form-action-modal" role="dialog" aria-modal="true" aria-labelledby="attendance-form-action-title" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2 id="attendance-form-action-title">{selectedAttendanceForm.title}</h2><p>{selectedAttendanceForm.group} · {selectedAttendanceForm.mode}</p></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setSelectedAttendanceForm(null)}>×</button></div><div className="attendance-form-actions"><button type="button" onClick={() => { setEditingAttendanceForm({ ...selectedAttendanceForm }); setSelectedAttendanceForm(null); }}><span aria-hidden="true">✎</span><strong>Edit form</strong><small>Change name, group, mode and online options</small></button><button type="button" onClick={() => startMarkingAttendance(selectedAttendanceForm)}><span aria-hidden="true">✓</span><strong>Mark attendance</strong><small>Open today&apos;s roster and mark members</small></button></div></div></div>}
+
+      {editingAttendanceForm && <div className="modal-backdrop" role="presentation" onClick={() => setEditingAttendanceForm(null)}><div className="modal-shell attendance-form-editor" role="dialog" aria-modal="true" aria-labelledby="attendance-form-editor-title" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2 id="attendance-form-editor-title">{attendanceForms.some((item) => item.id === editingAttendanceForm.id) ? 'Edit attendance form' : 'Create attendance form'}</h2><p>Save reusable settings for a batch, class or patient group.</p></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setEditingAttendanceForm(null)}>×</button></div><div className="modal-body attendance-form-editor-grid"><label className="field-block full-field"><span>Form name *</span><input className="lead-input" autoFocus value={editingAttendanceForm.title} onChange={(event) => setEditingAttendanceForm((current) => ({ ...current, title: event.target.value }))} placeholder="e.g. Garbhasanskar Morning Batch" /></label><label className="field-block"><span>Attendance for</span><select className="lead-input" value={editingAttendanceForm.group} onChange={(event) => setEditingAttendanceForm((current) => ({ ...current, group: event.target.value }))}><option>Students</option><option>Patients</option><option>Mixed Group</option></select></label><label className="field-block"><span>Default mode</span><select className="lead-input" value={editingAttendanceForm.mode} onChange={(event) => setEditingAttendanceForm((current) => ({ ...current, mode: event.target.value }))}><option>Offline</option><option>Online</option><option>Hybrid</option></select></label><label className="field-block full-field"><span>Default notes</span><textarea className="lead-input" rows="3" value={editingAttendanceForm.notes} onChange={(event) => setEditingAttendanceForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Teacher, topic, location or instructions" /></label><label className="field-block"><span>Zoom meeting link</span><input className="lead-input" type="url" value={editingAttendanceForm.zoomLink} onChange={(event) => setEditingAttendanceForm((current) => ({ ...current, zoomLink: event.target.value }))} placeholder="https://zoom.us/j/..." /></label><label className="field-block"><span>Present after (minutes)</span><input className="lead-input" type="number" min="1" value={editingAttendanceForm.minimumMinutes} onChange={(event) => setEditingAttendanceForm((current) => ({ ...current, minimumMinutes: event.target.value }))} /></label></div><div className="modal-actions"><button className="pill" type="button" onClick={() => setEditingAttendanceForm(null)}>Cancel</button><button className="pill primary-action" type="button" disabled={!editingAttendanceForm.title.trim()} onClick={saveAttendanceForm}>Save form</button></div></div></div>}
     </section>
   );
 }
