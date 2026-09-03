@@ -80,6 +80,26 @@ function dateTimeValue(date, time = '') {
   return Number.isFinite(value) ? value : 0;
 }
 
+function localDateKey(date = new Date()) {
+  const value = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(value.getTime())) return '';
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Reception priority keeps today's work first. Future appointments remain at
+// the bottom until their date arrives, while completed/past visits follow today.
+function journeyPriority(date, time = '', today = localDateKey()) {
+  const dateKey = String(date ?? '').slice(0, 10);
+  const value = dateTimeValue(dateKey, time);
+  if (!dateKey || !value) return { group: 3, value: 0 };
+  if (dateKey === today) return { group: 0, value };
+  if (dateKey < today) return { group: 1, value };
+  return { group: 2, value };
+}
+
 function formatJourneyDateTime(date, time = '') {
   const value = dateTimeValue(date, time);
   if (!value) return 'No visit yet';
@@ -175,6 +195,7 @@ const STAGES = [
   ['appointment', 'Appointment'],
   ['consultation', 'Doctor Consultation'],
   ['treatment', 'Treatment Plan'],
+  ['diet', 'Diet Plan (Optional)'],
   ['billing', 'Invoice & Payment'],
   ['followup', 'Next Follow-up'],
   ['forms', 'Required Forms'],
@@ -198,6 +219,29 @@ const QUICK_CONSULTATIONS = [
   { label: 'Acidity', complaint: 'Acidity, Bloating, Poor appetite', diagnosis: 'Digestive disorder', notes: 'Hydration and sleep guidance given', vitals: 'Vitals stable' },
   { label: 'Hair fall', complaint: 'Hair fall, Stress', diagnosis: 'Hair disorder', notes: 'Review after 30 days', vitals: 'Vitals stable' },
 ];
+
+const DEFAULT_DIET_MEALS = [
+  { time: '07:00', meal: 'Warm water', food: 'Lemon water / methi water', notes: 'Start hydration' },
+  { time: '08:30', meal: 'Breakfast', food: 'Protein breakfast + fruit', notes: 'Avoid sugar' },
+  { time: '13:30', meal: 'Lunch', food: 'Roti/rice + dal + sabzi + salad', notes: 'Balanced plate' },
+  { time: '20:00', meal: 'Dinner', food: 'Soup / khichdi / protein + vegetables', notes: 'Finish early' },
+];
+
+function newDietPlan(client = '') {
+  return {
+    id: `diet-plan-${Date.now()}`,
+    client,
+    service: 'Diet Counseling',
+    goal: 'Fat loss',
+    duration: '30 days',
+    planDate: currentSlot().date,
+    weekLabel: '',
+    calories: '',
+    water: '2.5-3 L',
+    instructions: 'Sleep 7 hours, walk daily, avoid sugar and fried food.',
+    meals: DEFAULT_DIET_MEALS.map((meal) => ({ ...meal })),
+  };
+}
 
 const PRINT_SECTION_OPTIONS = [
   ['patient', 'Patient Details'],
@@ -412,6 +456,7 @@ export function ClientJourneyPage() {
   const paymentsKey = branchKey('ayurflow-payments:rows:v3');
   const operationsKey = branchKey('Operations:tabs:v3');
   const treatmentTemplatesKey = branchKey('treatment-templates:v2');
+  const dietPlansKey = branchKey('diet-plans:v1');
   const journeysKey = branchKey('client-journeys:v1');
   const consultationTemplatesKey = branchKey('consultation-templates:v1');
   const clinicalPrintTemplatesKey = branchKey('clinical-print-templates:v1');
@@ -421,6 +466,7 @@ export function ClientJourneyPage() {
   const [selectedClient, setSelectedClient] = useState(() => searchParams.get('client') ?? '');
   const [selectedVisitId, setSelectedVisitId] = useState('');
   const [search, setSearch] = useState('');
+  const [todayKey, setTodayKey] = useState(() => localDateKey());
   const [consultationOpen, setConsultationOpen] = useState(false);
   const [consultation, setConsultation] = useState({ complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
   const [consultationTemplates, setConsultationTemplates] = useState(() => loadValue(consultationTemplatesKey, []));
@@ -449,6 +495,7 @@ export function ClientJourneyPage() {
   const [appointmentForm, setAppointmentForm] = useState(() => ({ mobile: '', ...currentSlot(), type: 'Consultation', status: 'Pending' }));
   const [requiredForm, setRequiredForm] = useState('Patient Intake Form');
   const [treatmentForm, setTreatmentForm] = useState({ service: 'Consultation', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
+  const [dietPlanForm, setDietPlanForm] = useState(() => newDietPlan());
   const [treatmentMedicineRows, setTreatmentMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
   const [medicineCatalogRevision, setMedicineCatalogRevision] = useState(0);
   const [paymentForm, setPaymentForm] = useState({ invoice: '', amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
@@ -474,6 +521,13 @@ export function ClientJourneyPage() {
       ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '' }
       : row).filter((row) => row.Medicine);
   }, [operationsKey, medicineCatalogRevision]);
+
+  useEffect(() => {
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const timer = window.setTimeout(() => setTodayKey(localDateKey()), nextMidnight.getTime() - now.getTime() + 100);
+    return () => window.clearTimeout(timer);
+  }, [todayKey]);
 
   useEffect(() => {
     const refresh = () => setClients(loadValue(clientsKey, []));
@@ -554,9 +608,21 @@ export function ClientJourneyPage() {
     const byName = new Map();
     const remember = (name, date, time = '') => {
       const key = normalizePersonName(name);
-      const value = dateTimeValue(date, time);
-      if (!key || !value || value <= (byName.get(key)?.value ?? 0)) return;
-      byName.set(key, { date: String(date).slice(0, 10), time: String(time ?? '').slice(0, 5), value });
+      const priority = journeyPriority(date, time, todayKey);
+      const current = byName.get(key);
+      if (!key || !priority.value) return;
+
+      const shouldReplace = !current
+        || priority.group < current.group
+        || (priority.group === current.group && (
+          priority.group === 2 ? priority.value < current.value : priority.value > current.value
+        ));
+      if (!shouldReplace) return;
+      byName.set(key, {
+        date: String(date).slice(0, 10),
+        time: String(time ?? '').slice(0, 5),
+        ...priority,
+      });
     };
     appointments.forEach((row) => {
       if (Array.isArray(row)) remember(row[0], row[2], row[3]);
@@ -571,16 +637,23 @@ export function ClientJourneyPage() {
       ));
     });
     return byName;
-  }, [appointments, clientRecords, journeys]);
+  }, [appointments, clientRecords, journeys, todayKey]);
   const visibleClients = useMemo(() => clientRecords
     .filter((row) => {
       const haystack = [clientId(row), clientName(row), clientMobile(row)].join(' ').toLowerCase();
       return haystack.includes(search.toLowerCase());
     })
     .sort((left, right) => {
-      const rightValue = clientVisitMeta.get(normalizePersonName(clientName(right)))?.value ?? 0;
-      const leftValue = clientVisitMeta.get(normalizePersonName(clientName(left)))?.value ?? 0;
-      return rightValue - leftValue || clientName(left).localeCompare(clientName(right));
+      const leftMeta = clientVisitMeta.get(normalizePersonName(clientName(left)));
+      const rightMeta = clientVisitMeta.get(normalizePersonName(clientName(right)));
+      const groupDifference = (leftMeta?.group ?? 3) - (rightMeta?.group ?? 3);
+      if (groupDifference) return groupDifference;
+
+      const leftValue = leftMeta?.value ?? 0;
+      const rightValue = rightMeta?.value ?? 0;
+      // Today's and past work is latest-first; future work is earliest-first.
+      const timeDifference = leftMeta?.group === 2 ? leftValue - rightValue : rightValue - leftValue;
+      return timeDifference || clientName(left).localeCompare(clientName(right));
     }), [clientRecords, clientVisitMeta, search]);
   const patientJourneyRecord = normalizeJourneyRecord(journeys[selectedClient]);
   const journeyVisits = patientJourneyRecord.visits;
@@ -660,12 +733,16 @@ export function ClientJourneyPage() {
     if (id === 'appointment') return Boolean(journey.appointment);
     if (id === 'billing') return Boolean(journey.billing);
     if (id === 'treatment') return Boolean(journey.treatment);
+    if (id === 'diet') return Boolean(journey.diet);
     if (id === 'forms') return Boolean(journey.forms);
     return Boolean(journey[id]);
   };
   const stageDetail = (id, complete) => {
     if (id === 'followup' && journey.followupData?.date) {
       return `${formatResponseDate(journey.followupData.date)} · ${journey.followupData.time || 'Time pending'}`;
+    }
+    if (id === 'diet' && journey.dietPlanData) {
+      return [journey.dietPlanData.goal, journey.dietPlanData.duration].filter(Boolean).join(' · ') || 'Diet plan saved';
     }
     return complete ? 'Completed' : 'Pending';
   };
@@ -914,7 +991,7 @@ export function ClientJourneyPage() {
     syncTreatmentMedicineRows(treatmentMedicineRows.filter((_, rowIndex) => rowIndex !== index));
   };
 
-  const nextAction = () => STAGES.find(([id]) => !stageDone(id))?.[0] ?? 'completed';
+  const nextAction = () => STAGES.find(([id]) => id !== 'diet' && !stageDone(id))?.[0] ?? 'completed';
   const openStageModal = (stage) => {
     if (stage === 'consultation') {
       openConsultation();
@@ -931,6 +1008,15 @@ export function ClientJourneyPage() {
       setTreatmentMedicineRows(medicines.length ? medicines : [{ medicine: '', dose: '', timing: '' }]);
       setSelectedPastTreatmentService(pastTreatmentOptions[0]?.service ?? '');
       setPastTreatmentApplied(false);
+    }
+    if (stage === 'diet') {
+      const savedDietPlan = journey.dietPlanData;
+      setDietPlanForm(savedDietPlan ? {
+        ...newDietPlan(selectedClient),
+        ...savedDietPlan,
+        client: selectedClient,
+        meals: Array.isArray(savedDietPlan.meals) && savedDietPlan.meals.length ? savedDietPlan.meals : DEFAULT_DIET_MEALS.map((meal) => ({ ...meal })),
+      } : newDietPlan(selectedClient));
     }
     if (stage === 'followup') {
       setFollowupForm(journey.followupData ?? { date: addDays(7), time: currentSlot().time, notes: '', status: 'Confirmed' });
@@ -1143,6 +1229,30 @@ export function ClientJourneyPage() {
     setStageModal('');
   };
 
+  const saveDietPlan = () => {
+    if (!dietPlanForm.goal.trim()) return;
+    const plan = {
+      ...dietPlanForm,
+      client: selectedClient,
+      meals: dietPlanForm.meals.filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())),
+      updatedAt: new Date().toISOString(),
+    };
+    const savedPlans = loadValue(dietPlansKey, []);
+    const nextPlans = Array.isArray(savedPlans) && journey.dietPlanData?.id
+      ? savedPlans.map((item) => item?.id === journey.dietPlanData.id ? plan : item)
+      : [plan, ...(Array.isArray(savedPlans) ? savedPlans : [])];
+    window.localStorage.setItem(dietPlansKey, JSON.stringify(nextPlans));
+    updateJourney({ diet: true, dietPlanData: plan, dietAt: new Date().toISOString() });
+    setStageModal('');
+  };
+
+  const updateDietMeal = (index, field, value) => {
+    setDietPlanForm((current) => ({
+      ...current,
+      meals: current.meals.map((meal, mealIndex) => mealIndex === index ? { ...meal, [field]: value } : meal),
+    }));
+  };
+
   const savePayment = () => {
     if (!paymentForm.amount) return;
     const current = loadValue(paymentsKey, []);
@@ -1170,7 +1280,7 @@ export function ClientJourneyPage() {
   };
 
   const runStage = (stage) => {
-    if (stage === 'appointment' || stage === 'forms' || stage === 'consultation' || stage === 'treatment' || stage === 'billing' || stage === 'followup') openStageModal(stage);
+    if (stage === 'appointment' || stage === 'forms' || stage === 'consultation' || stage === 'treatment' || stage === 'diet' || stage === 'billing' || stage === 'followup') openStageModal(stage);
   };
 
   return (
@@ -1266,7 +1376,7 @@ export function ClientJourneyPage() {
               <div className="journey-stages">
                 {STAGES.map(([id, label], index) => {
                   const complete = stageDone(id);
-                  return <div className={`journey-stage ${complete ? 'complete' : ''}`} key={id}><span className="journey-index">{complete ? '✓' : index + 1}</span><div><strong>{label}</strong><small>{stageDetail(id, complete)}</small></div>{id !== 'registration' && <button className="pill" type="button" onClick={() => runStage(id)}>{complete ? (id === 'treatment' ? 'Edit' : 'Open') : id === 'consultation' ? 'Consult' : id === 'followup' ? 'Schedule' : 'Start'}</button>}</div>;
+                  return <div className={`journey-stage ${complete ? 'complete' : ''}`} key={id}><span className="journey-index">{complete ? '✓' : index + 1}</span><div><strong>{label}</strong><small>{stageDetail(id, complete)}</small></div>{id !== 'registration' && <button className="pill" type="button" onClick={() => runStage(id)}>{complete ? (id === 'treatment' || id === 'diet' ? 'Edit' : 'Open') : id === 'consultation' ? 'Consult' : id === 'followup' ? 'Schedule' : id === 'diet' ? 'Add' : 'Start'}</button>}</div>;
                 })}
               </div>
               <div className="journey-print-actions">
@@ -1390,6 +1500,25 @@ export function ClientJourneyPage() {
           <label className="field-block"><span>Goal</span><input className="lead-input" list="goal-presets" value={treatmentForm.goal} onChange={(event) => setTreatmentForm((value) => ({ ...value, goal: event.target.value }))} placeholder="Treatment goal" /><datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist></label>
           <label className="field-block"><span>Duration</span><select className="lead-input" value={treatmentForm.duration} onChange={(event) => setTreatmentForm((value) => ({ ...value, duration: event.target.value }))}>{[...new Set([...DURATION_OPTIONS, treatmentForm.duration].filter(Boolean))].map((option) => <option key={option}>{option}</option>)}</select></label>
           <div className="treatment-medicine-builder"><div className="medicine-builder-head"><div><strong>Medicines / Products</strong><span>Search the medicine master or add a missing medicine without leaving this treatment.</span></div><button className="pill" type="button" onClick={() => syncTreatmentMedicineRows([...treatmentMedicineRows, { medicine: '', dose: '', timing: '' }])}>+ Add Medicine</button></div>{treatmentMedicineRows.map((row, index) => <div className="treatment-medicine-row" key={index}><MedicineSearchInput index={index} value={row.medicine} catalog={medicineCatalog} onChange={(value) => updateTreatmentMedicine(index, 'medicine', value)} onSelect={(medicine) => selectTreatmentMedicine(index, medicine)} onAdd={() => addTreatmentMedicineToCatalog(index)} /><label className="field-block"><span>Dose</span><input className="lead-input" value={row.dose} onChange={(event) => updateTreatmentMedicine(index, 'dose', event.target.value)} placeholder="Dose" /></label><label className="field-block"><span>Timing</span><input className="lead-input" value={row.timing} onChange={(event) => updateTreatmentMedicine(index, 'timing', event.target.value)} placeholder="After meals" /></label><button className="icon-btn" type="button" onClick={() => removeTreatmentMedicine(index)} aria-label={`Remove medicine ${index + 1}`}>x</button></div>)}</div>
+        </JourneyModal>
+      )}
+
+      {stageModal === 'diet' && (
+        <JourneyModal title={journey.diet ? 'Edit Diet Plan' : 'Add Diet Plan'} client={selectedClient} onClose={() => setStageModal('')} onSave={saveDietPlan} saveLabel={journey.diet ? 'Update Diet Plan' : 'Save Diet Plan'}>
+          <div className="quick-preset-row">
+            <button className="pill" type="button" onClick={() => setDietPlanForm((plan) => ({ ...plan, goal: 'Fat loss', calories: '1200-1500 kcal' }))}>Fat Loss</button>
+            <button className="pill" type="button" onClick={() => setDietPlanForm((plan) => ({ ...plan, goal: 'Muscle gain', calories: '2000-2400 kcal' }))}>Muscle Gain</button>
+            <button className="pill" type="button" onClick={() => setDietPlanForm((plan) => ({ ...plan, goal: 'Nutrition balance', calories: 'As per assessment' }))}>Nutrition</button>
+          </div>
+          <label className="field-block"><span>Service</span><select className="lead-input" value={dietPlanForm.service} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, service: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <label className="field-block"><span>Goal</span><input className="lead-input" value={dietPlanForm.goal} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, goal: event.target.value }))} placeholder="e.g. Fat loss" /></label>
+          <label className="field-block"><span>Duration</span><select className="lead-input" value={dietPlanForm.duration} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, duration: event.target.value }))}>{DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <label className="field-block"><span>Plan Date</span><input className="lead-input" type="date" value={dietPlanForm.planDate} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, planDate: event.target.value }))} /></label>
+          <label className="field-block"><span>Week / Phase</span><input className="lead-input" value={dietPlanForm.weekLabel} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, weekLabel: event.target.value }))} placeholder="e.g. Week 1" /></label>
+          <label className="field-block"><span>Calories</span><input className="lead-input" value={dietPlanForm.calories} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, calories: event.target.value }))} placeholder="e.g. 1500 kcal" /></label>
+          <label className="field-block"><span>Water</span><input className="lead-input" value={dietPlanForm.water} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, water: event.target.value }))} placeholder="e.g. 2.5-3 L" /></label>
+          <div className="treatment-medicine-builder full-field"><div className="medicine-builder-head"><div><strong>Meal Schedule</strong><span>Add time-wise meals for this patient.</span></div><button className="pill" type="button" onClick={() => setDietPlanForm((plan) => ({ ...plan, meals: [...plan.meals, { time: '', meal: '', food: '', notes: '' }] }))}>+ Add Meal</button></div>{dietPlanForm.meals.map((meal, index) => <div className="treatment-medicine-row diet-meal-row" key={`${meal.time}-${meal.meal}-${index}`}><label className="field-block"><span>Time</span><input className="lead-input" type="time" value={meal.time} onChange={(event) => updateDietMeal(index, 'time', event.target.value)} /></label><label className="field-block"><span>Meal</span><input className="lead-input" value={meal.meal} onChange={(event) => updateDietMeal(index, 'meal', event.target.value)} placeholder="Breakfast" /></label><label className="field-block diet-food-field"><span>Food</span><textarea className="lead-input" rows="2" value={meal.food} onChange={(event) => updateDietMeal(index, 'food', event.target.value)} placeholder="Food items" /></label><label className="field-block"><span>Notes</span><textarea className="lead-input" rows="2" value={meal.notes} onChange={(event) => updateDietMeal(index, 'notes', event.target.value)} placeholder="Instructions" /></label><button className="icon-btn" type="button" disabled={dietPlanForm.meals.length === 1} onClick={() => setDietPlanForm((plan) => ({ ...plan, meals: plan.meals.filter((_, mealIndex) => mealIndex !== index) }))} aria-label={`Remove meal ${index + 1}`}>x</button></div>)}</div>
+          <label className="field-block full-field"><span>Instructions</span><textarea className="lead-input" rows="3" value={dietPlanForm.instructions} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, instructions: event.target.value }))} placeholder="Additional instructions for the patient" /></label>
         </JourneyModal>
       )}
 
