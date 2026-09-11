@@ -220,6 +220,13 @@ export function AttendancePage() {
     setEditingAttendanceForm(null);
     setMessage(`${title} attendance form saved.`);
   };
+  const deleteAttendanceForm = (form) => {
+    if (!window.confirm(`Delete "${form.title}" attendance form? Saved attendance history will remain available.`)) return;
+    setAttendanceForms((current) => current.filter((item) => item.id !== form.id));
+    setSelectedAttendanceForm(null);
+    setEditingAttendanceForm(null);
+    setMessage(`${form.title} attendance form deleted.`);
+  };
   const startMarkingAttendance = (form) => {
     setSessionForm((current) => ({ ...current, title: form.title, group: form.group, mode: form.mode, notes: form.notes || '', zoomLink: form.zoomLink || '', minimumMinutes: form.minimumMinutes || 20, date: localDate(), time: localTime() }));
     setRoster([]);
@@ -315,7 +322,24 @@ export function AttendancePage() {
       {message && <div className="action-note attendance-message" role="status"><span>{message}</span><button type="button" aria-label="Dismiss message" onClick={() => setMessage('')}>×</button></div>}
       <Card title="Attendance Forms" subtitle="Choose a form to edit it or start marking attendance." action={<button className="pill primary-action" type="button" onClick={() => setEditingAttendanceForm(blankAttendanceForm())}>Create form</button>}>
         <div className="attendance-form-grid">
-          {attendanceForms.map((form) => <button className="attendance-form-card" type="button" key={form.id} onClick={() => setSelectedAttendanceForm(form)}><span className="attendance-form-icon" aria-hidden="true">✓</span><span><strong>{form.title}</strong><small>{form.group} · {form.mode}</small>{form.notes && <small>{form.notes}</small>}</span><b aria-hidden="true">›</b></button>)}
+          {attendanceForms.map((form) => (
+            <article className="attendance-form-card" key={form.id}>
+              <button className="attendance-form-main" type="button" onClick={() => startMarkingAttendance(form)}>
+                <span className="attendance-form-icon" aria-hidden="true">✓</span>
+                <span>
+                  <strong>{form.title}</strong>
+                  <small>{form.group} · {form.mode}</small>
+                  {form.notes && <small>{form.notes}</small>}
+                </span>
+                <b aria-hidden="true">›</b>
+              </button>
+              <div className="attendance-form-card-actions" aria-label={`${form.title} form actions`}>
+                <button className="pill" type="button" onClick={() => { setEditingAttendanceForm({ ...form }); setSelectedAttendanceForm(null); }}>Edit form</button>
+                <button className="pill" type="button" onClick={() => setSelectedAttendanceForm(form)}>More</button>
+                <button className="pill danger-action" type="button" onClick={() => deleteAttendanceForm(form)}>Delete</button>
+              </div>
+            </article>
+          ))}
           {!attendanceForms.length && <div className="empty-state compact-empty attendance-forms-empty"><strong>No attendance forms yet</strong><p>Create forms for different batches, classes or patient groups using the Create form button above.</p></div>}
         </div>
       </Card>
@@ -392,7 +416,7 @@ export function AttendancePage() {
         </div>
       </Card>
 
-      {selectedAttendanceForm && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedAttendanceForm(null)}><div className="modal-shell modal-small attendance-form-action-modal" role="dialog" aria-modal="true" aria-labelledby="attendance-form-action-title" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2 id="attendance-form-action-title">{selectedAttendanceForm.title}</h2><p>{selectedAttendanceForm.group} · {selectedAttendanceForm.mode}</p></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setSelectedAttendanceForm(null)}>×</button></div><div className="attendance-form-actions"><button type="button" onClick={() => { setEditingAttendanceForm({ ...selectedAttendanceForm }); setSelectedAttendanceForm(null); }}><span aria-hidden="true">✎</span><strong>Edit form</strong><small>Change name, group, mode and online options</small></button><button type="button" onClick={() => startMarkingAttendance(selectedAttendanceForm)}><span aria-hidden="true">✓</span><strong>Mark attendance</strong><small>Open the attendance popup</small></button></div></div></div>}
+      {selectedAttendanceForm && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedAttendanceForm(null)}><div className="modal-shell modal-small attendance-form-action-modal" role="dialog" aria-modal="true" aria-labelledby="attendance-form-action-title" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2 id="attendance-form-action-title">{selectedAttendanceForm.title}</h2><p>{selectedAttendanceForm.group} · {selectedAttendanceForm.mode}</p></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setSelectedAttendanceForm(null)}>×</button></div><div className="attendance-form-actions"><button type="button" onClick={() => { setEditingAttendanceForm({ ...selectedAttendanceForm }); setSelectedAttendanceForm(null); }}><span aria-hidden="true">✎</span><strong>Edit form</strong><small>Change name, group, mode and online options</small></button><button type="button" onClick={() => startMarkingAttendance(selectedAttendanceForm)}><span aria-hidden="true">✓</span><strong>Mark attendance</strong><small>Open the attendance popup</small></button><button className="danger-action-card" type="button" onClick={() => deleteAttendanceForm(selectedAttendanceForm)}><span aria-hidden="true">×</span><strong>Delete form</strong><small>Remove this saved form only</small></button></div></div></div>}
 
       {activeAttendanceForm && <div className="modal-backdrop" role="presentation" onClick={() => setActiveAttendanceForm(null)}><div className="modal-shell attendance-form-editor" role="dialog" aria-modal="true" aria-labelledby="mark-attendance-title" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2 id="mark-attendance-title">Mark attendance</h2><p>{activeAttendanceForm.title} · {sessionForm.group} · {sessionForm.mode}</p></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setActiveAttendanceForm(null)}>×</button></div><div className="modal-body"><div className="attendance-roster-tools"><div><strong>Attendance Roster</strong><span>{roster.length} member{roster.length === 1 ? '' : 's'} · {currentPresent} present</span></div><div className="card-action-group"><button className="pill" type="button" onClick={importPatients} disabled={!patients.length}>Import patients</button><button className="pill" type="button" disabled={!roster.length} onClick={() => markEveryone('Present')}>All present</button><button className="pill" type="button" disabled={!roster.length} onClick={() => markEveryone('Absent')}>All absent</button></div></div><div className="attendance-add-member"><label className="sr-only" htmlFor="attendance-popup-member-name">Student or patient name</label><input id="attendance-popup-member-name" className="lead-input" autoFocus value={newMember.name} onChange={(event) => setNewMember((current) => ({ ...current, name: event.target.value }))} placeholder="Student or patient name" onKeyDown={(event) => { if (event.key === 'Enter' && newMember.name.trim()) addMember(); }} /><label className="sr-only" htmlFor="attendance-popup-member-mobile">Mobile number</label><input id="attendance-popup-member-mobile" className="lead-input" type="tel" inputMode="numeric" value={newMember.mobile} onChange={(event) => setNewMember((current) => ({ ...current, mobile: event.target.value }))} placeholder="Mobile number" /><button className="pill" type="button" disabled={!newMember.name.trim()} onClick={() => addMember()}>Add member</button>{patientMatches.length > 0 && <div className="attendance-patient-results" role="listbox" aria-label="Matching patients">{patientMatches.map((patient) => <button type="button" role="option" key={patient.id || `${patient.name}-${patient.mobile}`} onClick={() => addMember(patient, 'Patient')}><span><strong>{patient.name}</strong><small>{patient.mobile || 'No mobile number'}</small></span><b>Add</b></button>)}</div>}</div><div className="attendance-roster">{roster.map((record, index) => <div className="attendance-roster-row" key={record.id}><span className="attendance-number">{index + 1}</span><div className="attendance-person"><strong>{record.name}</strong><small>{record.mobile || record.source}</small></div><select className={`lead-input attendance-status status-${record.status.toLowerCase()}`} value={record.status} onChange={(event) => updateRecord(record.id, 'status', event.target.value)}>{ATTENDANCE_STATUSES.map((status) => <option key={status}>{status}</option>)}</select><button className="icon-btn" type="button" onClick={() => setRoster((current) => current.filter((item) => item.id !== record.id))} aria-label={`Remove ${record.name}`}>×</button></div>)}{!roster.length && <div className="empty-state compact-empty"><strong>No one added yet</strong><p>Add a student or patient with their mobile number above.</p></div>}</div></div><div className="modal-actions"><button className="pill" type="button" onClick={() => setActiveAttendanceForm(null)}>Cancel</button><button className="pill primary-action" type="button" disabled={!roster.length} onClick={() => { saveSession(); setActiveAttendanceForm(null); }}>Save attendance</button></div></div></div>}
 

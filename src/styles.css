@@ -1509,20 +1509,28 @@ body {
 .attendance-message button { width: 28px; height: 28px; flex: 0 0 auto; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 1.15rem; line-height: 1; }
 .attendance-message button:hover { background: rgba(23, 53, 40, 0.07); color: var(--text); }
 .attendance-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
-.attendance-form-card { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 78px; padding: 11px; border: 1px solid var(--border); border-radius: 11px; background: #fbfdfc; color: var(--text); text-align: left; }
+.attendance-form-card { display: grid; gap: 10px; min-height: 112px; padding: 11px; border: 1px solid var(--border); border-radius: 11px; background: #fbfdfc; color: var(--text); text-align: left; }
 .attendance-form-card:hover { border-color: rgba(31, 107, 74, .34); background: #f2f9f5; transform: translateY(-1px); }
-.attendance-form-card > span:nth-child(2) { display: grid; gap: 2px; min-width: 0; }
+.attendance-form-main { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.attendance-form-main > span:nth-child(2) { display: grid; gap: 2px; min-width: 0; }
 .attendance-form-card strong, .attendance-form-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attendance-form-card small { color: var(--muted); font-size: .71rem; font-weight: 500; }
-.attendance-form-card > b { color: var(--green); font-size: 1.3rem; }
+.attendance-form-main > b { color: var(--green); font-size: 1.3rem; }
 .attendance-form-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: #e5f2ed; color: var(--green); font-weight: 900; }
+.attendance-form-card-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.attendance-form-card-actions .pill { min-height: 32px; padding: 6px 8px; justify-content: center; font-size: .72rem; }
+.danger-action { border-color: #f0c9c2; background: #fff8f7; color: #a83d2b; }
+.danger-action:hover { border-color: #df9f94; background: #fff0ee; color: #873021; }
 .attendance-forms-empty { grid-column: 1 / -1; }
 .attendance-forms-empty .pill { margin-top: 8px; }
-.attendance-form-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.attendance-form-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .attendance-form-actions > button { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 2px 10px; align-items: center; min-height: 104px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: #fbfdfc; color: var(--text); text-align: left; }
 .attendance-form-actions > button:hover { border-color: rgba(31, 107, 74, .38); background: #eff8f3; }
 .attendance-form-actions > button > span { grid-row: 1 / 3; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: #e5f2ed; color: var(--green); font-size: 1.1rem; }
 .attendance-form-actions small { color: var(--muted); font-size: .72rem; line-height: 1.4; }
+.attendance-form-actions > .danger-action-card { border-color: #f0c9c2; background: #fff8f7; }
+.attendance-form-actions > .danger-action-card:hover { border-color: #df9f94; background: #fff0ee; }
+.attendance-form-actions > .danger-action-card > span { background: #ffe4df; color: #a83d2b; }
 .attendance-form-editor { width: min(720px, 100%); }
 .attendance-form-editor > .modal-body { grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .attendance-form-editor > .modal-body > .attendance-roster-tools { margin-top: 0; padding-top: 0; }
