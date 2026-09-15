@@ -1,4 +1,5 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, Fragment, useContext, useMemo, useState } from 'react';
+import { readCurrentBranch } from '../data/branchStore.js';
 
 const BranchContext = createContext(null);
 const SINGLE_BRANCH = 'Main Branch';
@@ -16,28 +17,30 @@ function readBranches() {
 
 export function BranchProvider({ children }) {
   const [branches, setBranches] = useState(readBranches);
-  const [currentBranch, setCurrentBranchState] = useState(() => window.localStorage.getItem(CURRENT_BRANCH_KEY) || SINGLE_BRANCH);
+  const [currentBranch, setCurrentBranchState] = useState(() => readCurrentBranch(window.localStorage, readBranches()));
   const persistBranches = (next) => {
     window.localStorage.setItem(BRANCHES_KEY, JSON.stringify(next));
     setBranches(next);
   };
-  const setCurrentBranch = (branch) => {
-    if (!branches.includes(branch)) return;
-    window.localStorage.setItem(CURRENT_BRANCH_KEY, branch);
+  const selectBranch = (branch) => {
+    window.localStorage.setItem(CURRENT_BRANCH_KEY, JSON.stringify(branch));
     setCurrentBranchState(branch);
+  };
+  const setCurrentBranch = (branch) => {
+    if (branches.includes(branch)) selectBranch(branch);
   };
   const addBranch = (name) => {
     const clean = String(name ?? '').trim().replace(/\s+/g, ' ');
     if (!clean || branches.some((branch) => branch.toLowerCase() === clean.toLowerCase())) return false;
     persistBranches([...branches, clean]);
-    setCurrentBranch(clean);
+    selectBranch(clean);
     return true;
   };
   const renameBranch = (oldName, newName) => {
     const clean = String(newName ?? '').trim().replace(/\s+/g, ' ');
     if (!clean || !branches.includes(oldName) || branches.some((branch) => branch !== oldName && branch.toLowerCase() === clean.toLowerCase())) return false;
     persistBranches(branches.map((branch) => branch === oldName ? clean : branch));
-    if (currentBranch === oldName) setCurrentBranch(clean);
+    if (currentBranch === oldName) selectBranch(clean);
     return true;
   };
   const deleteBranch = (name) => {
@@ -49,7 +52,7 @@ export function BranchProvider({ children }) {
   };
   const value = useMemo(() => ({ branches, currentBranch, setCurrentBranch, addBranch, renameBranch, deleteBranch, branchKey: (key) => `moms-pathshala:${currentBranch}:${key}` }), [branches, currentBranch]);
 
-  return <BranchContext.Provider value={value}>{children}</BranchContext.Provider>;
+  return <BranchContext.Provider value={value}><Fragment key={currentBranch}>{children}</Fragment></BranchContext.Provider>;
 }
 
 export function useBranch() {
