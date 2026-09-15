@@ -851,9 +851,15 @@ function ImportExportModule({
       return;
     }
     const invoice = savePatientFileChargePayment(recordToSave);
-    setRows((current) => [recordToSave, ...current]);
+    // Persist the complete next list immediately. Relying only on the rows
+    // effect leaves a window where cloud hydration can restore the old list
+    // before the newly added record has been written.
+    const nextRows = [recordToSave, ...rows];
+    window.localStorage.setItem(storageKey, JSON.stringify(nextRows));
+    setRows(nextRows);
     setSelectedRowIndexes(new Set());
     setAddOpen(false);
+    setDraftRecord(Object.fromEntries(headers.map((header) => [header, ''])));
     setMessage(invoice
       ? `${rowToCsvValues(recordToSave)[0] || title} added. File charge invoice ${invoice} created.`
       : `${rowToCsvValues(recordToSave)[0] || title} added.`);
@@ -5879,26 +5885,44 @@ export function IntegrationsPage() {
 
 export function BranchesPage() {
   const navigate = useNavigate();
-  const { currentBranch } = useBranch();
+  const { branches, currentBranch, setCurrentBranch, addBranch, renameBranch, deleteBranch } = useBranch();
+  const [branchName, setBranchName] = useState('');
+  const [message, setMessage] = useState('Add a branch to keep its records separate.');
+
+  const createBranch = () => {
+    if (!addBranch(branchName)) return setMessage('Enter a unique branch name.');
+    setMessage(`${branchName.trim()} added and selected.`);
+    setBranchName('');
+  };
 
   return (
     <section className="module-page">
       <div className="module-hero">
         <div>
-          <h1>Shared Workspace</h1>
-          <p>All records now use one PostgreSQL-backed workspace so every device sees the same live data.</p>
-          <p className="subtle">Signed-in account: shreeayurved09@gmail.com</p>
+          <h1>Branches</h1>
+          <p>Each branch has its own patients, appointments, payments, and reports.</p>
         </div>
         <div className="module-stats">
-          <div className="mini-stat"><span>Mode</span><strong>Live Cloud</strong></div>
+          <div className="mini-stat"><span>Branches</span><strong>{branches.length}</strong></div>
           <div className="mini-stat"><span>Workspace</span><strong>{currentBranch}</strong></div>
-          <div className="mini-stat"><span>Scope</span><strong>Single</strong></div>
+          <div className="mini-stat"><span>Scope</span><strong>Separate</strong></div>
         </div>
       </div>
 
-      <Card title="Cloud Data Scope" subtitle="Workspace separation is disabled for this live installation.">
-        <div className="action-note">
-          <strong>Single source of truth.</strong> Patients, appointments, payments, forms, users, and reports are saved under the same shared workspace from every browser and device.
+      <Card title="Add Branch" subtitle={message}>
+        <div className="sheet-actions">
+          <input className="lead-input" value={branchName} onChange={(event) => setBranchName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') createBranch(); }} placeholder="Enter branch name" />
+          <button className="pill primary-action" type="button" onClick={createBranch}>+ Add Branch</button>
+        </div>
+      </Card>
+
+      <Card title="Your Branches" subtitle="Select a branch to work in.">
+        <div className="table adaptive-table" style={{ '--table-columns': 3 }}>
+          <div className="table-head"><div>Branch</div><div>Status</div><div>Actions</div></div>
+          {branches.map((branch) => <div className="data-row" key={branch}>
+            <div><strong>{branch}</strong></div><div>{branch === currentBranch ? 'Active' : 'Available'}</div>
+            <div className="card-action-group"><button className="pill" type="button" onClick={() => setCurrentBranch(branch)}>Open</button><button className="pill" type="button" onClick={() => { const next = window.prompt('New branch name', branch); if (next && !renameBranch(branch, next)) setMessage('Branch name must be unique.'); }}>Rename</button><button className="pill danger-action" type="button" disabled={branches.length === 1} onClick={() => { if (window.confirm(`Delete ${branch}?`)) deleteBranch(branch); }}>Delete</button></div>
+          </div>)}
         </div>
         <div className="sheet-actions">
           <button className="pill primary-action" type="button" onClick={() => navigate('/clients')}>Open Patients <ChevronRight /></button>

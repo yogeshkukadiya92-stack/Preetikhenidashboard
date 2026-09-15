@@ -75,7 +75,7 @@ function formatDateSelection(start, end) {
 
 export function Layout() {
   const session = getAuthSession();
-  const { currentBranch } = useBranch();
+  const { currentBranch, branches, setCurrentBranch } = useBranch();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchText, setSearchText] = useState('');
@@ -212,12 +212,14 @@ export function Layout() {
           })}
         </nav>
         <div className="sidebar-art" aria-hidden="true" />
-        <div className="clinic-card" role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => navigate('/settings')} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/settings'); }}>
+        <div className="clinic-card">
           <div>
             <strong>Mom's Pathshala</strong>
-            <span>{currentBranch}</span>
+            <select aria-label="Select branch" value={currentBranch} onChange={(event) => setCurrentBranch(event.target.value)}>
+              {branches.map((branch) => <option key={branch}>{branch}</option>)}
+            </select>
           </div>
-          <ChevronRight />
+          <button className="icon-btn" type="button" onClick={() => navigate('/branches')} aria-label="Manage branches"><ChevronRight /></button>
         </div>
       </aside>
 

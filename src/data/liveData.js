@@ -44,7 +44,7 @@ function isToday(value) {
 }
 
 function branchKey(branch, key) {
-  return `moms-pathshala:Main Branch:${key}`;
+  return `moms-pathshala:${branch}:${key}`;
 }
 
 function readBranchArray(branch, key, legacyKey, fallback = []) {
