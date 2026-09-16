@@ -554,6 +554,7 @@ export function ClientJourneyPage() {
   const [treatmentForm, setTreatmentForm] = useState({ service: 'Consultation', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
   const [dietPlanForm, setDietPlanForm] = useState(() => newDietPlan());
   const [treatmentMedicineRows, setTreatmentMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
+  const [treatmentSaveError, setTreatmentSaveError] = useState('');
   const [medicineCatalogRevision, setMedicineCatalogRevision] = useState(0);
   const [paymentForm, setPaymentForm] = useState({ invoice: '', amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
   const [followupForm, setFollowupForm] = useState(() => ({ date: addDays(7), time: currentSlot().time, notes: '', status: 'Confirmed' }));
@@ -1071,6 +1072,7 @@ export function ClientJourneyPage() {
       setTreatmentForm(nextForm);
       const medicines = treatmentRowsFromData(savedTreatment);
       setTreatmentMedicineRows(medicines.length ? medicines : [{ medicine: '', dose: '', timing: '' }]);
+      setTreatmentSaveError('');
       setSelectedPastTreatmentService(pastTreatmentOptions[0]?.service ?? '');
       setPastTreatmentApplied(false);
     }
@@ -1260,9 +1262,19 @@ export function ClientJourneyPage() {
   };
 
   const saveTreatment = () => {
-    if (!treatmentForm.goal.trim()) return;
     const current = loadValue(operationsKey, {});
-    const medicines = treatmentMedicineRows.filter((row) => row.medicine.trim());
+    const medicines = treatmentMedicineRows
+      .map((row) => ({
+        medicine: String(row.medicine ?? '').trim(),
+        dose: String(row.dose ?? '').trim(),
+        timing: String(row.timing ?? '').trim(),
+      }))
+      .filter((row) => row.medicine);
+    if (!treatmentForm.goal.trim() && !medicines.length) {
+      setTreatmentSaveError('Add a treatment goal or at least one medicine before saving.');
+      return;
+    }
+    setTreatmentSaveError('');
     const previousTreatmentData = journey.treatmentData;
     const treatmentData = {
       ...treatmentForm,
@@ -1567,8 +1579,9 @@ export function ClientJourneyPage() {
             </div>
           </div>
           {pastTreatmentApplied && <div className="action-note full-field"><strong>Past treatment loaded.</strong> Review the copied plan and medicines, then save this treatment.</div>}
+          {treatmentSaveError && <div className="action-note danger-note full-field" role="alert"><strong>Treatment not saved.</strong> {treatmentSaveError}</div>}
           <label className="field-block"><span>Service</span><input className="lead-input" list="treatment-service-options" value={treatmentForm.service} onChange={(event) => setTreatmentForm((value) => ({ ...value, service: event.target.value }))} placeholder="Select or type a service" autoComplete="off" /><datalist id="treatment-service-options">{[...new Set([...SERVICE_OPTIONS, ...pastTreatmentOptions.map((option) => option.service)].filter(Boolean))].map((option) => <option key={option} value={option} />)}</datalist></label>
-          <label className="field-block"><span>Goal</span><input className="lead-input" list="goal-presets" value={treatmentForm.goal} onChange={(event) => setTreatmentForm((value) => ({ ...value, goal: event.target.value }))} placeholder="Treatment goal" /><datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist></label>
+          <label className="field-block"><span>Goal (optional when medicines are added)</span><input className="lead-input" list="goal-presets" value={treatmentForm.goal} onChange={(event) => { setTreatmentForm((value) => ({ ...value, goal: event.target.value })); setTreatmentSaveError(''); }} placeholder="Treatment goal" /><datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist></label>
           <label className="field-block"><span>Duration</span><select className="lead-input" value={treatmentForm.duration} onChange={(event) => setTreatmentForm((value) => ({ ...value, duration: event.target.value }))}>{[...new Set([...DURATION_OPTIONS, treatmentForm.duration].filter(Boolean))].map((option) => <option key={option}>{option}</option>)}</select></label>
           <div className="treatment-medicine-builder"><div className="medicine-builder-head"><div><strong>Medicines / Products</strong><span>Search the medicine master or add a missing medicine without leaving this treatment.</span></div><button className="pill" type="button" onClick={() => syncTreatmentMedicineRows([...treatmentMedicineRows, { medicine: '', dose: '', timing: '' }])}>+ Add Medicine</button></div>{treatmentMedicineRows.map((row, index) => <div className="treatment-medicine-row" key={index}><MedicineSearchInput index={index} value={row.medicine} catalog={medicineCatalog} onChange={(value) => updateTreatmentMedicine(index, 'medicine', value)} onSelect={(medicine) => selectTreatmentMedicine(index, medicine)} onAdd={() => addTreatmentMedicineToCatalog(index)} /><label className="field-block"><span>Dose</span><input className="lead-input" value={row.dose} onChange={(event) => updateTreatmentMedicine(index, 'dose', event.target.value)} placeholder="Dose" /></label><label className="field-block"><span>Timing</span><input className="lead-input" value={row.timing} onChange={(event) => updateTreatmentMedicine(index, 'timing', event.target.value)} placeholder="After meals" /></label><button className="icon-btn" type="button" onClick={() => removeTreatmentMedicine(index)} aria-label={`Remove medicine ${index + 1}`}>x</button></div>)}</div>
         </JourneyModal>
