@@ -728,6 +728,10 @@ export function ClientJourneyPage() {
     .slice()
     .reverse()
     .find((visit) => visit?.treatmentData);
+  const previousDietVisit = (activeVisitIndex >= 0 ? journeyVisits.slice(0, activeVisitIndex) : journeyVisits)
+    .slice()
+    .reverse()
+    .find((visit) => visit?.dietPlanData);
   const pastTreatmentOptions = (activeVisitIndex >= 0 ? journeyVisits.slice(0, activeVisitIndex) : journeyVisits)
     .slice()
     .reverse()
@@ -1077,7 +1081,7 @@ export function ClientJourneyPage() {
       setPastTreatmentApplied(false);
     }
     if (stage === 'diet') {
-      const savedDietPlan = journey.dietPlanData;
+      const savedDietPlan = journey.dietPlanData || previousDietVisit?.dietPlanData;
       setDietPlanForm(savedDietPlan ? {
         ...newDietPlan(selectedClient),
         ...savedDietPlan,
@@ -1242,6 +1246,16 @@ export function ClientJourneyPage() {
               ...(previousConsultation?.consultationData ? {
                 consultationData: { ...previousConsultation.consultationData },
                 consultationCarriedForwardFrom: previousConsultation.id,
+              } : {}),
+              ...(record.visits.slice().reverse().find((visit) => visit?.dietPlanData)?.dietPlanData ? {
+                dietPlanData: {
+                  ...record.visits.slice().reverse().find((visit) => visit?.dietPlanData).dietPlanData,
+                  id: `diet-plan-${Date.now()}`,
+                  client: selectedClient,
+                  planDate: appointmentForm.date,
+                  carriedForwardFrom: record.visits.slice().reverse().find((visit) => visit?.dietPlanData).id,
+                  updatedAt: now,
+                },
               } : {}),
             }],
             activeVisitId: visitId,
