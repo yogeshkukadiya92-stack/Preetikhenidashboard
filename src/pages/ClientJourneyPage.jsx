@@ -522,6 +522,8 @@ export function ClientJourneyPage() {
   const [journeys, setJourneys] = useState(() => loadValue(journeysKey, {}));
   const [selectedClient, setSelectedClient] = useState(() => searchParams.get('client') ?? '');
   const [selectedVisitId, setSelectedVisitId] = useState('');
+  const [patientViewTab, setPatientViewTab] = useState('workflow');
+  const [showMobileList, setShowMobileList] = useState(false);
   const [search, setSearch] = useState('');
   const [todayKey, setTodayKey] = useState(() => localDateKey());
   const [consultationOpen, setConsultationOpen] = useState(false);
@@ -815,6 +817,171 @@ export function ClientJourneyPage() {
       return [journey.dietPlanData.goal, journey.dietPlanData.duration].filter(Boolean).join(' · ') || 'Diet plan saved';
     }
     return complete ? 'Completed' : 'Pending';
+  };
+
+  const getStageInfo = (id) => {
+    const complete = stageDone(id);
+    const isCurrent = nextAction() === id;
+
+    if (id === 'registration') {
+      const idStr = clientId(selectedClientRecord);
+      const phoneStr = clientMobile(selectedClientRecord);
+      const programStr = selectedClientRecord?.program || selectedClientRecord?.['Program'] || '';
+      return {
+        title: 'Patient Registration',
+        complete: true,
+        status: 'Completed',
+        statusTone: 'complete',
+        summary: selectedClientRecord
+          ? `${patientIdentity(selectedClient, selectedClientRecord)} · Registered profile on file`
+          : 'Patient registered in system',
+        tags: [idStr ? `#${idStr.replace(/^#/, '')}` : '', phoneStr, programStr].filter(Boolean),
+        buttonText: 'View Profile',
+        onClick: () => navigate('/clients'),
+      };
+    }
+
+    if (id === 'appointment') {
+      const data = journey.appointmentData;
+      let summary = 'Schedule appointment date, time, service type & check-in.';
+      if (complete && data?.date) {
+        summary = `${formatResponseDate(data.date)}${data.time ? ` at ${data.time}` : ''} · ${data.type || 'Visit'} (${data.status || 'Confirmed'})`;
+      }
+      return {
+        title: 'Appointment & Check-in',
+        complete,
+        status: complete ? 'Completed' : (isCurrent ? 'In Progress' : 'Pending'),
+        statusTone: complete ? 'complete' : (isCurrent ? 'current' : 'pending'),
+        summary,
+        tags: complete && data ? [data.type || 'Consultation', data.status || 'Confirmed'].filter(Boolean) : [],
+        buttonText: complete ? 'Edit Appointment' : 'Book Appointment',
+        onClick: () => runStage('appointment'),
+      };
+    }
+
+    if (id === 'consultation') {
+      const data = journey.consultationData;
+      const parts = [];
+      if (data?.diagnosis) parts.push(`Diagnosis: ${data.diagnosis}`);
+      if (data?.vitals) parts.push(`Vitals: ${data.vitals}`);
+      if (data?.complaint) parts.push(`Complaints: ${data.complaint}`);
+      const summary = complete && parts.length
+        ? parts.join(' · ')
+        : (complete ? 'Doctor consultation notes recorded.' : 'Record presenting complaints, vitals, diagnosis & clinical examination.');
+      return {
+        title: 'Doctor Consultation',
+        complete,
+        status: complete ? 'Completed' : (isCurrent ? 'In Progress' : 'Pending'),
+        statusTone: complete ? 'complete' : (isCurrent ? 'current' : 'pending'),
+        summary,
+        tags: complete && data ? [data.diagnosis, data.vitals].filter(Boolean) : [],
+        buttonText: complete ? 'Edit Consultation' : 'Start Consultation',
+        onClick: () => runStage('consultation'),
+      };
+    }
+
+    if (id === 'treatment') {
+      const data = journey.treatmentData;
+      const medicines = clinicalMedicines(data);
+      let summary = 'Prescribe Ayurveda therapies, medications, dosage & duration.';
+      if (complete && data) {
+        const parts = [data.service || 'Treatment', data.duration ? `Duration: ${data.duration}` : '', data.goal ? `Goal: ${data.goal}` : ''].filter(Boolean);
+        if (medicines.length) parts.push(`${medicines.length} medicine(s)`);
+        summary = parts.join(' · ');
+      }
+      return {
+        title: 'Treatment Plan & Medicines',
+        complete,
+        status: complete ? 'Completed' : (isCurrent ? 'In Progress' : 'Pending'),
+        statusTone: complete ? 'complete' : (isCurrent ? 'current' : 'pending'),
+        summary,
+        tags: complete && medicines.length ? medicines.map((m) => m.medicine).slice(0, 3) : (data?.service ? [data.service] : []),
+        buttonText: complete ? 'Edit Treatment' : 'Add Treatment',
+        onClick: () => runStage('treatment'),
+      };
+    }
+
+    if (id === 'diet') {
+      const data = journey.dietPlanData;
+      const summary = complete && data
+        ? [data.goal ? `Goal: ${data.goal}` : '', data.duration ? `Duration: ${data.duration}` : '', data.calories ? `${data.calories}` : '', `${data.meals?.length || 0} meals`].filter(Boolean).join(' · ')
+        : 'Custom meal schedule, calorie targets & nutrition guidelines (Optional).';
+      return {
+        title: 'Diet & Nutrition Plan',
+        complete,
+        status: complete ? 'Completed' : (isCurrent ? 'In Progress' : 'Optional'),
+        statusTone: complete ? 'complete' : (isCurrent ? 'current' : 'optional'),
+        summary,
+        tags: complete && data ? [data.goal, data.calories].filter(Boolean) : ['Optional'],
+        buttonText: complete ? 'Edit Diet Plan' : '+ Add Diet Plan',
+        onClick: () => runStage('diet'),
+      };
+    }
+
+    if (id === 'billing') {
+      const data = journey.paymentData;
+      let summary = 'Generate invoice, collect payment & manage pending dues.';
+      if (complete && data) {
+        const parts = [`₹ ${data.amount || 0} (${data.status || 'Paid'})`];
+        if (data.invoice) parts.push(`Inv: ${data.invoice}`);
+        if (data.pendingAmount && Number(data.pendingAmount) > 0) parts.push(`Pending: ₹${data.pendingAmount}`);
+        summary = parts.join(' · ');
+      }
+      return {
+        title: 'Invoice & Payment',
+        complete,
+        status: complete ? 'Completed' : (isCurrent ? 'In Progress' : 'Pending'),
+        statusTone: complete ? 'complete' : (isCurrent ? 'current' : 'pending'),
+        summary,
+        tags: complete && data ? [`₹ ${data.amount || 0}`, data.status || 'Paid'].filter(Boolean) : [],
+        buttonText: complete ? 'Edit Payment' : 'Collect Payment',
+        onClick: () => runStage('billing'),
+      };
+    }
+
+    if (id === 'followup') {
+      const data = journey.followupData;
+      const summary = complete && data?.date
+        ? `Follow-up on ${formatResponseDate(data.date)}${data.time ? ` at ${data.time}` : ''}${data.notes ? ` · Note: ${data.notes}` : ''}`
+        : 'Schedule review visit (7, 15, or 30 days) and automated patient reminder.';
+      return {
+        title: 'Next Follow-up',
+        complete,
+        status: complete ? 'Completed' : (isCurrent ? 'In Progress' : 'Pending'),
+        statusTone: complete ? 'complete' : (isCurrent ? 'current' : 'pending'),
+        summary,
+        tags: complete && data?.date ? [formatResponseDate(data.date), data.time || ''].filter(Boolean) : [],
+        buttonText: complete ? 'Update Follow-up' : 'Schedule Follow-up',
+        onClick: () => runStage('followup'),
+      };
+    }
+
+    if (id === 'forms') {
+      const summary = complete
+        ? (hasRequiredFormResponse ? `${requiredForm} submitted and matched with patient phone.` : `${journey.requiredForm || requiredForm} verified.`)
+        : (matchedFormResponses.length ? `${matchedFormResponses.length} submitted response(s) ready to verify.` : `Waiting for patient to submit ${requiredForm}.`);
+      return {
+        title: 'Required Forms',
+        complete,
+        status: complete ? 'Completed' : (matchedFormResponses.length ? 'Ready to Verify' : 'Waiting'),
+        statusTone: complete ? 'complete' : (matchedFormResponses.length ? 'current' : 'pending'),
+        summary,
+        tags: complete ? [requiredForm, 'Verified'] : [requiredForm],
+        buttonText: complete ? 'View Form' : (matchedFormResponses.length ? 'Verify Submission' : 'Check Forms'),
+        onClick: () => runStage('forms'),
+      };
+    }
+
+    return {
+      title: id,
+      complete,
+      status: complete ? 'Completed' : 'Pending',
+      statusTone: complete ? 'complete' : 'pending',
+      summary: stageDetail(id, complete),
+      tags: [],
+      buttonText: 'Open',
+      onClick: () => runStage(id),
+    };
   };
 
   const updateJourney = (changes) => {
@@ -1368,6 +1535,10 @@ export function ClientJourneyPage() {
     if (stage === 'appointment' || stage === 'forms' || stage === 'consultation' || stage === 'treatment' || stage === 'diet' || stage === 'billing' || stage === 'followup') openStageModal(stage);
   };
 
+  const completedStageCount = STAGES.filter(([id]) => stageDone(id)).length;
+  const totalStageCount = STAGES.length;
+  const progressPercentage = Math.round((completedStageCount / totalStageCount) * 100);
+
   return (
     <section className="module-page journey-page">
       <div className="module-hero compact-hero">
@@ -1376,102 +1547,398 @@ export function ClientJourneyPage() {
       </div>
 
       <div className="journey-layout">
-        <Card title="Reception Desk" subtitle="Search an existing patient or register a new walk-in." action={<button className="pill primary-action" type="button" onClick={() => navigate('/clients?action=add')}>+ Register Patient</button>}>
-          <input className="lead-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search patient by ID, name, or mobile..." />
-          <div className="returning-patient-action">
-            <div>
-              <strong>Returning patient?</strong>
-              <span>Select an existing patient below, then start a new visit with saved profile data.</span>
+        <div className={`reception-col ${selectedClient && !showMobileList ? 'mobile-hidden' : ''}`}>
+          <Card
+            title="Reception Desk"
+            subtitle="Search an existing patient or register a new walk-in."
+            className="reception-card"
+            action={<button className="pill primary-action" type="button" onClick={() => navigate('/clients?action=add')}>+ Register Patient</button>}
+          >
+            <div className="journey-search-wrap">
+              <input
+                className="lead-input"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search patient by ID, name, or mobile..."
+              />
             </div>
-            <button className="pill" type="button" disabled={!selectedClient} onClick={openReturningVisit}>+ Start New Visit</button>
-          </div>
-          <div className="journey-client-list">
-            {visibleClients.length ? visibleClients.map((row) => {
-              const name = clientName(row);
-              const id = clientId(row);
-              const visitMeta = clientVisitMeta.get(normalizePersonName(name));
-              return (
-                <button className={`journey-client ${selectedClient === name ? 'active' : ''}`} type="button" key={id || name} onClick={() => setSelectedClient(name)}>
-                  <strong>{id ? `${id} · ${name}` : name}</strong>
-                  <span className="journey-client-meta">
-                    <small>{journeys[name] ? 'Journey in progress' : 'Ready for check-in'}</small>
-                    <time dateTime={visitMeta ? `${visitMeta.date}${visitMeta.time ? `T${visitMeta.time}` : ''}` : undefined}>{visitMeta ? formatJourneyDateTime(visitMeta.date, visitMeta.time) : 'No visit yet'}</time>
-                  </span>
-                </button>
-              );
-            }) : <div className="empty-state compact-empty"><strong>No patients found.</strong><p>Register the patient before booking an appointment.</p></div>}
-          </div>
-        </Card>
+            <div className="returning-patient-action">
+              <div>
+                <strong>Returning patient?</strong>
+                <span>Select an existing patient below, then start a new visit with saved profile data.</span>
+              </div>
+              <button className="pill" type="button" disabled={!selectedClient} onClick={openReturningVisit}>
+                + Start New Visit
+              </button>
+            </div>
+            <div className="journey-client-list">
+              {visibleClients.length ? visibleClients.map((row) => {
+                const name = clientName(row);
+                const id = clientId(row);
+                const phone = clientMobile(row);
+                const visitMeta = clientVisitMeta.get(normalizePersonName(name));
+                const isSelected = selectedClient === name;
+                return (
+                  <button
+                    className={`journey-client ${isSelected ? 'active' : ''}`}
+                    type="button"
+                    key={id || name}
+                    onClick={() => {
+                      setSelectedClient(name);
+                      setShowMobileList(false);
+                    }}
+                  >
+                    <div className="journey-client-main">
+                      <div className="journey-client-avatar">
+                        {name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="journey-client-info">
+                        <strong>{id ? `#${id.replace(/^#/, '')} · ${name}` : name}</strong>
+                        <span>{phone || 'No mobile saved'}</span>
+                      </div>
+                    </div>
+                    <span className="journey-client-meta">
+                      <small>{journeys[name] ? 'In progress' : 'Ready'}</small>
+                      <time dateTime={visitMeta ? `${visitMeta.date}${visitMeta.time ? `T${visitMeta.time}` : ''}` : undefined}>
+                        {visitMeta ? formatJourneyDateTime(visitMeta.date, visitMeta.time) : 'No visit yet'}
+                      </time>
+                    </span>
+                  </button>
+                );
+              }) : (
+                <div className="empty-state compact-empty">
+                  <strong>No patients found.</strong>
+                  <p>Register the patient before booking an appointment.</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
 
-        <Card title={selectedClient ? `${selectedClient} Journey` : 'Journey Stages'} subtitle={selectedClient ? 'Complete each stage in order; earlier records remain linked.' : 'Select a patient to begin.'}>
+        <div className={`patient-journey-col ${!selectedClient || showMobileList ? 'mobile-hidden' : ''}`}>
           {selectedClient ? (
-            <>
-              {selectedWeightUpdates.length > 0 && (
-                <div className="patient-weight-summary">
-                  <div><span>Latest Weight</span><strong>{selectedWeightUpdates[0].value} {selectedWeightUpdates[0].unit || 'kg'}</strong><small>{formatResponseDate(selectedWeightUpdates[0].recordedAt)} · {selectedWeightUpdates[0].formTitle || 'Submitted form'}</small></div>
-                  <div className="patient-weight-history" aria-label={`${selectedClient} weight history`}>
-                    {selectedWeightUpdates.slice(0, 6).map((update) => <span key={update.id}><strong>{update.value} {update.unit || 'kg'}</strong><small>{formatResponseDate(update.recordedAt)}</small></span>)}
+            <div className="patient-journey-content">
+              {/* 1. Ultra-Premium Patient Hero Header Card */}
+              <div className="patient-journey-hero-card">
+                <div className="patient-hero-top-row">
+                  <div className="patient-hero-identity">
+                    <div className="patient-hero-avatar" aria-hidden="true">
+                      {selectedClient.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="patient-hero-info">
+                      <div className="patient-hero-name-row">
+                        <h2>{selectedClient}</h2>
+                        {clientId(selectedClientRecord) && (
+                          <span className="patient-hero-badge id-badge">
+                            #{clientId(selectedClientRecord).replace(/^#/, '')}
+                          </span>
+                        )}
+                        <span className="patient-hero-badge program-badge">
+                          🌿 {selectedClientRecord?.program || selectedClientRecord?.['Program'] || 'Ayurveda Care'}
+                        </span>
+                      </div>
+                      <div className="patient-hero-meta-row">
+                        {clientMobile(selectedClientRecord) ? (
+                          <a href={`tel:${clientMobile(selectedClientRecord)}`} className="patient-hero-meta-item phone-link">
+                            📞 {clientMobile(selectedClientRecord)}
+                          </a>
+                        ) : (
+                          <span className="patient-hero-meta-item">📞 No mobile</span>
+                        )}
+                        <span className="patient-hero-meta-dot">·</span>
+                        <span className="patient-hero-meta-item">
+                          👤 {patientAgeGender(selectedClientRecord) || 'Age/Gender N/A'}
+                        </span>
+                        <span className="patient-hero-meta-dot">·</span>
+                        <span className="patient-hero-meta-item">
+                          🗓️ {clientVisitDate(selectedClientRecord) ? `Reg: ${formatResponseDate(clientVisitDate(selectedClientRecord))}` : 'Saved Patient'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="patient-hero-actions">
+                    <button className="pill primary-action" type="button" onClick={openReturningVisit}>
+                      + Start New Visit
+                    </button>
+                    <button className="pill" type="button" onClick={openClinicalPrint}>
+                      🖨️ Handout / Print
+                    </button>
+                    {pastJourneyVisits.length > 0 && (
+                      <button className="pill" type="button" onClick={openPastJourneyPrint}>
+                        📄 Past History PDF
+                      </button>
+                    )}
+                    <button className="pill mobile-back-btn" type="button" onClick={() => setShowMobileList(true)}>
+                      ← Switch Patient
+                    </button>
+                  </div>
+                </div>
+
+                <div className="patient-hero-progress-bar-wrap">
+                  <div className="patient-hero-progress-label">
+                    <span>
+                      <strong>Journey Progress:</strong> {completedStageCount} of {totalStageCount} stages completed
+                    </span>
+                    <span className="progress-percent">{progressPercentage}%</span>
+                  </div>
+                  <div className="patient-hero-progress-track">
+                    <div className="patient-hero-progress-fill" style={{ width: `${progressPercentage}%` }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Visit Timeline Selector Bar */}
+              <div className="journey-visit-selector-bar">
+                <div className="visit-selector-label">
+                  <span className="visit-icon">🗓️</span>
+                  <div>
+                    <strong>Visits Timeline</strong>
+                    <small>{journeyVisits.length} {journeyVisits.length === 1 ? 'visit' : 'visits'} on record</small>
+                  </div>
+                </div>
+                <div className="visit-selector-chips" role="tablist" aria-label="Visit timeline">
+                  {[...journeyVisits].sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate))).map((visit, index) => {
+                    const isSelected = activeVisitId === visit.id;
+                    return (
+                      <button
+                        key={visit.id}
+                        className={`journey-visit-chip ${isSelected ? 'active' : ''}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={isSelected}
+                        onClick={() => setSelectedVisitId(visit.id)}
+                      >
+                        <strong>{formatResponseDate(visit.visitDate)}</strong>
+                        <span>{visit.appointmentData?.type || (index === 0 ? 'Latest Visit' : 'Follow-up')}</span>
+                      </button>
+                    );
+                  })}
+                  <button className="journey-visit-add-chip" type="button" onClick={openReturningVisit}>
+                    + New Visit
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Section Tabs */}
+              <div className="journey-view-tabs" role="tablist" aria-label="Journey view sections">
+                <button
+                  className={`journey-view-tab ${patientViewTab === 'workflow' ? 'active' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={patientViewTab === 'workflow'}
+                  onClick={() => setPatientViewTab('workflow')}
+                >
+                  ⚡ Clinical Workflow ({completedStageCount}/{totalStageCount})
+                </button>
+                <button
+                  className={`journey-view-tab ${patientViewTab === 'records' ? 'active' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={patientViewTab === 'records'}
+                  onClick={() => setPatientViewTab('records')}
+                >
+                  📋 History & Vitals {selectedWeightUpdates.length || pregnancyHistoryEntries.length ? `(${selectedWeightUpdates.length + pregnancyHistoryEntries.length})` : ''}
+                </button>
+                <button
+                  className={`journey-view-tab ${patientViewTab === 'handout' ? 'active' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={patientViewTab === 'handout'}
+                  onClick={() => setPatientViewTab('handout')}
+                >
+                  🖨️ Handout & Summary
+                </button>
+              </div>
+
+              {/* 4. Tab 1: Clinical Workflow Stages */}
+              {patientViewTab === 'workflow' && (
+                <>
+                  <div className="journey-stages-grid">
+                    {STAGES.map(([id]) => {
+                      const info = getStageInfo(id);
+                      return (
+                        <div className={`journey-stage-card ${info.statusTone}`} key={id}>
+                          <div className={`journey-stage-index-badge ${info.statusTone}`}>
+                            {info.complete ? '✓' : (STAGES.findIndex(([s]) => s === id) + 1)}
+                          </div>
+                          <div className="journey-stage-content">
+                            <div className="journey-stage-head">
+                              <div className="journey-stage-title-wrap">
+                                <h3>{info.title}</h3>
+                                <span className={`journey-status-pill ${info.statusTone}`}>{info.status}</span>
+                              </div>
+                              {info.tags && info.tags.length > 0 && (
+                                <div className="journey-stage-tags">
+                                  {info.tags.map((tag, tIndex) => (
+                                    <span className="journey-stage-tag" key={tIndex}>{tag}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <p className="journey-stage-summary-text">{info.summary}</p>
+                          </div>
+                          <div className="journey-stage-action-wrap">
+                            <button
+                              className={`pill ${info.statusTone === 'current' ? 'primary-action' : ''}`}
+                              type="button"
+                              onClick={info.onClick}
+                            >
+                              {info.buttonText}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {nextAction() !== 'completed' ? (
+                    <div className="journey-next-action-bar">
+                      <div className="next-action-copy">
+                        <strong>Next Recommended Step:</strong>
+                        <span>{STAGES.find(([id]) => id === nextAction())?.[1]}</span>
+                      </div>
+                      <button className="pill primary-action journey-next-btn" type="button" onClick={() => runStage(nextAction())}>
+                        Continue to {STAGES.find(([id]) => id === nextAction())?.[1]} →
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="journey-completed-banner">
+                      <span className="check-icon">✓</span>
+                      <div>
+                        <strong>Complete Patient Journey Recorded</strong>
+                        <p>All core clinical stages for this visit have been completed. You can now generate the patient handout or print receipt.</p>
+                      </div>
+                      <button className="pill primary-action" type="button" onClick={openClinicalPrint}>
+                        Customize & Print Handout
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 5. Tab 2: Medical History & Vitals */}
+              {patientViewTab === 'records' && (
+                <div className="journey-records-container">
+                  {selectedWeightUpdates.length > 0 ? (
+                    <div className="patient-weight-summary">
+                      <div className="weight-summary-head">
+                        <div>
+                          <strong>Weight Tracking History</strong>
+                          <small>Auto-synced from submitted patient health forms</small>
+                        </div>
+                        <div className="weight-metric-box">
+                          <strong>{selectedWeightUpdates[0].value}</strong>
+                          <span>{selectedWeightUpdates[0].unit || 'kg'} (Latest)</span>
+                        </div>
+                      </div>
+                      <div className="patient-weight-history" aria-label={`${selectedClient} weight history`}>
+                        {selectedWeightUpdates.slice(0, 8).map((update) => (
+                          <div className="weight-history-chip" key={update.id}>
+                            <strong>{update.value} {update.unit || 'kg'}</strong>
+                            <small>{formatResponseDate(update.recordedAt)}</small>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="empty-state compact-empty" style={{ background: '#fff', marginBottom: '16px', borderRadius: '14px' }}>
+                      <strong>No weight updates recorded.</strong>
+                      <p>Weight entries from submitted patient intake and progress forms will appear here automatically.</p>
+                    </div>
+                  )}
+
+                  <div className="pregnancy-history-panel">
+                    <div className="pregnancy-history-head">
+                      <div>
+                        <strong>Pregnancy & Garbhsanskar Clinical Notes</strong>
+                        <span>{pregnancyHistoryEntries.length ? `${pregnancyHistoryEntries.length} history ${pregnancyHistoryEntries.length === 1 ? 'entry' : 'entries'} saved` : 'Record what the gynec advised during each visit.'}</span>
+                      </div>
+                      <button className="pill" type="button" onClick={openPregnancyHistory}>+ Add Clinical Note</button>
+                    </div>
+                    {pregnancyHistoryEntries.length ? (
+                      <div className="pregnancy-history-timeline">
+                        {pregnancyHistoryEntries.map((entry) => (
+                          <article className="pregnancy-history-entry" key={entry.id}>
+                            <div className="pregnancy-history-date">
+                              <strong>{formatResponseDate(entry.date || entry.visitDate)}</strong>
+                              <span>{entry.pregnancyStage || 'Stage not specified'}</span>
+                            </div>
+                            <div className="pregnancy-history-content">
+                              {entry.gynecName && <p><b>Gynec:</b> {entry.gynecName}</p>}
+                              {entry.gynecAdvice && <p><b>Gynec Advice:</b> {entry.gynecAdvice}</p>}
+                              {entry.tests && <p><b>Reports / Tests:</b> {entry.tests}</p>}
+                              {entry.medicines && <p><b>Medicines / Supplements:</b> {entry.medicines}</p>}
+                              {entry.garbhsanskarAdvice && <p><b>Garbhsanskar Plan:</b> {entry.garbhsanskarAdvice}</p>}
+                              {entry.nextFollowup && <p><b>Next Follow-up:</b> {formatResponseDate(entry.nextFollowup)}</p>}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="pregnancy-history-empty">
+                        No pregnancy or Garbhsanskar clinical history added yet. Click "+ Add Clinical Note" above to record advice.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
-              <div className="journey-visit-history">
-                <div><strong>Date-wise Journeys</strong><span>{journeyVisits.length ? `${journeyVisits.length} visit journey${journeyVisits.length === 1 ? '' : 's'} saved` : 'No visit journey created yet'}</span></div>
-                <div className="journey-visit-tabs" role="tablist" aria-label={`${selectedClient} visit journeys`}>
-                  {[...journeyVisits].sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate))).map((visit, index) => (
-                    <button className={`journey-visit-tab ${activeVisitId === visit.id ? 'active' : ''}`} type="button" role="tab" aria-selected={activeVisitId === visit.id} key={visit.id} onClick={() => setSelectedVisitId(visit.id)}>
-                      <strong>{formatResponseDate(visit.visitDate)}</strong>
-                      <span>{visit.appointmentData?.type || (index === 0 ? 'Latest visit' : 'Patient visit')}</span>
+
+              {/* 6. Tab 3: Patient Handout & Summary */}
+              {patientViewTab === 'handout' && (
+                <div className="journey-handout-preview-card">
+                  <div className="journey-handout-preview-head">
+                    <div>
+                      <strong>Visit Handout Summary ({formatResponseDate(journey.visitDate)})</strong>
+                      <p>Review the active consultation notes, prescribed medicines, and customized printing options.</p>
+                    </div>
+                    <button className="pill primary-action" type="button" onClick={openClinicalPrint}>
+                      🖨️ Customize & Print Full PDF
                     </button>
-                  ))}
-                </div>
-                <div className="journey-history-pdf-action">
-                  <div><strong>Past clinical history</strong><span>{pastJourneyVisits.length ? `${pastJourneyVisits.length} earlier visit${pastJourneyVisits.length === 1 ? '' : 's'} before ${formatResponseDate(journey.visitDate)}` : 'No earlier visit is available before this date.'}</span></div>
-                  <button className="pill" type="button" disabled={!pastJourneyVisits.length} onClick={openPastJourneyPrint}>View Past Journey PDF</button>
-                </div>
-              </div>
-              <div className="pregnancy-history-panel">
-                <div className="pregnancy-history-head">
-                  <div>
-                    <strong>Pregnancy / Garbhsanskar History</strong>
-                    <span>{pregnancyHistoryEntries.length ? `${pregnancyHistoryEntries.length} history ${pregnancyHistoryEntries.length === 1 ? 'entry' : 'entries'} saved` : 'Record what the gynec advised during each visit.'}</span>
                   </div>
-                  <button className="pill" type="button" onClick={openPregnancyHistory}>+ Add History</button>
-                </div>
-                {pregnancyHistoryEntries.length ? (
-                  <div className="pregnancy-history-timeline">
-                    {pregnancyHistoryEntries.map((entry) => (
-                      <article className="pregnancy-history-entry" key={entry.id}>
-                        <div className="pregnancy-history-date">
-                          <strong>{formatResponseDate(entry.date || entry.visitDate)}</strong>
-                          <span>{entry.pregnancyStage || 'Pregnancy stage not added'}</span>
-                        </div>
-                        <div className="pregnancy-history-content">
-                          {entry.gynecName && <p><b>Gynec:</b> {entry.gynecName}</p>}
-                          {entry.gynecAdvice && <p><b>Gynec Advice:</b> {entry.gynecAdvice}</p>}
-                          {entry.tests && <p><b>Reports / Tests:</b> {entry.tests}</p>}
-                          {entry.medicines && <p><b>Medicines / Supplements:</b> {entry.medicines}</p>}
-                          {entry.garbhsanskarAdvice && <p><b>Garbhsanskar Plan:</b> {entry.garbhsanskarAdvice}</p>}
-                          {entry.nextFollowup && <p><b>Next Follow-up:</b> {formatResponseDate(entry.nextFollowup)}</p>}
-                        </div>
-                      </article>
-                    ))}
+                  <div className="journey-handout-grid">
+                    <div className="journey-handout-item">
+                      <strong>Diagnosis & Complaints</strong>
+                      <p>{journey.consultationData?.diagnosis || 'No diagnosis recorded'}</p>
+                      {journey.consultationData?.complaint && <small style={{ color: 'var(--muted)', display: 'block', marginTop: '4px' }}>Complaints: {journey.consultationData.complaint}</small>}
+                    </div>
+                    <div className="journey-handout-item">
+                      <strong>Vitals & Examination</strong>
+                      <p>{journey.consultationData?.vitals || 'Vitals stable / not recorded'}</p>
+                    </div>
+                    <div className="journey-handout-item">
+                      <strong>Treatment Plan</strong>
+                      <p>{[journey.treatmentData?.service, journey.treatmentData?.duration, journey.treatmentData?.goal].filter(Boolean).join(' · ') || 'No treatment plan saved'}</p>
+                    </div>
+                    <div className="journey-handout-item">
+                      <strong>Prescribed Medicines</strong>
+                      <p>{clinicalMedicines(journey.treatmentData).length ? clinicalMedicines(journey.treatmentData).map((m) => `${m.medicine} (${m.dose || ''} ${m.timing || ''})`).join(', ') : 'No medicines prescribed'}</p>
+                    </div>
+                    <div className="journey-handout-item">
+                      <strong>Next Review Date</strong>
+                      <p>{journey.followupData?.date ? `${formatResponseDate(journey.followupData.date)} ${journey.followupData.time || ''}` : 'Follow-up pending'}</p>
+                    </div>
+                    <div className="journey-handout-item">
+                      <strong>Billing Status</strong>
+                      <p>{journey.paymentData?.amount ? `₹ ${journey.paymentData.amount} · ${journey.paymentData.status || 'Paid'}` : 'Payment pending'}</p>
+                    </div>
                   </div>
-                ) : <div className="pregnancy-history-empty">No pregnancy history added yet.</div>}
-              </div>
-              <div className="journey-stages">
-                {STAGES.map(([id, label], index) => {
-                  const complete = stageDone(id);
-                  return <div className={`journey-stage ${complete ? 'complete' : ''}`} key={id}><span className="journey-index">{complete ? '✓' : index + 1}</span><div><strong>{label}</strong><small>{stageDetail(id, complete)}</small></div>{id !== 'registration' && <button className="pill" type="button" onClick={() => runStage(id)}>{complete ? (id === 'treatment' || id === 'diet' ? 'Edit' : 'Open') : id === 'consultation' ? 'Consult' : id === 'followup' ? 'Schedule' : id === 'diet' ? 'Add' : 'Start'}</button>}</div>;
-                })}
-              </div>
-              <div className="journey-print-actions">
-                <div><strong>Patient handout</strong><span>Select consultation and treatment details for a customized print.</span></div>
-                <button className="pill" type="button" onClick={openClinicalPrint}>Customize Patient Print</button>
-              </div>
-              {nextAction() !== 'completed' ? <button className="pill primary-action journey-next" type="button" onClick={() => runStage(nextAction())}>Continue to {STAGES.find(([id]) => id === nextAction())?.[1]}</button> : <div className="action-note"><strong>Journey completed.</strong> All required stages are recorded.</div>}
-            </>
-          ) : <div className="empty-state"><strong>No patient selected.</strong><p>Choose a patient from Reception Desk to see their workflow.</p></div>}
-        </Card>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="card empty-state" style={{ minHeight: '340px', display: 'grid', placeContent: 'center', textAlign: 'center' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🏥</div>
+              <strong style={{ fontSize: '1.1rem', color: 'var(--text)' }}>No Patient Selected</strong>
+              <p style={{ color: 'var(--muted)', maxWidth: '380px', margin: '6px auto 16px' }}>
+                Select an existing patient from the Reception Desk on the left, or register a new patient to run the complete clinical workflow.
+              </p>
+              <button className="pill primary-action" type="button" onClick={() => navigate('/clients?action=add')}>
+                + Register New Patient
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {clinicalPrintOpen && (

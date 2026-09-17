@@ -1695,88 +1695,938 @@ body {
   background: #ffe9e6;
 }
 .empty-state .primary-action { margin-top: 12px; }
-.journey-layout { display: grid; grid-template-columns: minmax(280px, 0.7fr) minmax(0, 1.3fr); gap: 12px; align-items: start; }
-.journey-client-list { display: grid; gap: 7px; margin-top: 12px; max-height: 520px; overflow-y: auto; }
-.journey-client { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px; border: 1px solid var(--border); border-radius: 9px; background: #fff; color: var(--text); text-align: left; }
-.journey-client span { color: var(--muted); font-size: 0.75rem; }
-.journey-client-meta { display: grid; flex: 0 0 auto; gap: 3px; text-align: right; }
-.journey-client-meta small { color: var(--muted); font-size: 0.72rem; }
-.journey-client-meta time { color: var(--green-dark); font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
-.journey-client.active { border-color: var(--green); background: #eef8f2; box-shadow: inset 3px 0 0 var(--green); }
-.journey-stages { display: grid; gap: 8px; }
-.journey-visit-history {
+/* ==========================================================================
+   PATIENT JOURNEY COMMAND CENTER - REDESIGNED PREMIUM UI/UX
+   ========================================================================== */
+
+/* Main Layout: Balanced 2-column on desktop, responsive stack on tablet/mobile */
+.journey-layout {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* Reception Desk (Left Column) */
+.reception-card {
+  position: sticky;
+  top: 16px;
+}
+
+.journey-search-wrap {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.journey-client-list {
   display: grid;
   gap: 8px;
-  margin-bottom: 10px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #f8fbfa;
+  margin-top: 12px;
+  max-height: calc(100vh - 320px);
+  min-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
-.journey-visit-history > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.journey-visit-history > div:first-child strong { font-size: 0.8rem; }
-.journey-visit-history > div:first-child span { color: var(--muted); font-size: 0.7rem; }
-.journey-visit-tabs { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; }
-.journey-history-pdf-action { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 9px; border-top: 1px solid var(--border); }
-.journey-history-pdf-action > div { display: grid; gap: 2px; min-width: 0; }
-.journey-history-pdf-action strong { font-size: 0.76rem; }
-.journey-history-pdf-action span { color: var(--muted); font-size: 0.69rem; }
-.journey-history-pdf-action .pill { flex: 0 0 auto; }
-.pregnancy-history-panel { display: grid; gap: 10px; margin: 12px 0; padding: 12px; border: 1px solid #d7e7df; border-radius: 11px; background: #f7fbf9; }
-.pregnancy-history-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.pregnancy-history-head > div { display: grid; gap: 3px; }
-.pregnancy-history-head strong { font-size: 0.82rem; }
-.pregnancy-history-head span { color: var(--muted); font-size: 0.71rem; line-height: 1.4; }
-.pregnancy-history-timeline { display: grid; gap: 9px; }
-.pregnancy-history-entry { display: grid; grid-template-columns: minmax(120px, .32fr) minmax(0, 1fr); gap: 12px; padding: 11px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
-.pregnancy-history-date { display: grid; align-content: start; gap: 4px; }
-.pregnancy-history-date strong { color: var(--green-dark); font-size: .78rem; }
-.pregnancy-history-date span { color: var(--muted); font-size: .7rem; }
-.pregnancy-history-content { display: grid; gap: 5px; }
-.pregnancy-history-content p { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.48; white-space: pre-wrap; }
-.pregnancy-history-content b { color: var(--text); }
-.pregnancy-history-empty { padding: 12px; border: 1px dashed var(--border); border-radius: 9px; color: var(--muted); font-size: .75rem; text-align: center; background: #fff; }
-.journey-visit-tab {
+
+.journey-client {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--text);
+  text-align: left;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.journey-client:hover {
+  border-color: rgba(31, 107, 74, 0.35);
+  background: #fbfdfc;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(19, 52, 39, 0.05);
+}
+
+.journey-client.active {
+  border-color: var(--green);
+  background: #eef8f2;
+  box-shadow: 0 4px 14px rgba(31, 107, 74, 0.12), inset 4px 0 0 var(--green);
+}
+
+.journey-client-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.journey-client-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1f6b4a 0%, #138f86 100%);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.88rem;
+  flex-shrink: 0;
+}
+
+.journey-client-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.journey-client-info strong {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.journey-client-info span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.journey-client-meta {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 3px;
+  text-align: right;
+}
+
+.journey-client-meta small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.journey-client-meta time {
+  color: var(--green);
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   INDIVIDUAL PATIENT HERO CARD
+   ========================================================================== */
+.patient-journey-hero-card {
+  background: #ffffff;
+  border: 1px solid rgba(27, 54, 43, 0.12);
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: 0 4px 20px rgba(19, 52, 39, 0.05);
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.patient-hero-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.patient-hero-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.patient-hero-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1f6b4a 0%, #138f86 100%);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(31, 107, 74, 0.25);
+  flex-shrink: 0;
+}
+
+.patient-hero-info {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.patient-hero-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.patient-hero-name-row h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+.patient-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.patient-hero-badge.id-badge {
+  background: rgba(31, 107, 74, 0.09);
+  color: var(--green);
+  border: 1px solid rgba(31, 107, 74, 0.2);
+}
+
+.patient-hero-badge.program-badge {
+  background: #fdf6e7;
+  color: #8c5d00;
+  border: 1px solid rgba(228, 176, 66, 0.35);
+}
+
+.patient-hero-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.patient-hero-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.patient-hero-meta-item.phone-link {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.patient-hero-meta-item.phone-link:hover {
+  color: var(--green);
+  text-decoration: underline;
+}
+
+.patient-hero-meta-dot {
+  color: rgba(27, 54, 43, 0.25);
+  font-weight: bold;
+}
+
+.patient-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mobile-back-btn {
+  display: none;
+}
+
+/* Progress bar section */
+.patient-hero-progress-bar-wrap {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(27, 54, 43, 0.08);
+}
+
+.patient-hero-progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  color: var(--text);
+}
+
+.patient-hero-progress-label strong {
+  font-weight: 600;
+}
+
+.patient-hero-progress-label .progress-percent {
+  font-weight: 700;
+  color: var(--green);
+  font-size: 0.88rem;
+}
+
+.patient-hero-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: #e7efe9;
+  overflow: hidden;
+}
+
+.patient-hero-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #1f6b4a 0%, #138f86 100%);
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 10px rgba(19, 143, 134, 0.3);
+}
+
+/* ==========================================================================
+   VISIT TIMELINE SELECTOR BAR
+   ========================================================================== */
+.journey-visit-selector-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #f8fbfa;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.visit-selector-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.visit-selector-label .visit-icon {
+  font-size: 1.2rem;
+}
+
+.visit-selector-label strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.visit-selector-label small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.visit-selector-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  max-width: 100%;
+}
+
+.journey-visit-chip {
   display: grid;
   gap: 2px;
   flex: 0 0 auto;
-  min-width: 118px;
-  min-height: 48px;
-  padding: 7px 9px;
+  min-height: 44px;
+  padding: 7px 12px;
   border: 1px solid var(--border);
-  border-radius: 9px;
-  background: #fff;
+  border-radius: 10px;
+  background: #ffffff;
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
 }
-.journey-visit-tab:hover,
-.journey-visit-tab:focus-visible { border-color: rgba(14, 91, 82, 0.4); }
-.journey-visit-tab.active { border-color: var(--green); background: var(--green); color: #fff; }
-.journey-visit-tab strong { font-size: 0.75rem; }
-.journey-visit-tab span { color: var(--muted); font-size: 0.66rem; }
-.journey-visit-tab.active span { color: rgba(255, 255, 255, 0.8); }
-.journey-stage { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 58px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
-.journey-stage.complete { background: #f1f8f4; }
-.journey-index { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #e5ece8; color: var(--muted); font-weight: 900; }
-.journey-stage.complete .journey-index { background: var(--green); color: #fff; }
-.journey-stage strong, .journey-stage small { display: block; }
-.journey-stage small { margin-top: 2px; color: var(--muted); }
-.journey-print-actions {
+
+.journey-visit-chip:hover {
+  border-color: rgba(31, 107, 74, 0.4);
+  background: #f4f9f6;
+}
+
+.journey-visit-chip.active {
+  border-color: var(--green);
+  background: var(--green);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(31, 107, 74, 0.22);
+}
+
+.journey-visit-chip strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.journey-visit-chip span {
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.journey-visit-chip.active span {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.journey-visit-add-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px dashed rgba(31, 107, 74, 0.4);
+  border-radius: 10px;
+  background: rgba(238, 248, 242, 0.5);
+  color: var(--green);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.journey-visit-add-chip:hover {
+  background: #eef8f2;
+  border-style: solid;
+}
+
+/* ==========================================================================
+   SEGMENTED SECTION TABS
+   ========================================================================== */
+.journey-view-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(27, 54, 43, 0.06);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.journey-view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.journey-view-tab:hover {
+  color: var(--text);
+}
+
+.journey-view-tab.active {
+  background: #ffffff;
+  color: var(--green);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+}
+
+/* ==========================================================================
+   STAGE WORKFLOW CARDS (CORE PIPELINE)
+   ========================================================================== */
+.journey-stages-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.journey-stage-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  min-height: 74px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #ffffff;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+}
+
+.journey-stage-card:hover {
+  border-color: rgba(31, 107, 74, 0.35);
+  box-shadow: 0 6px 18px rgba(19, 52, 39, 0.05);
+  transform: translateY(-1px);
+}
+
+.journey-stage-card.complete {
+  background: #fbfdfc;
+  border-color: rgba(31, 107, 74, 0.18);
+}
+
+.journey-stage-card.current {
+  border-color: var(--green);
+  background: #f7fcf9;
+  box-shadow: 0 0 0 2px rgba(31, 107, 74, 0.12), 0 4px 14px rgba(31, 107, 74, 0.08);
+}
+
+.journey-stage-card.optional {
+  border-style: dashed;
+  background: #fafafa;
+}
+
+.journey-stage-index-badge {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 0.95rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.journey-stage-index-badge.complete {
+  background: var(--green);
+  color: #ffffff;
+  box-shadow: 0 3px 8px rgba(31, 107, 74, 0.3);
+}
+
+.journey-stage-index-badge.current {
+  background: linear-gradient(135deg, #e4b042 0%, #d49f30 100%);
+  color: #ffffff;
+  box-shadow: 0 3px 8px rgba(228, 176, 66, 0.35);
+}
+
+.journey-stage-index-badge.pending,
+.journey-stage-index-badge.optional {
+  background: #e9f0ec;
+  color: var(--muted);
+}
+
+.journey-stage-content {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.journey-stage-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 10px;
-  padding: 11px;
-  border: 1px solid rgba(14, 91, 82, 0.2);
-  border-radius: 10px;
-  background: rgba(236, 249, 244, 0.7);
+  flex-wrap: wrap;
 }
-.journey-print-actions > div { display: grid; gap: 2px; min-width: 0; }
-.journey-print-actions strong { font-size: 0.8rem; }
-.journey-print-actions span { color: var(--muted); font-size: 0.72rem; line-height: 1.4; }
-.journey-print-actions .pill { flex: 0 0 auto; }
+
+.journey-stage-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.journey-stage-title-wrap h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.journey-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.journey-status-pill.complete {
+  background: #e8f5ed;
+  color: #1a6042;
+  border: 1px solid rgba(26, 96, 66, 0.2);
+}
+
+.journey-status-pill.current {
+  background: #fdf5e2;
+  color: #8c5d00;
+  border: 1px solid rgba(228, 176, 66, 0.35);
+}
+
+.journey-status-pill.pending {
+  background: #f0f2f1;
+  color: var(--muted);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.journey-status-pill.optional {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px dashed #d1d5db;
+}
+
+.journey-stage-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.journey-stage-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(27, 54, 43, 0.06);
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.journey-stage-summary-text {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.journey-stage-card.complete .journey-stage-summary-text {
+  color: var(--text);
+}
+
+.journey-stage-action-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   NEXT ACTION & COMPLETED BANNERS
+   ========================================================================== */
+.journey-next-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, rgba(238, 248, 242, 0.9) 0%, rgba(228, 246, 240, 0.9) 100%);
+  border: 1px solid rgba(31, 107, 74, 0.25);
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(31, 107, 74, 0.06);
+}
+
+.next-action-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.next-action-copy strong {
+  font-size: 0.82rem;
+  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.next-action-copy span {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.journey-next-btn {
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 10px 20px;
+}
+
+.journey-completed-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 18px 22px;
+  background: #f0f9f4;
+  border: 1px solid rgba(31, 107, 74, 0.25);
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(31, 107, 74, 0.06);
+}
+
+.journey-completed-banner .check-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-size: 1.25rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.journey-completed-banner div {
+  flex: 1;
+}
+
+.journey-completed-banner strong {
+  display: block;
+  font-size: 1rem;
+  color: var(--green);
+  font-weight: 700;
+}
+
+.journey-completed-banner p {
+  margin: 3px 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* ==========================================================================
+   WEIGHT & VITALS TRACKING SECTION
+   ========================================================================== */
+.patient-weight-summary {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #ffffff;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+}
+
+.weight-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.weight-metric-box {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.weight-metric-box strong {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--green);
+  letter-spacing: -0.02em;
+}
+
+.weight-metric-box span {
+  font-size: 0.86rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.patient-weight-history {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(27, 54, 43, 0.08);
+}
+
+.weight-history-chip {
+  display: grid;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: #f7faf8;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.weight-history-chip strong {
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.weight-history-chip small {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+/* ==========================================================================
+   PREGNANCY / GARBHSANSKAR HISTORY PANEL
+   ========================================================================== */
+.pregnancy-history-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #cde3d6;
+  border-radius: 14px;
+  background: #f8fcfa;
+  margin-bottom: 16px;
+}
+
+.pregnancy-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pregnancy-history-head strong {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text);
+  display: block;
+}
+
+.pregnancy-history-head span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.pregnancy-history-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.pregnancy-history-entry {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.28fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+}
+
+.pregnancy-history-date {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.pregnancy-history-date strong {
+  color: var(--green);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.pregnancy-history-date span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.pregnancy-history-content {
+  display: grid;
+  gap: 6px;
+}
+
+.pregnancy-history-content p {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.pregnancy-history-content b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.pregnancy-history-empty {
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  text-align: center;
+  background: #ffffff;
+}
+
+/* ==========================================================================
+   HANDOUT TAB PREVIEW CARD
+   ========================================================================== */
+.journey-handout-preview-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
+}
+
+.journey-handout-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.journey-handout-preview-head strong {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.journey-handout-preview-head p {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.journey-handout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.journey-handout-item {
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fbfa;
+  border: 1px solid rgba(27, 54, 43, 0.07);
+}
+
+.journey-handout-item strong {
+  display: block;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--green);
+  margin-bottom: 4px;
+}
+
+.journey-handout-item p {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text);
+  line-height: 1.45;
+}
+
 .clinical-print-modal { width: min(1080px, calc(100vw - 28px)); }
 .clinical-print-layout { display: grid; grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr); gap: 14px; padding: 14px; overflow-y: auto; }
 .clinical-print-controls { display: grid; align-content: start; gap: 12px; }
@@ -2311,6 +3161,18 @@ body {
   .journey-history-pdf-action,
   .pregnancy-history-head,
   .clinical-print-select-all { align-items: stretch; flex-direction: column; }
+  .patient-hero-top-row { flex-direction: column; align-items: flex-start; }
+  .patient-hero-actions { width: 100%; }
+  .patient-hero-actions .pill { flex: 1; justify-content: center; }
+  .mobile-back-btn { display: inline-flex !important; }
+  .journey-visit-selector-bar { flex-direction: column; align-items: stretch; }
+  .journey-stage-card { grid-template-columns: 36px minmax(0, 1fr); }
+  .journey-stage-action-wrap { grid-column: 1 / -1; justify-content: flex-end; }
+  .journey-stage-action-wrap .pill { width: 100%; justify-content: center; }
+  .journey-next-action-bar { flex-direction: column; align-items: stretch; }
+  .journey-next-btn { width: 100%; justify-content: center; }
+  .journey-completed-banner { flex-direction: column; align-items: stretch; text-align: center; }
+  .journey-completed-banner .check-icon { margin: 0 auto; }
   .clinical-print-template-tools { grid-template-columns: 1fr; }
   .clinical-print-template-actions { grid-column: auto; }
   .journey-print-actions .pill { width: 100%; }
