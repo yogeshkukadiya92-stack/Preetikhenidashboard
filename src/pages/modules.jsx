@@ -27,6 +27,13 @@ import {
 } from '../data/appConfig.js';
 import { loadAllLocalResponses, loadForms as loadSavedForms } from '../data/formStore.js';
 import { hashPassword, STAFF_PERMISSION_OPTIONS } from '../data/auth.js';
+import {
+  AYURVEDIC_GUIDELINES,
+  CLINICAL_DIET_PRESETS,
+  COMMON_MEAL_NAMES,
+  DIET_GOAL_PRESETS,
+  QUICK_MEAL_SLOTS,
+} from './ClientJourneyPage.jsx';
 
 function downloadText(filename, content, mimeType = 'text/plain;charset=utf-8') {
   const blob = new Blob([content], { type: mimeType });
@@ -4242,6 +4249,8 @@ export function TreatmentPlansPage() {
   const [dietForm, setDietForm] = useState(blankDietPlan);
   const [dietTemplateName, setDietTemplateName] = useState('');
   const [editingDietIndex, setEditingDietIndex] = useState(null);
+  const [selectedDietPreset, setSelectedDietPreset] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
   const [dietPdfMessage, setDietPdfMessage] = useState('');
   const hasMountedTreatmentPlans = useRef(false);
   const hasMountedPlanTemplates = useRef(false);
@@ -4361,38 +4370,98 @@ export function TreatmentPlansPage() {
     }));
   };
 
-  const addDietMeal = () => {
-    setDietForm((current) => ({ ...current, meals: [...current.meals, { time: '', meal: '', food: '', notes: '' }] }));
+  const addDietMeal = (slot) => {
+    setDietForm((current) => ({
+      ...current,
+      meals: [...current.meals, { time: slot?.time || '', meal: slot?.meal || '', food: slot?.food || '', notes: slot?.notes || '' }],
+    }));
+  };
+
+  const duplicateDietMeal = (index) => {
+    setDietForm((current) => {
+      const target = current.meals[index];
+      if (!target) return current;
+      const nextMeals = [...current.meals];
+      nextMeals.splice(index + 1, 0, { ...target });
+      return { ...current, meals: nextMeals };
+    });
+  };
+
+  const moveDietMeal = (index, direction) => {
+    setDietForm((current) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.meals.length) return current;
+      const nextMeals = [...current.meals];
+      const temp = nextMeals[index];
+      nextMeals[index] = nextMeals[nextIndex];
+      nextMeals[nextIndex] = temp;
+      return { ...current, meals: nextMeals };
+    });
   };
 
   const removeDietMeal = (index) => {
     setDietForm((current) => ({ ...current, meals: current.meals.length > 1 ? current.meals.filter((_, mealIndex) => mealIndex !== index) : current.meals }));
   };
 
-  const applyDietPreset = (type) => {
-    const presets = {
-      fatLoss: { goal: 'Fat loss', calories: '1200-1500 kcal', meals: blankDietMeals },
-      muscleGain: {
-        goal: 'Muscle gain',
-        calories: '2200-2600 kcal',
-        meals: [
-          { time: '07:00', meal: 'Pre-workout', food: 'Banana + black coffee / soaked almonds', notes: 'Before training' },
-          { time: '09:00', meal: 'Breakfast', food: 'Paneer/eggs/sprouts + oats/poha', notes: 'High protein' },
-          { time: '11:30', meal: 'Snack', food: 'Fruit + nuts / protein shake', notes: 'Add calories' },
-          { time: '14:00', meal: 'Lunch', food: 'Rice/roti + dal + sabzi + curd + salad', notes: 'Balanced carbs' },
-          { time: '17:30', meal: 'Evening', food: 'Sweet potato / sandwich / chilla', notes: 'Pre-evening snack' },
-          { time: '20:30', meal: 'Dinner', food: 'Protein + roti/rice + vegetables', notes: 'Do not skip' },
-        ],
-      },
-      nutrition: { goal: 'Nutrition balance', calories: 'As per assessment', meals: blankDietMeals },
-    };
-    const preset = presets[type];
-    setDietForm((current) => ({ ...current, goal: preset.goal, calories: preset.calories, meals: preset.meals }));
+  const appendDietGuideline = (rule) => {
+    setDietForm((current) => {
+      const trimmed = String(current.instructions ?? '').trim();
+      const nextInstructions = trimmed ? `${trimmed}\n• ${rule}` : `• ${rule}`;
+      return { ...current, instructions: nextInstructions };
+    });
+  };
+
+  const applyClinicalDietPreset = (preset) => {
+    setSelectedDietPreset(preset.id);
+    setDietForm((current) => ({
+      ...current,
+      goal: preset.goal,
+      service: preset.service || current.service,
+      calories: preset.calories,
+      water: preset.water,
+      duration: preset.duration || current.duration,
+      weekLabel: preset.weekLabel || current.weekLabel,
+      instructions: preset.instructions || current.instructions,
+      meals: preset.meals.map((meal) => ({ ...meal })),
+    }));
+    setToastMessage(`Applied preset: ${preset.label}`);
+    setTimeout(() => setToastMessage(''), 3500);
+  };
+
+  const copyDietForWhatsApp = () => {
+    const mealText = (dietForm.meals || [])
+      .filter((m) => m.meal || m.food)
+      .map((m) => `⏰ *${m.time || '--:--'} - ${m.meal}*\n🍽️ ${m.food}${m.notes ? `\n💡 _Note:_ ${m.notes}` : ''}`)
+      .join('\n\n');
+
+    const message = `🌿 *SHREE AYURVED HOSPITAL - DIET & NUTRITION PLAN*\n` +
+      `👤 *Patient:* ${dietForm.client || 'Patient'}\n` +
+      `🎯 *Goal:* ${dietForm.goal || 'General Health'}\n` +
+      `⏱️ *Duration:* ${dietForm.duration || '30 days'}\n` +
+      (dietForm.weekLabel ? `📅 *Phase:* ${dietForm.weekLabel}\n` : '') +
+      (dietForm.calories ? `🔥 *Target Calories:* ${dietForm.calories}\n` : '') +
+      (dietForm.water ? `💧 *Daily Hydration:* ${dietForm.water}\n` : '') +
+      `\n--------------------------------\n` +
+      `📋 *DAILY MEAL SCHEDULE*\n` +
+      `--------------------------------\n\n` +
+      (mealText || 'No meals scheduled yet.') +
+      (dietForm.instructions ? `\n\n--------------------------------\n🌿 *INSTRUCTIONS & AYURVEDIC GUIDELINES*\n--------------------------------\n${dietForm.instructions}` : '') +
+      `\n\n_Wish you healthy healing!_\n*Dr. Shree Ayurved Hospital*`;
+
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(message);
+      setToastMessage('Copied WhatsApp summary to clipboard!');
+      setTimeout(() => setToastMessage(''), 3000);
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+    }
   };
 
   const openNewDietPlan = () => {
     setDietForm(blankDietPlan);
     setDietTemplateName('');
+    setSelectedDietPreset('');
+    setToastMessage('');
     setEditingDietIndex(null);
     setDietModal(true);
   };
@@ -4400,6 +4469,8 @@ export function TreatmentPlansPage() {
   const openEditDietPlan = (plan, index) => {
     setDietForm({ ...blankDietPlan, ...plan, planDate: plan.planDate ?? '', weekLabel: plan.weekLabel ?? '', meals: Array.isArray(plan.meals) && plan.meals.length ? plan.meals : blankDietMeals });
     setDietTemplateName('');
+    setSelectedDietPreset('');
+    setToastMessage('');
     setEditingDietIndex(index);
     setDietModal(true);
   };
@@ -4848,57 +4919,382 @@ export function TreatmentPlansPage() {
 
       {dietModal && (
         <div className="modal-backdrop" role="presentation" onClick={() => setDietModal(false)}>
-          <div className="modal-shell consultation-modal diet-plan-modal" role="dialog" aria-modal="true" aria-label="Diet Plan" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <div><h2>{editingDietIndex === null ? 'Add Diet Plan' : 'Edit Diet Plan'}</h2><p>Build time-wise meals, then print/save as PDF or share.</p></div>
-              <button className="icon-btn" type="button" onClick={() => setDietModal(false)} aria-label="Close">x</button>
-            </div>
-            <div className="modal-body detail-grid">
-              <div className="consultation-template-tools">
-                <label className="field-block">
-                  <span>Use Diet Template</span>
-                  <select className="lead-input" defaultValue="" onChange={(event) => applyDietTemplate(event.target.value)}>
-                    <option value="">{dietTemplates.length ? 'Select saved diet template...' : 'No diet templates saved yet'}</option>
-                    {dietTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}
-                  </select>
-                </label>
-                <label className="field-block">
-                  <span>Template Name</span>
-                  <input className="lead-input" value={dietTemplateName} onChange={(event) => setDietTemplateName(event.target.value)} placeholder="e.g. Fat Loss 30 Days" />
-                </label>
-                <button className="pill" type="button" onClick={saveDietTemplate} disabled={!dietTemplateName.trim()}>Save Template</button>
-              </div>
-              <div className="quick-preset-row">
-                <button className="pill" type="button" onClick={() => applyDietPreset('fatLoss')}>Fat Loss</button>
-                <button className="pill" type="button" onClick={() => applyDietPreset('muscleGain')}>Muscle Gain</button>
-                <button className="pill" type="button" onClick={() => applyDietPreset('nutrition')}>Nutrition</button>
-              </div>
-              <label className="field-block"><span>Patient Name</span><input className="lead-input" list="diet-client-options" value={dietForm.client} onChange={(e) => setDietForm((f) => ({ ...f, client: e.target.value }))} placeholder={clientNames.length ? 'Search or select patient...' : 'Patient name'} /><datalist id="diet-client-options">{clientNames.map((name) => <option key={name} value={name} />)}</datalist></label>
-              <label className="field-block"><span>Service</span><select className="lead-input" value={dietForm.service} onChange={(e) => setDietForm((f) => ({ ...f, service: e.target.value }))}>{serviceOptions.map((service) => <option key={service}>{service}</option>)}</select></label>
-              <label className="field-block"><span>Goal</span><input className="lead-input" value={dietForm.goal} onChange={(e) => setDietForm((f) => ({ ...f, goal: e.target.value }))} /></label>
-              <label className="field-block"><span>Duration</span><input className="lead-input" value={dietForm.duration} onChange={(e) => setDietForm((f) => ({ ...f, duration: e.target.value }))} /></label>
-              <label className="field-block"><span>Plan Date</span><input className="lead-input" type="date" value={dietForm.planDate} onChange={(e) => setDietForm((f) => ({ ...f, planDate: e.target.value }))} /></label>
-              <label className="field-block"><span>Week / Phase</span><input className="lead-input" value={dietForm.weekLabel} onChange={(e) => setDietForm((f) => ({ ...f, weekLabel: e.target.value }))} placeholder="e.g. Week 1, Week 2, Phase 3" /></label>
-              <label className="field-block"><span>Calories</span><input className="lead-input" value={dietForm.calories} onChange={(e) => setDietForm((f) => ({ ...f, calories: e.target.value }))} placeholder="e.g. 1500 kcal" /></label>
-              <label className="field-block"><span>Water</span><input className="lead-input" value={dietForm.water} onChange={(e) => setDietForm((f) => ({ ...f, water: e.target.value }))} /></label>
-              <div className="treatment-medicine-builder">
-                <div className="medicine-builder-head"><div><strong>Meal Schedule</strong><span>Add time, meal name, food items, and notes.</span></div><button className="pill" type="button" onClick={addDietMeal}>Add Meal</button></div>
-                {dietForm.meals.map((meal, index) => (
-                  <div className="treatment-medicine-row diet-meal-row" key={index}>
-                    <label className="field-block"><span>Time</span><input className="lead-input" type="time" value={meal.time} onChange={(e) => setDietMeal(index, 'time', e.target.value)} /></label>
-                    <label className="field-block"><span>Meal</span><input className="lead-input" value={meal.meal} onChange={(e) => setDietMeal(index, 'meal', e.target.value)} placeholder="Breakfast" /></label>
-                    <label className="field-block diet-food-field"><span>Food</span><textarea className="lead-input" rows={2} value={meal.food} onChange={(e) => setDietMeal(index, 'food', e.target.value)} placeholder="Food items" /></label>
-                    <label className="field-block"><span>Notes</span><textarea className="lead-input" rows={2} value={meal.notes} onChange={(e) => setDietMeal(index, 'notes', e.target.value)} placeholder="Instructions" /></label>
-                    <button className="icon-btn" type="button" onClick={() => removeDietMeal(index)} aria-label={`Remove meal ${index + 1}`}>x</button>
+          <div
+            className="modal-shell diet-builder-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Diet Plan Builder"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="diet-builder-head">
+              <div className="diet-builder-head-left">
+                <div className="diet-builder-avatar">
+                  {String(dietForm.client || 'D').trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join('').toUpperCase() || 'DP'}
+                </div>
+                <div className="diet-builder-title">
+                  <h2>{editingDietIndex === null ? 'Create Personalized Diet Plan' : 'Edit Diet Plan'}</h2>
+                  <div className="diet-builder-patient-meta">
+                    <span className="patient-name-tag">{dietForm.client || 'New Patient'}</span>
+                    <span>• Date: {dietForm.planDate || new Date().toISOString().slice(0, 10)}</span>
                   </div>
-                ))}
+                </div>
               </div>
-              <label className="field-block full-field"><span>Instructions</span><textarea className="lead-input" rows={3} value={dietForm.instructions} onChange={(e) => setDietForm((f) => ({ ...f, instructions: e.target.value }))} /></label>
+              <button className="icon-btn" type="button" onClick={() => setDietModal(false)} aria-label="Close modal">✕</button>
             </div>
-            <div className="modal-actions">
-              <button className="pill" type="button" onClick={() => setDietModal(false)}>Cancel</button>
-              <button className="pill" type="button" onClick={() => openDietPdf(dietForm)}>Preview PDF</button>
-              <button className="pill primary-action" type="button" onClick={saveDietPlan} disabled={!dietForm.client.trim()}>Save Diet Plan</button>
+
+            {/* Scrollable Body */}
+            <div className="diet-builder-body">
+              {/* Section 1: Presets & Templates */}
+              <div className="diet-section-card">
+                <div className="diet-section-header">
+                  <div>
+                    <h3>⚡ Clinical Protocols & Quick Presets</h3>
+                    <p>One-tap load scientifically curated Ayurvedic nutrition frameworks for instant meal scheduling.</p>
+                  </div>
+                  {toastMessage && <div className="diet-toast-msg">✨ {toastMessage}</div>}
+                </div>
+
+                <div className="diet-presets-bar">
+                  {CLINICAL_DIET_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`diet-preset-chip ${selectedDietPreset === preset.id ? 'active' : ''}`}
+                      onClick={() => applyClinicalDietPreset(preset)}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="diet-template-tools">
+                  <label className="field-block">
+                    <span>Use Saved Diet Template</span>
+                    <select className="lead-input" defaultValue="" onChange={(e) => applyDietTemplate(e.target.value)}>
+                      <option value="">{dietTemplates.length ? 'Select from saved diet templates...' : 'No saved templates yet'}</option>
+                      {dietTemplates.map((t, idx) => (
+                        <option key={`${t.name}-${idx}`} value={idx}>{t.name} ({t.goal || 'General'})</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field-block">
+                    <span>Save Current Plan As Template</span>
+                    <input
+                      className="lead-input"
+                      value={dietTemplateName}
+                      onChange={(e) => setDietTemplateName(e.target.value)}
+                      placeholder="e.g. 30-Day Garbh Sanskar Nutrition"
+                    />
+                  </label>
+                  <button
+                    className="pill"
+                    type="button"
+                    onClick={saveDietTemplate}
+                    disabled={!dietTemplateName.trim()}
+                  >
+                    + Save Template
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 2: Patient & Plan Overview */}
+              <div className="diet-section-card">
+                <div className="diet-section-header">
+                  <div>
+                    <h3>📋 Patient & Plan Overview</h3>
+                    <p>Assign patient, clinical service, primary goal, duration, and target parameters.</p>
+                  </div>
+                </div>
+
+                <div className="diet-overview-grid">
+                  <label className="field-block">
+                    <span>Patient Name *</span>
+                    <input
+                      className="lead-input"
+                      list="diet-client-options"
+                      value={dietForm.client}
+                      onChange={(e) => setDietForm((f) => ({ ...f, client: e.target.value }))}
+                      placeholder={clientNames.length ? 'Search or select patient...' : 'Patient name'}
+                    />
+                    <datalist id="diet-client-options">
+                      {clientNames.map((name) => <option key={name} value={name} />)}
+                    </datalist>
+                  </label>
+
+                  <label className="field-block">
+                    <span>Service Type</span>
+                    <select
+                      className="lead-input"
+                      value={dietForm.service}
+                      onChange={(e) => setDietForm((f) => ({ ...f, service: e.target.value }))}
+                    >
+                      {serviceOptions.map((service) => <option key={service} value={service}>{service}</option>)}
+                    </select>
+                  </label>
+
+                  <label className="field-block">
+                    <span>Clinical Goal</span>
+                    <input
+                      className="lead-input"
+                      list="diet-goal-presets-list-module"
+                      value={dietForm.goal}
+                      onChange={(e) => setDietForm((f) => ({ ...f, goal: e.target.value }))}
+                      placeholder="e.g. Fat loss"
+                    />
+                    <datalist id="diet-goal-presets-list-module">
+                      {DIET_GOAL_PRESETS.map((g) => <option key={g} value={g} />)}
+                    </datalist>
+                  </label>
+
+                  <label className="field-block">
+                    <span>Plan Duration</span>
+                    <input
+                      className="lead-input"
+                      value={dietForm.duration}
+                      onChange={(e) => setDietForm((f) => ({ ...f, duration: e.target.value }))}
+                      placeholder="e.g. 30 days"
+                    />
+                  </label>
+                </div>
+
+                <div className="diet-targets-grid">
+                  <label className="field-block">
+                    <span>Start Date</span>
+                    <input
+                      className="lead-input"
+                      type="date"
+                      value={dietForm.planDate}
+                      onChange={(e) => setDietForm((f) => ({ ...f, planDate: e.target.value }))}
+                    />
+                  </label>
+
+                  <label className="field-block">
+                    <span>Week / Phase</span>
+                    <input
+                      className="lead-input"
+                      value={dietForm.weekLabel}
+                      onChange={(e) => setDietForm((f) => ({ ...f, weekLabel: e.target.value }))}
+                      placeholder="e.g. Phase 1 - Detox"
+                    />
+                  </label>
+
+                  <label className="field-block">
+                    <span>Daily Calories Target</span>
+                    <input
+                      className="lead-input"
+                      value={dietForm.calories}
+                      onChange={(e) => setDietForm((f) => ({ ...f, calories: e.target.value }))}
+                      placeholder="e.g. 1200-1400 kcal"
+                    />
+                  </label>
+
+                  <label className="field-block">
+                    <span>Daily Water Intake</span>
+                    <input
+                      className="lead-input"
+                      value={dietForm.water}
+                      onChange={(e) => setDietForm((f) => ({ ...f, water: e.target.value }))}
+                      placeholder="e.g. 2.5 - 3.0 Liters"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Section 3: Time-wise Meal Schedule */}
+              <div className="diet-section-card">
+                <div className="diet-section-header">
+                  <div>
+                    <h3>🍽️ Daily Meal Schedule ({dietForm.meals?.length || 0} Meals)</h3>
+                    <p>Customize time-wise nutrition slots. Use quick slot buttons below or add custom meals.</p>
+                  </div>
+                </div>
+
+                <div className="diet-quick-meals-bar">
+                  <span>Quick Add Slot:</span>
+                  {QUICK_MEAL_SLOTS.map((slot) => (
+                    <button
+                      key={slot.meal}
+                      type="button"
+                      className="diet-quick-slot-btn"
+                      onClick={() => addDietMeal(slot)}
+                      title={`Add ${slot.meal} at ${slot.time}`}
+                    >
+                      + {slot.meal} ({slot.time})
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="diet-quick-slot-btn custom-btn"
+                    onClick={() => addDietMeal({ time: '', meal: '', food: '', notes: '' })}
+                  >
+                    + Custom Meal Row
+                  </button>
+                </div>
+
+                <div className="diet-meal-cards-list">
+                  {dietForm.meals.map((meal, index) => (
+                    <div className="diet-meal-card" key={index}>
+                      <div className="diet-meal-card-head">
+                        <div className="diet-meal-card-head-left">
+                          <span className="diet-meal-slot-badge">#{index + 1}</span>
+
+                          <div className="diet-time-field">
+                            <input
+                              className="lead-input"
+                              type="time"
+                              value={meal.time}
+                              onChange={(e) => setDietMeal(index, 'time', e.target.value)}
+                              title="Meal timing"
+                            />
+                          </div>
+
+                          <div className="diet-meal-name-field">
+                            <input
+                              className="lead-input"
+                              list="common-meal-names-list-module"
+                              value={meal.meal}
+                              onChange={(e) => setDietMeal(index, 'meal', e.target.value)}
+                              placeholder="Meal Name (e.g. Breakfast)"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="diet-meal-card-actions">
+                          <button
+                            className="diet-meal-action-btn"
+                            type="button"
+                            disabled={index === 0}
+                            onClick={() => moveDietMeal(index, -1)}
+                            title="Move meal up"
+                            aria-label="Move meal up"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            className="diet-meal-action-btn"
+                            type="button"
+                            disabled={index === dietForm.meals.length - 1}
+                            onClick={() => moveDietMeal(index, 1)}
+                            title="Move meal down"
+                            aria-label="Move meal down"
+                          >
+                            ↓
+                          </button>
+                          <button
+                            className="diet-meal-action-btn"
+                            type="button"
+                            onClick={() => duplicateDietMeal(index)}
+                            title="Duplicate meal"
+                            aria-label="Duplicate meal"
+                          >
+                            ⎘
+                          </button>
+                          <button
+                            className="diet-meal-action-btn danger"
+                            type="button"
+                            disabled={dietForm.meals.length === 1}
+                            onClick={() => removeDietMeal(index)}
+                            title="Remove this meal"
+                            aria-label="Remove meal"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="diet-meal-card-body">
+                        <div>
+                          <span className="diet-meal-col-label">Food Items & Recipe / Quantity *</span>
+                          <textarea
+                            className="diet-textarea"
+                            rows={2}
+                            value={meal.food}
+                            onChange={(e) => setDietMeal(index, 'food', e.target.value)}
+                            placeholder="e.g. 1 bowl Moong dal chilla + green mint chutney + 1 cup warm water..."
+                          />
+                        </div>
+
+                        <div>
+                          <span className="diet-meal-col-label">Instructions / Notes / Precautions</span>
+                          <textarea
+                            className="diet-textarea"
+                            rows={2}
+                            value={meal.notes}
+                            onChange={(e) => setDietMeal(index, 'notes', e.target.value)}
+                            placeholder="e.g. Drink warm water 30 mins later; avoid cold drinks..."
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <datalist id="common-meal-names-list-module">
+                  {COMMON_MEAL_NAMES.map((name) => <option key={name} value={name} />)}
+                </datalist>
+              </div>
+
+              {/* Section 4: Ayurvedic Guidelines */}
+              <div className="diet-section-card">
+                <div className="diet-section-header">
+                  <div>
+                    <h3>🌿 Patient Guidelines & Ayurvedic Pathya / Apathya (Do's & Don'ts)</h3>
+                    <p>Click any guideline chip below to quickly append it to patient instructions:</p>
+                  </div>
+                </div>
+
+                <div className="diet-guidelines-bar">
+                  {AYURVEDIC_GUIDELINES.map((rule) => (
+                    <button
+                      key={rule}
+                      type="button"
+                      className="diet-guideline-chip"
+                      onClick={() => appendDietGuideline(rule)}
+                      title="Click to add to instructions"
+                    >
+                      + {rule}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="field-block full-field">
+                  <span className="diet-meal-col-label">Complete Dietary Instructions for Patient</span>
+                  <textarea
+                    className="diet-instructions-area"
+                    rows={4}
+                    value={dietForm.instructions}
+                    onChange={(e) => setDietForm((f) => ({ ...f, instructions: e.target.value }))}
+                    placeholder="Additional instructions, clinical dos and don'ts, or follow-up notes..."
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Sticky Action Footer */}
+            <div className="diet-builder-foot">
+              <div className="diet-builder-foot-left">
+                <button className="pill" type="button" onClick={() => openDietPdf(dietForm)}>
+                  🖨️ Preview & Print PDF
+                </button>
+                <button className="pill" type="button" onClick={copyDietForWhatsApp}>
+                  📲 Copy for WhatsApp
+                </button>
+              </div>
+
+              <div className="diet-builder-foot-right">
+                <button className="pill" type="button" onClick={() => setDietModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  className="pill primary-action"
+                  type="button"
+                  onClick={saveDietPlan}
+                  disabled={!dietForm.client.trim()}
+                >
+                  ✓ {editingDietIndex === null ? 'Save Diet Plan' : 'Update Diet Plan'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

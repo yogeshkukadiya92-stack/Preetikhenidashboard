@@ -231,12 +231,290 @@ const QUICK_CONSULTATIONS = [
   { label: 'Hair fall', complaint: 'Hair fall, Stress', diagnosis: 'Hair disorder', notes: 'Review after 30 days', vitals: 'Vitals stable' },
 ];
 
-const DEFAULT_DIET_MEALS = [
-  { time: '07:00', meal: 'Warm water', food: 'Lemon water / methi water', notes: 'Start hydration' },
-  { time: '08:30', meal: 'Breakfast', food: 'Protein breakfast + fruit', notes: 'Avoid sugar' },
-  { time: '13:30', meal: 'Lunch', food: 'Roti/rice + dal + sabzi + salad', notes: 'Balanced plate' },
-  { time: '20:00', meal: 'Dinner', food: 'Soup / khichdi / protein + vegetables', notes: 'Finish early' },
+export const COMMON_MEAL_NAMES = [
+  'Early Morning',
+  'Breakfast',
+  'Mid-Morning Snack',
+  'Lunch',
+  'Evening Snack',
+  'Dinner',
+  'Bedtime Drink',
 ];
+
+export const DIET_GOAL_PRESETS = [
+  'Fat loss & Metabolism',
+  'PCOS / Hormonal balance',
+  'Garbh Sanskar & Prenatal nutrition',
+  'Ayurvedic Detox (Deepana / Pachana)',
+  'Diabetes & Blood sugar control',
+  'Muscle gain & Vitality (Dhatu Poshan)',
+  'Thyroid care & Weight control',
+  'Digestive health & Acidity relief',
+];
+
+export const CLINICAL_DIET_PRESETS = [
+  {
+    id: 'fatLoss',
+    label: '🥗 Fat Loss & Metabolism',
+    goal: 'Fat loss & Weight Management',
+    calories: '1200-1400 kcal',
+    water: '2.5-3.0 L',
+    duration: '30 days',
+    service: 'Diet Counseling',
+    weekLabel: 'Phase 1 - Detox & Fat Loss',
+    instructions: '• Drink 1 glass of warm water 30 mins before meals.\n• Finish light dinner before 7:30 PM.\n• 100 steps gentle walk (Shatapadi) after lunch and dinner.\n• Strictly avoid cold drinks, refined white sugar, maida, and deep-fried items.',
+    meals: [
+      { time: '06:30', meal: 'Early Morning', food: '1 glass warm lemon water with chia seeds + 4 soaked almonds', notes: 'Drink warm sitting down' },
+      { time: '08:30', meal: 'Breakfast', food: 'Moong dal chilla with mint coriander chutney OR vegetable oats', notes: 'High protein, low oil' },
+      { time: '11:00', meal: 'Mid-Morning Snack', food: '1 fresh seasonal fruit (Apple / Papaya / Guava) + Green tea', notes: 'No fruit juice' },
+      { time: '13:30', meal: 'Lunch', food: '1 Jowar/Bajra rotla + 1 bowl green vegetable + 1 bowl thin dal + cucumber salad', notes: 'Chew slowly 32 times' },
+      { time: '17:00', meal: 'Evening Snack', food: 'Roasted makhana OR boiled chana chaat + herbal tea', notes: 'Light healthy snack' },
+      { time: '19:30', meal: 'Dinner', food: '1 bowl bottle gourd (Lauki) soup OR warm Moong khichdi', notes: 'Finish before 8:00 PM' },
+      { time: '21:30', meal: 'Bedtime Drink', food: 'Warm water with 1/2 tsp triphala powder', notes: 'Supports overnight digestion' },
+    ],
+  },
+  {
+    id: 'garbhsanskar',
+    label: '🤰 Garbh Sanskar & Prenatal',
+    goal: 'Prenatal Nutrition & Fetal Development',
+    calories: '1800-2200 kcal',
+    water: '2.5-3.0 L',
+    duration: '30 days',
+    service: 'Garbhsanskar Diet',
+    weekLabel: 'Trimester Nutrition',
+    instructions: '• Pure Sattvic freshly prepared diet with Cow Ghee (Ghrit).\n• Soak all nuts overnight before eating.\n• Keep adequate hydration with coconut water and buttermilk.\n• Positive, calm mindset while taking meals.',
+    meals: [
+      { time: '06:30', meal: 'Early Morning', food: '1 glass warm cow milk with saffron (Kesar) + 5 soaked almonds + 1 walnut', notes: 'Nourishes Ojas' },
+      { time: '08:30', meal: 'Breakfast', food: 'Vegetable Dalia / Sheera with dry fruits / Poha with sprouts', notes: 'Nutrient rich' },
+      { time: '11:00', meal: 'Mid-Morning Snack', food: '1 glass fresh tender coconut water + pomegranate / apple', notes: 'Electrolytes & iron' },
+      { time: '13:00', meal: 'Lunch', food: '2 Rotis with 1 tsp A2 Cow Ghee + Dal + Seasonal sabzi + Rice + Buttermilk', notes: 'Complete balanced thali' },
+      { time: '17:00', meal: 'Evening Snack', food: 'Roasted makhana / Til-Gud laddoo / Fruit smoothie', notes: 'Natural calcium' },
+      { time: '19:30', meal: 'Dinner', food: 'Light Moong khichdi with ghee + vegetable soup', notes: 'Easy to digest' },
+      { time: '21:30', meal: 'Bedtime Drink', food: 'Warm milk with pinch of turmeric & cardamom', notes: 'Promotes sound sleep' },
+    ],
+  },
+  {
+    id: 'pcos',
+    label: '🩺 PCOS & Hormonal Balance',
+    goal: 'PCOS Management & Insulin Sensitivity',
+    calories: '1300-1500 kcal',
+    water: '2.5-3.0 L',
+    duration: '30 days',
+    service: 'Diet Counseling',
+    weekLabel: 'Hormonal Reset',
+    instructions: '• Low glycemic index (GI) foods.\n• Practice seed cycling (Flax & Pumpkin in follicular phase; Sesame & Sunflower in luteal phase).\n• Avoid dairy, refined carbs, and processed packaged foods.\n• Sleep by 10:30 PM to optimize endocrine rhythm.',
+    meals: [
+      { time: '06:30', meal: 'Early Morning', food: 'Warm fenugreek (Methi) soaked water + 1 tbsp ground flaxseeds', notes: 'Insulin sensitizer' },
+      { time: '08:30', meal: 'Breakfast', food: 'Besan vegetable chilla + mint coriander chutney', notes: 'High fiber & protein' },
+      { time: '11:00', meal: 'Mid-Morning Snack', food: '1 cup green tea / spearmint tea + 1 fistful roasted pumpkin seeds', notes: 'Hormone balance' },
+      { time: '13:30', meal: 'Lunch', food: '1 Multigrain roti + green leafy vegetable + boiled sprouts / dal + salad', notes: 'Rich in antioxidants' },
+      { time: '17:00', meal: 'Evening Snack', food: 'Sprouted moong chaat OR cucumber carrot sticks with hummus', notes: 'Low sugar snack' },
+      { time: '19:30', meal: 'Dinner', food: 'Vegetable stir-fry + paneer / tofu soup OR vegetable dalia', notes: 'Light carb dinner' },
+      { time: '21:30', meal: 'Bedtime Drink', food: 'Warm chamomile or spearmint tea', notes: 'Anti-androgenic' },
+    ],
+  },
+  {
+    id: 'detox',
+    label: '🥣 Deepana & Pachana (Ayurvedic Detox)',
+    goal: 'Agni Deepana & Ama Pachana (Digestive Reset)',
+    calories: '1200 kcal',
+    water: '3.0 L',
+    duration: '15 days',
+    service: 'Diet Counseling',
+    weekLabel: 'Digestive Reset',
+    instructions: '• Consume only freshly cooked warm meals (Koshna Ahara).\n• Sip warm water boiled with Cumin, Coriander, and Fennel (CCF tea) throughout the day.\n• Strictly no cold, oily, heavy, or curd preparations.\n• Stop eating when 75% full (Aharamatra).',
+    meals: [
+      { time: '07:00', meal: 'Early Morning', food: '1 cup warm ginger-cumin-coriander infusion', notes: 'Stimulates digestive fire' },
+      { time: '08:30', meal: 'Breakfast', food: 'Warm rice porridge (Peya) OR roasted suji upma with ginger', notes: 'Light and warm' },
+      { time: '11:00', meal: 'Mid-Morning Snack', food: 'Warm CCF (Cumin-Coriander-Fennel) herbal tea', notes: 'Sip slowly' },
+      { time: '13:00', meal: 'Lunch', food: 'Yellow Moong dal soup (Yusha) with 1 light phulka + steamed bottle gourd', notes: 'Pachana Ahara' },
+      { time: '16:30', meal: 'Evening Snack', food: 'Warm water with pinch of roasted jeera powder', notes: 'Digestive aid' },
+      { time: '19:00', meal: 'Dinner', food: 'Thin Moong khichdi tempered with ghee, cumin & hing', notes: 'Finished before dusk' },
+      { time: '21:00', meal: 'Bedtime Drink', food: 'Warm water with dash of ajwain and rock salt', notes: 'Prevents morning bloating' },
+    ],
+  },
+  {
+    id: 'diabetes',
+    label: '🩸 Diabetes & Metabolic Care',
+    goal: 'Blood Sugar Regulation & HbA1c Control',
+    calories: '1400-1600 kcal',
+    water: '2.5 L',
+    duration: '30 days',
+    service: 'Diet Counseling',
+    weekLabel: 'Glycemic Control',
+    instructions: '• Complex carbohydrates only (Barley, Methi, Oats, Millets).\n• Include bitter & astringent tastes (Tikta & Kashaya Rasa) like Karela, Jamun, Methi.\n• Regular interval meals: avoid long fasting and overeating.\n• Minimum 30 mins brisk walking morning & evening.',
+    meals: [
+      { time: '06:30', meal: 'Early Morning', food: 'Soaked Methi dana water + chew the seeds + 4 soaked almonds', notes: 'Glucose regulation' },
+      { time: '08:30', meal: 'Breakfast', food: 'Barley (Jau) porridge / Methi thepla with curd (skimmed)', notes: 'Low glycemic load' },
+      { time: '11:00', meal: 'Mid-Morning Snack', food: '1 small apple or amla juice + roasted flaxseeds', notes: 'Antioxidant rich' },
+      { time: '13:30', meal: 'Lunch', food: '1 Multigrain roti (Jau-Chana-Wheat) + 1 bowl Karela/Bhindi sabzi + 1 bowl Dal + salad', notes: 'High fiber' },
+      { time: '17:00', meal: 'Evening Snack', food: 'Roasted makhana + green tea (no sugar)', notes: 'Safe snacking' },
+      { time: '19:30', meal: 'Dinner', food: 'Vegetable daliya OR mixed vegetable clear soup with tofu/paneer', notes: 'No rice at night' },
+      { time: '21:30', meal: 'Bedtime Drink', food: 'Warm water with pinch of cinnamon powder', notes: 'Maintains nocturnal fasting sugar' },
+    ],
+  },
+  {
+    id: 'vitality',
+    label: '💪 Vitality & Dhatu Poshan',
+    goal: 'Muscle Tone, Stamina & Dhatu Poshan',
+    calories: '2000-2400 kcal',
+    water: '3.0 L',
+    duration: '30 days',
+    service: 'Diet Counseling',
+    weekLabel: 'Strength & Nourishment',
+    instructions: '• Protein and micronutrient-dense Sattvic nutrition.\n• Natural healthy fats: Cow Ghee, Almonds, Walnuts, Sesame seeds.\n• Strength training or Yoga followed by immediate post-workout nourishment.',
+    meals: [
+      { time: '06:30', meal: 'Pre-Workout', food: '1 Banana + 5 soaked almonds + 2 dates + warm water', notes: 'Energy boost' },
+      { time: '08:30', meal: 'Breakfast', food: 'Paneer bhurji / Boiled sprouts + Oats with milk and honey', notes: 'High protein' },
+      { time: '11:00', meal: 'Mid-Morning Snack', food: 'Seasonal fruit + 1 handful mixed seeds (Pumpkin, Chia, Sunflower)', notes: 'Micronutrients' },
+      { time: '13:30', meal: 'Lunch', food: '2 Rotis with ghee + 1 bowl dense Dal/Rajma + Paneer sabzi + Brown rice + Salad', notes: 'Anabolic nutrition' },
+      { time: '17:00', meal: 'Evening Snack', food: 'Sattu drink (sweet or salted) OR Peanut butter toast / Sweet potato', notes: 'Sustained energy' },
+      { time: '20:00', meal: 'Dinner', food: 'Paneer/Lentil soup + Roti + cooked greens + fresh salad', notes: 'Muscle recovery' },
+      { time: '21:30', meal: 'Bedtime Drink', food: 'Warm milk with 1 tsp Ashwagandha & pinch of nutmeg', notes: 'Tissue regeneration (Rasayana)' },
+    ],
+  },
+];
+
+export const QUICK_MEAL_SLOTS = [
+  { time: '06:30', meal: 'Early Morning', food: '', notes: '' },
+  { time: '08:30', meal: 'Breakfast', food: '', notes: '' },
+  { time: '11:00', meal: 'Mid-Morning Snack', food: '', notes: '' },
+  { time: '13:30', meal: 'Lunch', food: '', notes: '' },
+  { time: '17:00', meal: 'Evening Snack', food: '', notes: '' },
+  { time: '19:30', meal: 'Dinner', food: '', notes: '' },
+  { time: '21:30', meal: 'Bedtime Drink', food: '', notes: '' },
+];
+
+export const AYURVEDIC_GUIDELINES = [
+  'Drink 2-3 glasses of warm/lukewarm water throughout the day.',
+  'Strictly avoid cold water, refrigerated drinks, and leftover refrigerated food.',
+  'Finish light dinner before 8:00 PM to facilitate optimal digestion (Agni).',
+  'Gentle 100-step walk (Shatapadi) after lunch and dinner.',
+  'Eat mindfully in a calm seated posture; chew food 32 times.',
+  'Maintain a 3 to 4 hour gap between main meals; avoid frequent snacking.',
+  'Avoid refined white sugar, maida, processed packaged foods, and bakery items.',
+  'Avoid curd (dahi) and sour foods at night.',
+  'Drink 1 cup of warm turmeric/nutmeg milk before sleeping for restorative sleep.',
+  'Practice seed cycling as advised for hormonal and menstrual balance.',
+];
+
+export const DEFAULT_DIET_MEALS = [
+  { time: '06:30', meal: 'Early Morning', food: '1 glass warm lemon/methi water + 4 soaked almonds', notes: 'Start hydration' },
+  { time: '08:30', meal: 'Breakfast', food: 'Moong dal chilla / Vegetable oats + green tea', notes: 'Low oil, high protein' },
+  { time: '11:00', meal: 'Mid-Morning Snack', food: '1 seasonal fresh fruit', notes: 'Chew well' },
+  { time: '13:30', meal: 'Lunch', food: '1-2 Jowar rotla + green sabzi + dal + cucumber salad', notes: 'Balanced meal' },
+  { time: '17:00', meal: 'Evening Snack', food: 'Roasted makhana + herbal tea', notes: 'Light snack' },
+  { time: '19:30', meal: 'Dinner', food: 'Thin Moong khichdi with ghee OR bottle gourd soup', notes: 'Finish before 8:00 PM' },
+];
+
+function escapeDietHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
+function fileSafeDietName(value) {
+  return String(value || 'diet-plan').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'diet-plan';
+}
+
+function buildDietPlanPrintHtml(plan) {
+  const mealRows = (plan.meals ?? []).map((meal) => `
+    <tr>
+      <td style="font-weight:700;color:#138f86;white-space:nowrap;padding:10px 12px;border-bottom:1px solid #e2ece8;">${escapeDietHtml(meal.time)}</td>
+      <td style="font-weight:700;color:#1f6b4a;white-space:nowrap;padding:10px 12px;border-bottom:1px solid #e2ece8;">${escapeDietHtml(meal.meal)}</td>
+      <td style="line-height:1.5;padding:10px 12px;border-bottom:1px solid #e2ece8;white-space:pre-wrap;">${escapeDietHtml(meal.food)}</td>
+      <td style="color:#57766d;font-size:12px;line-height:1.45;padding:10px 12px;border-bottom:1px solid #e2ece8;white-space:pre-wrap;">${escapeDietHtml(meal.notes || '—')}</td>
+    </tr>
+  `).join('');
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Diet Plan - ${escapeDietHtml(plan.client || 'Patient')}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 32px; color: #163f33; background: #fff; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #138f86; padding-bottom: 14px; margin-bottom: 20px; }
+    .logo-box h1 { margin: 0; font-size: 22px; color: #1f6b4a; }
+    .logo-box p { margin: 4px 0 0; color: #57766d; font-size: 13px; font-weight: 500; }
+    .patient-badge { text-align: right; background: #f0f7f4; padding: 8px 14px; border-radius: 8px; border: 1px solid #d3e7df; }
+    .patient-badge strong { font-size: 15px; color: #163f33; display: block; }
+    .patient-badge span { font-size: 12px; color: #57766d; }
+    .plan-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; background: #fafdfc; border: 1px solid #dcebe5; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; }
+    .meta-item span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6f8d83; font-weight: 600; }
+    .meta-item strong { font-size: 13.5px; color: #163f33; margin-top: 2px; display: block; }
+    h2 { font-size: 15px; color: #1f6b4a; margin: 20px 0 10px; text-transform: uppercase; letter-spacing: 0.5px; border-left: 3px solid #138f86; padding-left: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; background: #fff; }
+    thead th { background: #eaf5f1; color: #163f33; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px; text-align: left; border-bottom: 2px solid #c8ded6; }
+    .instructions-box { background: #fcfdfd; border: 1px solid #dcebe5; border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.6; color: #2c4e43; white-space: pre-wrap; margin-top: 8px; }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 24px; }
+    .toolbar button { border: none; background: #138f86; color: #fff; border-radius: 8px; padding: 10px 18px; font-weight: 700; cursor: pointer; font-size: 13px; }
+    @page { margin: 14mm; }
+    @media print {
+      .toolbar { display: none; }
+      body { margin: 0; }
+      thead th { background: #eaf5f1 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .plan-meta-grid, .patient-badge, .instructions-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">🖨️ Print / Save as PDF</button>
+  </div>
+  <div class="header">
+    <div class="logo-box">
+      <h1>SHREE AYURVED HOSPITAL & CLINIC</h1>
+      <p>Personalized Ayurvedic Diet & Lifestyle Protocol • Mom's Pathshala</p>
+    </div>
+    <div class="patient-badge">
+      <strong>${escapeDietHtml(plan.client || 'Patient')}</strong>
+      <span>Date: ${escapeDietHtml(plan.planDate || new Date().toISOString().slice(0, 10))}</span>
+    </div>
+  </div>
+
+  <div class="plan-meta-grid">
+    <div class="meta-item"><span>Clinical Goal</span><strong>${escapeDietHtml(plan.goal || '—')}</strong></div>
+    <div class="meta-item"><span>Service</span><strong>${escapeDietHtml(plan.service || 'Diet Counseling')}</strong></div>
+    <div class="meta-item"><span>Duration</span><strong>${escapeDietHtml(plan.duration || '30 days')}</strong></div>
+    <div class="meta-item"><span>Phase / Week</span><strong>${escapeDietHtml(plan.weekLabel || 'Phase 1')}</strong></div>
+    <div class="meta-item"><span>Target Calories</span><strong>${escapeDietHtml(plan.calories || 'As per advice')}</strong></div>
+    <div class="meta-item"><span>Daily Water Intake</span><strong>${escapeDietHtml(plan.water || '2.5 - 3.0 L')}</strong></div>
+    <div class="meta-item"><span>Total Meals</span><strong>${plan.meals?.length || 0} meals/day</strong></div>
+    <div class="meta-item"><span>Consultant</span><strong>Ayurvedic Consultant</strong></div>
+  </div>
+
+  <h2>Daily Meal Schedule</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 14%;">Time</th>
+        <th style="width: 20%;">Meal</th>
+        <th style="width: 44%;">Food Items & Nutrition</th>
+        <th style="width: 22%;">Guidelines & Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${mealRows || '<tr><td colspan="4" style="padding:16px;text-align:center;color:#6f8d83;">No meal schedule specified.</td></tr>'}
+    </tbody>
+  </table>
+
+  ${plan.instructions ? `
+    <h2>Dietary Guidelines & Precautions (Pathya / Apathya)</h2>
+    <div class="instructions-box">${escapeDietHtml(plan.instructions)}</div>
+  ` : ''}
+
+  <div style="margin-top: 30px; border-top: 1px dashed #c8ded6; padding-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: #6f8d83;">
+    <span>Shree Ayurved Hospital • Health & Wellness Care</span>
+    <span>Consult doctor before modifying prescription.</span>
+  </div>
+
+  <script>
+    window.addEventListener('load', function() {
+      setTimeout(function() { window.print(); }, 400);
+    });
+  </script>
+</body>
+</html>`;
+}
 
 function newDietPlan(client = '') {
   return {
@@ -246,10 +524,10 @@ function newDietPlan(client = '') {
     goal: 'Fat loss',
     duration: '30 days',
     planDate: currentSlot().date,
-    weekLabel: '',
-    calories: '',
-    water: '2.5-3 L',
-    instructions: 'Sleep 7 hours, walk daily, avoid sugar and fried food.',
+    weekLabel: 'Phase 1 - Detox',
+    calories: '1200-1400 kcal',
+    water: '2.5-3.0 L',
+    instructions: '• Drink warm water throughout the day.\n• Finish light dinner before 8:00 PM.\n• 100 steps walk (Shatapadi) after meals.',
     meals: DEFAULT_DIET_MEALS.map((meal) => ({ ...meal })),
   };
 }
@@ -514,6 +792,7 @@ export function ClientJourneyPage() {
   const operationsKey = branchKey('Operations:tabs:v3');
   const treatmentTemplatesKey = branchKey('treatment-templates:v2');
   const dietPlansKey = branchKey('diet-plans:v1');
+  const dietTemplatesKey = branchKey('diet-templates:v1');
   const journeysKey = branchKey('client-journeys:v1');
   const consultationTemplatesKey = branchKey('consultation-templates:v1');
   const clinicalPrintTemplatesKey = branchKey('clinical-print-templates:v1');
@@ -525,6 +804,10 @@ export function ClientJourneyPage() {
   const [patientViewTab, setPatientViewTab] = useState('workflow');
   const [showMobileList, setShowMobileList] = useState(false);
   const [search, setSearch] = useState('');
+  const [dietTemplates, setDietTemplates] = useState(() => loadValue(dietTemplatesKey, []));
+  const [dietTemplateName, setDietTemplateName] = useState('');
+  const [selectedDietPreset, setSelectedDietPreset] = useState('');
+  const [dietToastMessage, setDietToastMessage] = useState('');
   const [todayKey, setTodayKey] = useState(() => localDateKey());
   const [consultationOpen, setConsultationOpen] = useState(false);
   const [consultation, setConsultation] = useState({ complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
@@ -1505,6 +1788,160 @@ export function ClientJourneyPage() {
     }));
   };
 
+  const addQuickMealSlot = (slot) => {
+    setDietPlanForm((current) => ({
+      ...current,
+      meals: [...current.meals, { time: slot.time || '', meal: slot.meal || 'Meal', food: slot.food || '', notes: slot.notes || '' }],
+    }));
+  };
+
+  const duplicateDietMeal = (index) => {
+    setDietPlanForm((current) => {
+      const target = current.meals[index];
+      if (!target) return current;
+      const nextMeals = [...current.meals];
+      nextMeals.splice(index + 1, 0, { ...target });
+      return { ...current, meals: nextMeals };
+    });
+  };
+
+  const moveDietMeal = (index, direction) => {
+    setDietPlanForm((current) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.meals.length) return current;
+      const nextMeals = [...current.meals];
+      const temp = nextMeals[index];
+      nextMeals[index] = nextMeals[nextIndex];
+      nextMeals[nextIndex] = temp;
+      return { ...current, meals: nextMeals };
+    });
+  };
+
+  const removeDietMeal = (index) => {
+    setDietPlanForm((current) => ({
+      ...current,
+      meals: current.meals.length > 1 ? current.meals.filter((_, mealIndex) => mealIndex !== index) : current.meals,
+    }));
+  };
+
+  const appendDietGuideline = (rule) => {
+    setDietPlanForm((current) => {
+      const trimmed = String(current.instructions ?? '').trim();
+      const nextInstructions = trimmed ? `${trimmed}\n• ${rule}` : `• ${rule}`;
+      return { ...current, instructions: nextInstructions };
+    });
+    setDietToastMessage('Guideline added to instructions!');
+    setTimeout(() => setDietToastMessage(''), 2500);
+  };
+
+  const applyClinicalDietPreset = (preset) => {
+    setSelectedDietPreset(preset.id);
+    setDietPlanForm((current) => ({
+      ...current,
+      goal: preset.goal,
+      calories: preset.calories,
+      water: preset.water,
+      duration: preset.duration || current.duration,
+      service: preset.service || current.service,
+      weekLabel: preset.weekLabel || current.weekLabel,
+      instructions: preset.instructions || current.instructions,
+      meals: preset.meals.map((m) => ({ ...m })),
+    }));
+    setDietToastMessage(`Loaded ${preset.label} protocol (${preset.meals.length} meals)!`);
+    setTimeout(() => setDietToastMessage(''), 3500);
+  };
+
+  const saveDietTemplate = () => {
+    if (!dietTemplateName.trim()) return;
+    const template = {
+      name: dietTemplateName.trim(),
+      service: dietPlanForm.service,
+      goal: dietPlanForm.goal,
+      duration: dietPlanForm.duration,
+      planDate: dietPlanForm.planDate,
+      weekLabel: dietPlanForm.weekLabel,
+      calories: dietPlanForm.calories,
+      water: dietPlanForm.water,
+      instructions: dietPlanForm.instructions,
+      meals: dietPlanForm.meals.filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())),
+    };
+    const nextTemplates = [template, ...dietTemplates.filter((t) => t.name.toLowerCase() !== template.name.toLowerCase())];
+    setDietTemplates(nextTemplates);
+    window.localStorage.setItem(dietTemplatesKey, JSON.stringify(nextTemplates));
+    setDietToastMessage(`Saved template "${template.name}"!`);
+    setTimeout(() => setDietToastMessage(''), 3000);
+  };
+
+  const applyDietTemplate = (index) => {
+    const template = dietTemplates[Number(index)];
+    if (!template) return;
+    setDietPlanForm((current) => ({
+      ...current,
+      service: template.service || current.service,
+      goal: template.goal || current.goal,
+      duration: template.duration || current.duration,
+      weekLabel: template.weekLabel || current.weekLabel,
+      calories: template.calories || current.calories,
+      water: template.water || current.water,
+      instructions: template.instructions || current.instructions,
+      meals: Array.isArray(template.meals) && template.meals.length ? template.meals.map((m) => ({ ...m })) : current.meals,
+    }));
+    setDietTemplateName(template.name || '');
+    setDietToastMessage(`Loaded template "${template.name}"!`);
+    setTimeout(() => setDietToastMessage(''), 3000);
+  };
+
+  const openDietPdf = (plan) => {
+    const html = buildDietPlanPrintHtml(plan);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${fileSafeDietName(plan.client)}-diet-plan.html`;
+      a.click();
+      return;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+
+  const copyDietForWhatsApp = (plan) => {
+    const mealText = (plan.meals || []).map((m, i) =>
+      `⏰ *${m.time || '—'} - ${m.meal || `Meal ${i + 1}`}*\n🥗 ${m.food || '—'}${m.notes ? `\n📝 _${m.notes}_` : ''}`
+    ).join('\n\n');
+
+    const text = `🌿 *SHREE AYURVED HOSPITAL & CLINIC*
+📋 *Personalized Diet Plan*
+━━━━━━━━━━━━━━━━━━━
+👤 *Patient:* ${plan.client || 'Patient'}
+🎯 *Goal:* ${plan.goal || 'Health & Nutrition'}
+📅 *Duration:* ${plan.duration || '30 days'}
+💧 *Daily Water:* ${plan.water || '2.5 - 3.0 L'}
+⚡ *Calories:* ${plan.calories || 'As advised'}
+━━━━━━━━━━━━━━━━━━━
+🍽️ *DAILY MEAL SCHEDULE:*
+
+${mealText || 'No meals added.'}
+
+━━━━━━━━━━━━━━━━━━━
+📌 *GUIDELINES & PRECAUTIONS:*
+${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
+━━━━━━━━━━━━━━━━━━━
+✨ _Wishing you vibrant health and wellness!_`;
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        setDietToastMessage('Diet Plan copied to clipboard! Ready to paste in WhatsApp.');
+        setTimeout(() => setDietToastMessage(''), 4000);
+      }).catch(() => {
+        alert('Could not auto-copy to clipboard. Please use Print PDF.');
+      });
+    } else {
+      alert('Clipboard not accessible on this device.');
+    }
+  };
+
   const savePayment = () => {
     if (!paymentForm.amount) return;
     const current = loadValue(paymentsKey, []);
@@ -2069,22 +2506,31 @@ export function ClientJourneyPage() {
       )}
 
       {stageModal === 'diet' && (
-        <JourneyModal title={journey.diet ? 'Edit Diet Plan' : 'Add Diet Plan'} client={selectedClient} onClose={() => setStageModal('')} onSave={saveDietPlan} saveLabel={journey.diet ? 'Update Diet Plan' : 'Save Diet Plan'}>
-          <div className="quick-preset-row">
-            <button className="pill" type="button" onClick={() => setDietPlanForm((plan) => ({ ...plan, goal: 'Fat loss', calories: '1200-1500 kcal' }))}>Fat Loss</button>
-            <button className="pill" type="button" onClick={() => setDietPlanForm((plan) => ({ ...plan, goal: 'Muscle gain', calories: '2000-2400 kcal' }))}>Muscle Gain</button>
-            <button className="pill" type="button" onClick={() => setDietPlanForm((plan) => ({ ...plan, goal: 'Nutrition balance', calories: 'As per assessment' }))}>Nutrition</button>
-          </div>
-          <label className="field-block"><span>Service</span><select className="lead-input" value={dietPlanForm.service} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, service: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
-          <label className="field-block"><span>Goal</span><input className="lead-input" value={dietPlanForm.goal} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, goal: event.target.value }))} placeholder="e.g. Fat loss" /></label>
-          <label className="field-block"><span>Duration</span><select className="lead-input" value={dietPlanForm.duration} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, duration: event.target.value }))}>{DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
-          <label className="field-block"><span>Plan Date</span><input className="lead-input" type="date" value={dietPlanForm.planDate} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, planDate: event.target.value }))} /></label>
-          <label className="field-block"><span>Week / Phase</span><input className="lead-input" value={dietPlanForm.weekLabel} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, weekLabel: event.target.value }))} placeholder="e.g. Week 1" /></label>
-          <label className="field-block"><span>Calories</span><input className="lead-input" value={dietPlanForm.calories} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, calories: event.target.value }))} placeholder="e.g. 1500 kcal" /></label>
-          <label className="field-block"><span>Water</span><input className="lead-input" value={dietPlanForm.water} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, water: event.target.value }))} placeholder="e.g. 2.5-3 L" /></label>
-          <div className="treatment-medicine-builder full-field"><div className="medicine-builder-head"><div><strong>Meal Schedule</strong><span>Add time-wise meals for this patient.</span></div><button className="pill" type="button" onClick={() => setDietPlanForm((plan) => ({ ...plan, meals: [...plan.meals, { time: '', meal: '', food: '', notes: '' }] }))}>+ Add Meal</button></div>{dietPlanForm.meals.map((meal, index) => <div className="treatment-medicine-row diet-meal-row" key={`${meal.time}-${meal.meal}-${index}`}><label className="field-block"><span>Time</span><input className="lead-input" type="time" value={meal.time} onChange={(event) => updateDietMeal(index, 'time', event.target.value)} /></label><label className="field-block"><span>Meal</span><input className="lead-input" value={meal.meal} onChange={(event) => updateDietMeal(index, 'meal', event.target.value)} placeholder="Breakfast" /></label><label className="field-block diet-food-field"><span>Food</span><textarea className="lead-input" rows="2" value={meal.food} onChange={(event) => updateDietMeal(index, 'food', event.target.value)} placeholder="Food items" /></label><label className="field-block"><span>Notes</span><textarea className="lead-input" rows="2" value={meal.notes} onChange={(event) => updateDietMeal(index, 'notes', event.target.value)} placeholder="Instructions" /></label><button className="icon-btn" type="button" disabled={dietPlanForm.meals.length === 1} onClick={() => setDietPlanForm((plan) => ({ ...plan, meals: plan.meals.filter((_, mealIndex) => mealIndex !== index) }))} aria-label={`Remove meal ${index + 1}`}>x</button></div>)}</div>
-          <label className="field-block full-field"><span>Instructions</span><textarea className="lead-input" rows="3" value={dietPlanForm.instructions} onChange={(event) => setDietPlanForm((plan) => ({ ...plan, instructions: event.target.value }))} placeholder="Additional instructions for the patient" /></label>
-        </JourneyModal>
+        <DietPlanModal
+          client={selectedClient}
+          clientRecord={selectedClientRecord}
+          dietPlanForm={dietPlanForm}
+          setDietPlanForm={setDietPlanForm}
+          onClose={() => setStageModal('')}
+          onSave={saveDietPlan}
+          saveLabel={journey.diet ? 'Update Diet Plan' : 'Save Diet Plan'}
+          dietTemplates={dietTemplates}
+          dietTemplateName={dietTemplateName}
+          setDietTemplateName={setDietTemplateName}
+          saveDietTemplate={saveDietTemplate}
+          applyDietTemplate={applyDietTemplate}
+          applyClinicalDietPreset={applyClinicalDietPreset}
+          selectedDietPreset={selectedDietPreset}
+          addQuickMealSlot={addQuickMealSlot}
+          updateDietMeal={updateDietMeal}
+          duplicateDietMeal={duplicateDietMeal}
+          moveDietMeal={moveDietMeal}
+          removeDietMeal={removeDietMeal}
+          appendDietGuideline={appendDietGuideline}
+          openDietPdf={() => openDietPdf(dietPlanForm)}
+          copyDietForWhatsApp={() => copyDietForWhatsApp(dietPlanForm)}
+          toastMessage={dietToastMessage}
+        />
       )}
 
       {stageModal === 'billing' && <JourneyModal title="Add Payment" client={selectedClient} onClose={() => setStageModal('')} onSave={savePayment} saveLabel="Save Payment"><div className="quick-preset-row">{PAYMENT_AMOUNTS.map((amount) => <button className="pill" type="button" key={amount} onClick={() => setPaymentForm((value) => ({ ...value, amount, paidAmount: value.status === 'Paid' ? amount : value.paidAmount, pendingAmount: calculatePaymentPending(amount, value.status === 'Paid' ? amount : value.paidAmount, value.status) }))}>Rs {amount}</button>)}</div><label className="field-block"><span>Invoice</span><input className="lead-input" value={paymentForm.invoice} readOnly /></label><label className="field-block"><span>Total Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.amount} onChange={(event) => setPaymentForm((value) => ({ ...value, amount: event.target.value, paidAmount: value.status === 'Paid' ? event.target.value : value.paidAmount, pendingAmount: calculatePaymentPending(event.target.value, value.status === 'Paid' ? event.target.value : value.paidAmount, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Paid Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.paidAmount} onChange={(event) => setPaymentForm((value) => ({ ...value, paidAmount: event.target.value, pendingAmount: calculatePaymentPending(value.amount, event.target.value, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Pending Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.pendingAmount} readOnly placeholder="Auto calculated" /></label><label className="field-block"><span>Status</span><select className="lead-input" value={paymentForm.status} onChange={(event) => setPaymentForm((value) => { const paidAmount = event.target.value === 'Paid' ? value.amount : event.target.value === 'Pending' ? '' : value.paidAmount; return { ...value, status: event.target.value, paidAmount, pendingAmount: calculatePaymentPending(value.amount, paidAmount, event.target.value) }; })}><option>Paid</option><option>Partial</option><option>Pending</option></select></label><label className="field-block"><span>Paid On</span><input className="lead-input" type="date" value={paymentForm.paidOn} onChange={(event) => setPaymentForm((value) => ({ ...value, paidOn: event.target.value }))} /></label></JourneyModal>}
@@ -2127,3 +2573,408 @@ export function ClientJourneyPage() {
 function JourneyModal({ title, client, children, onClose, onSave, saveLabel, saveDisabled = false }) {
   return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>{title}</h2><p>For patient: {client}</p></div><button className="icon-btn" type="button" onClick={onClose} aria-label="Close modal">x</button></div><div className="modal-body detail-grid">{children}</div><div className="modal-actions"><button className="pill" type="button" onClick={onClose}>Cancel</button><button className="pill primary-action" type="button" onClick={onSave} disabled={saveDisabled}>{saveLabel}</button></div></div></div>;
 }
+
+function DietPlanModal({
+  client,
+  clientRecord,
+  dietPlanForm,
+  setDietPlanForm,
+  onClose,
+  onSave,
+  saveLabel,
+  dietTemplates,
+  dietTemplateName,
+  setDietTemplateName,
+  saveDietTemplate,
+  applyDietTemplate,
+  applyClinicalDietPreset,
+  selectedDietPreset,
+  addQuickMealSlot,
+  updateDietMeal,
+  duplicateDietMeal,
+  moveDietMeal,
+  removeDietMeal,
+  appendDietGuideline,
+  openDietPdf,
+  copyDietForWhatsApp,
+  toastMessage,
+}) {
+  const initials = String(client || 'P').trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+  const phone = clientMobile(clientRecord);
+  const id = clientId(clientRecord);
+  const ageGender = patientAgeGender(clientRecord);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        className="modal-shell diet-builder-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Diet Plan Builder"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="diet-builder-head">
+          <div className="diet-builder-head-left">
+            <div className="diet-builder-avatar">{initials}</div>
+            <div className="diet-builder-title">
+              <h2>{saveLabel.includes('Update') ? 'Edit Diet Plan' : 'Create Personalized Diet Plan'}</h2>
+              <div className="diet-builder-patient-meta">
+                <span className="patient-name-tag">{client || 'Selected Patient'}</span>
+                {id && <span className="patient-id-tag">#{id.replace(/^#/, '')}</span>}
+                {phone && <span>📞 {phone}</span>}
+                {ageGender && <span>• {ageGender}</span>}
+                <span>• Date: {dietPlanForm.planDate || currentSlot().date}</span>
+              </div>
+            </div>
+          </div>
+          <button className="icon-btn" type="button" onClick={onClose} aria-label="Close modal">✕</button>
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="diet-builder-body">
+          {/* Section 1: Clinical Presets & Saved Templates */}
+          <div className="diet-section-card">
+            <div className="diet-section-header">
+              <div>
+                <h3>⚡ Clinical Protocols & Quick Presets</h3>
+                <p>One-tap load scientifically curated Ayurvedic nutrition frameworks for instant meal scheduling.</p>
+              </div>
+              {toastMessage && <div className="diet-toast-msg">✨ {toastMessage}</div>}
+            </div>
+
+            <div className="diet-presets-bar">
+              {CLINICAL_DIET_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`diet-preset-chip ${selectedDietPreset === preset.id ? 'active' : ''}`}
+                  onClick={() => applyClinicalDietPreset(preset)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="diet-template-tools">
+              <label className="field-block">
+                <span>Use Saved Diet Template</span>
+                <select className="lead-input" defaultValue="" onChange={(e) => applyDietTemplate(e.target.value)}>
+                  <option value="">{dietTemplates.length ? 'Select from saved diet templates...' : 'No saved templates yet'}</option>
+                  {dietTemplates.map((t, idx) => (
+                    <option key={`${t.name}-${idx}`} value={idx}>{t.name} ({t.goal || 'General'})</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field-block">
+                <span>Save Current Plan As Template</span>
+                <input
+                  className="lead-input"
+                  value={dietTemplateName}
+                  onChange={(e) => setDietTemplateName(e.target.value)}
+                  placeholder="e.g. 30-Day Garbh Sanskar Nutrition"
+                />
+              </label>
+              <button
+                className="pill"
+                type="button"
+                onClick={saveDietTemplate}
+                disabled={!dietTemplateName.trim()}
+              >
+                + Save Template
+              </button>
+            </div>
+          </div>
+
+          {/* Section 2: Plan Parameters & Targets */}
+          <div className="diet-section-card">
+            <div className="diet-section-header">
+              <div>
+                <h3>📋 Plan Overview & Targets</h3>
+                <p>Define clinical service, primary goal, timeframe, and daily nutritional benchmarks.</p>
+              </div>
+            </div>
+
+            <div className="diet-overview-grid">
+              <label className="field-block">
+                <span>Service Type</span>
+                <select
+                  className="lead-input"
+                  value={dietPlanForm.service}
+                  onChange={(e) => setDietPlanForm((p) => ({ ...p, service: e.target.value }))}
+                >
+                  {SERVICE_OPTIONS.map((opt) => <option key={opt}>{opt}</option>)}
+                </select>
+              </label>
+
+              <label className="field-block">
+                <span>Clinical Goal</span>
+                <input
+                  className="lead-input"
+                  list="diet-goal-presets-list"
+                  value={dietPlanForm.goal}
+                  onChange={(e) => setDietPlanForm((p) => ({ ...p, goal: e.target.value }))}
+                  placeholder="e.g. Fat loss"
+                />
+                <datalist id="diet-goal-presets-list">
+                  {DIET_GOAL_PRESETS.map((g) => <option key={g} value={g} />)}
+                </datalist>
+              </label>
+
+              <label className="field-block">
+                <span>Plan Duration</span>
+                <select
+                  className="lead-input"
+                  value={dietPlanForm.duration}
+                  onChange={(e) => setDietPlanForm((p) => ({ ...p, duration: e.target.value }))}
+                >
+                  {DURATION_OPTIONS.map((opt) => <option key={opt}>{opt}</option>)}
+                </select>
+              </label>
+
+              <label className="field-block">
+                <span>Start Date</span>
+                <input
+                  className="lead-input"
+                  type="date"
+                  value={dietPlanForm.planDate}
+                  onChange={(e) => setDietPlanForm((p) => ({ ...p, planDate: e.target.value }))}
+                />
+              </label>
+            </div>
+
+            <div className="diet-targets-grid">
+              <label className="field-block">
+                <span>Week / Phase</span>
+                <input
+                  className="lead-input"
+                  value={dietPlanForm.weekLabel}
+                  onChange={(e) => setDietPlanForm((p) => ({ ...p, weekLabel: e.target.value }))}
+                  placeholder="e.g. Phase 1 - Detox"
+                />
+              </label>
+
+              <label className="field-block">
+                <span>Daily Calories Target</span>
+                <input
+                  className="lead-input"
+                  value={dietPlanForm.calories}
+                  onChange={(e) => setDietPlanForm((p) => ({ ...p, calories: e.target.value }))}
+                  placeholder="e.g. 1200-1400 kcal"
+                />
+              </label>
+
+              <label className="field-block">
+                <span>Daily Water Intake</span>
+                <input
+                  className="lead-input"
+                  value={dietPlanForm.water}
+                  onChange={(e) => setDietPlanForm((p) => ({ ...p, water: e.target.value }))}
+                  placeholder="e.g. 2.5 - 3.0 Liters"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Section 3: Time-wise Meal Schedule */}
+          <div className="diet-section-card">
+            <div className="diet-section-header">
+              <div>
+                <h3>🍽️ Daily Meal Schedule ({dietPlanForm.meals?.length || 0} Meals)</h3>
+                <p>Customize time-wise nutrition slots. Use quick slot buttons below or add custom meals.</p>
+              </div>
+            </div>
+
+            {/* Quick Meal Slot Adders */}
+            <div className="diet-quick-meals-bar">
+              <span>Quick Add Slot:</span>
+              {QUICK_MEAL_SLOTS.map((slot) => (
+                <button
+                  key={slot.meal}
+                  type="button"
+                  className="diet-quick-slot-btn"
+                  onClick={() => addQuickMealSlot(slot)}
+                  title={`Add ${slot.meal} at ${slot.time}`}
+                >
+                  + {slot.meal} ({slot.time})
+                </button>
+              ))}
+              <button
+                type="button"
+                className="diet-quick-slot-btn custom-btn"
+                onClick={() => addQuickMealSlot({ time: '', meal: '', food: '', notes: '' })}
+              >
+                + Custom Meal Row
+              </button>
+            </div>
+
+            {/* Meal Cards List */}
+            <div className="diet-meal-cards-list">
+              {dietPlanForm.meals.map((meal, index) => (
+                <div className="diet-meal-card" key={index}>
+                  <div className="diet-meal-card-head">
+                    <div className="diet-meal-card-head-left">
+                      <span className="diet-meal-slot-badge">#{index + 1}</span>
+
+                      <div className="diet-time-field">
+                        <input
+                          className="lead-input"
+                          type="time"
+                          value={meal.time}
+                          onChange={(e) => updateDietMeal(index, 'time', e.target.value)}
+                          title="Meal timing"
+                        />
+                      </div>
+
+                      <div className="diet-meal-name-field">
+                        <input
+                          className="lead-input"
+                          list="common-meal-names-list"
+                          value={meal.meal}
+                          onChange={(e) => updateDietMeal(index, 'meal', e.target.value)}
+                          placeholder="Meal Name (e.g. Breakfast)"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="diet-meal-card-actions">
+                      <button
+                        className="diet-meal-action-btn"
+                        type="button"
+                        disabled={index === 0}
+                        onClick={() => moveDietMeal(index, -1)}
+                        title="Move meal up"
+                        aria-label="Move meal up"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        className="diet-meal-action-btn"
+                        type="button"
+                        disabled={index === dietPlanForm.meals.length - 1}
+                        onClick={() => moveDietMeal(index, 1)}
+                        title="Move meal down"
+                        aria-label="Move meal down"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        className="diet-meal-action-btn"
+                        type="button"
+                        onClick={() => duplicateDietMeal(index)}
+                        title="Duplicate meal"
+                        aria-label="Duplicate meal"
+                      >
+                        ⎘
+                      </button>
+                      <button
+                        className="diet-meal-action-btn danger"
+                        type="button"
+                        disabled={dietPlanForm.meals.length === 1}
+                        onClick={() => removeDietMeal(index)}
+                        title="Remove this meal"
+                        aria-label="Remove meal"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="diet-meal-card-body">
+                    <div>
+                      <span className="diet-meal-col-label">Food Items & Recipe / Quantity *</span>
+                      <textarea
+                        className="diet-textarea"
+                        rows={2}
+                        value={meal.food}
+                        onChange={(e) => updateDietMeal(index, 'food', e.target.value)}
+                        placeholder="e.g. 1 bowl Moong dal chilla + green mint chutney + 1 cup warm water..."
+                      />
+                    </div>
+
+                    <div>
+                      <span className="diet-meal-col-label">Instructions / Notes / Precautions</span>
+                      <textarea
+                        className="diet-textarea"
+                        rows={2}
+                        value={meal.notes}
+                        onChange={(e) => updateDietMeal(index, 'notes', e.target.value)}
+                        placeholder="e.g. Drink warm water 30 mins later; avoid cold drinks..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <datalist id="common-meal-names-list">
+              {COMMON_MEAL_NAMES.map((name) => <option key={name} value={name} />)}
+            </datalist>
+          </div>
+
+          {/* Section 4: Ayurvedic Guidelines & Instructions */}
+          <div className="diet-section-card">
+            <div className="diet-section-header">
+              <div>
+                <h3>🌿 Patient Guidelines & Ayurvedic Pathya / Apathya (Do's & Don'ts)</h3>
+                <p>Click any guideline chip below to quickly append it to patient instructions:</p>
+              </div>
+            </div>
+
+            <div className="diet-guidelines-bar">
+              {AYURVEDIC_GUIDELINES.map((rule) => (
+                <button
+                  key={rule}
+                  type="button"
+                  className="diet-guideline-chip"
+                  onClick={() => appendDietGuideline(rule)}
+                  title="Click to add to instructions"
+                >
+                  + {rule}
+                </button>
+              ))}
+            </div>
+
+            <label className="field-block full-field">
+              <span className="diet-meal-col-label">Complete Dietary Instructions for Patient</span>
+              <textarea
+                className="diet-instructions-area"
+                rows={4}
+                value={dietPlanForm.instructions}
+                onChange={(e) => setDietPlanForm((p) => ({ ...p, instructions: e.target.value }))}
+                placeholder="Additional instructions, clinical dos and don'ts, or follow-up notes..."
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Sticky Action Footer */}
+        <div className="diet-builder-foot">
+          <div className="diet-builder-foot-left">
+            <button className="pill" type="button" onClick={openDietPdf}>
+              🖨️ Preview & Print PDF
+            </button>
+            <button className="pill" type="button" onClick={copyDietForWhatsApp}>
+              📲 Copy for WhatsApp
+            </button>
+          </div>
+
+          <div className="diet-builder-foot-right">
+            <button className="pill" type="button" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              className="pill primary-action"
+              type="button"
+              onClick={onSave}
+              disabled={!dietPlanForm.goal.trim()}
+            >
+              ✓ {saveLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
