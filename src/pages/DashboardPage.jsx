@@ -40,13 +40,17 @@ export function DashboardPage() {
   const { currentBranch } = useBranch();
   const [datePreset, setDatePreset] = useState('7 Days');
   const [customDateRange, setCustomDateRange] = useState(null);
-  const [moreInsightsOpen, setMoreInsightsOpen] = useState(false);
+  const [operationalView, setOperationalView] = useState('queue'); // 'queue' | 'calendar'
+  const [activeInsightsTab, setActiveInsightsTab] = useState('aging'); // 'aging' | 'sales' | 'leads' | 'staff' | 'inventory' | 'birthdays'
+  const [priorityFilter, setPriorityFilter] = useState('all'); // 'all' | 'collection' | 'followup' | 'stock' | 'reminder'
   const [patientSearch, setPatientSearch] = useState('');
   const [dataRevision, setDataRevision] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toLocalIsoDate(new Date()));
+
   const liveData = useMemo(() => loadLiveDashboardData(currentBranch), [currentBranch, dataRevision]);
-  const { leads, payments, todaySchedule, urgentTasks, appointments, clients, inventory, packages, staff, treatments } = liveData;
+  const { leads, payments, urgentTasks, appointments, clients, inventory, packages, staff, treatments } = liveData;
+
   const normalizedPatients = useMemo(() => clients.map(normalizeDashboardPatient).filter((patient) => patient.name), [clients]);
   const patientResults = useMemo(() => {
     const query = patientSearch.trim().toLowerCase();
@@ -56,10 +60,12 @@ export function DashboardPage() {
       .slice(0, 8);
   }, [normalizedPatients, patientSearch]);
   const hasPatientSearch = Boolean(patientSearch.trim());
+
   const calendarAppointments = useMemo(
     () => appointments.map(normalizeCalendarAppointment).filter((appointment) => appointment.date),
     [appointments],
   );
+
   const appointmentsByDate = useMemo(() => {
     const grouped = new Map();
     calendarAppointments.forEach((appointment) => {
@@ -70,8 +76,23 @@ export function DashboardPage() {
     grouped.forEach((rows) => rows.sort((a, b) => String(a.time).localeCompare(String(b.time))));
     return grouped;
   }, [calendarAppointments]);
+
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const selectedDateAppointments = appointmentsByDate.get(selectedCalendarDate) ?? [];
+
+  const todayIsoDate = useMemo(() => toLocalIsoDate(new Date()), []);
+  const todayAppointments = useMemo(() => {
+    return appointmentsByDate.get(todayIsoDate) ?? [];
+  }, [appointmentsByDate, todayIsoDate]);
+
+  const todayFormatted = useMemo(() => {
+    return new Date().toLocaleDateString('en-IN', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  }, []);
 
   useEffect(() => {
     const refresh = () => setDataRevision((current) => current + 1);
@@ -82,6 +103,7 @@ export function DashboardPage() {
       window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
     };
   }, []);
+
   useEffect(() => {
     const applyHeaderDateRange = (event) => {
       const { start, end } = event.detail ?? {};
@@ -97,392 +119,642 @@ export function DashboardPage() {
     window.addEventListener('moms-pathshala:date-range-change', applyHeaderDateRange);
     return () => window.removeEventListener('moms-pathshala:date-range-change', applyHeaderDateRange);
   }, []);
+
   const filteredLeads = filterRowsByPreset(leads, datePreset, (lead) => lead.addedOn, customDateRange);
   const filteredPayments = filterRowsByPreset(payments, datePreset, (payment) => payment.paidOn, customDateRange);
   const filteredAppointments = filterRowsByPreset(appointments, datePreset, (appointment) => appointment[2] ?? appointment.date, customDateRange);
   const filteredOpenLeads = filteredLeads.filter((lead) => !['won', 'lost', 'closed'].includes(normalizeStatus(lead.status)));
   const filteredFollowUps = filteredLeads.filter((lead) => normalizeStatus(lead.status).includes('follow'));
   const filteredPendingPayments = filteredPayments.filter((payment) => paymentPendingAmount(payment) > 0);
-  const selectedRangeLabel = datePreset === 'Custom' && customDateRange
-    ? `${customDateRange.start} to ${customDateRange.end}`
-    : datePreset;
-  const kpis = [
-    {
-      label: datePreset === 'Today' ? "Today's Appointments" : 'Appointments',
-      value: String(filteredAppointments.length),
-      delta: filteredAppointments.length ? `${selectedRangeLabel} range` : 'No records in range',
-      accent: 'green',
-    },
-    {
-      label: 'Open Leads',
-      value: String(filteredOpenLeads.length),
-      delta: filteredOpenLeads.length ? `${filteredFollowUps.length} follow-up due` : 'No records in range',
-      accent: 'gold',
-    },
-    {
-      label: 'Total Billing',
-      value: `₹ ${filteredPayments.reduce((sum, payment) => sum + parseLiveAmount(payment?.amount ?? payment?.['Total Amount'] ?? payment?.Amount), 0).toLocaleString('en-IN')}`,
-      delta: filteredPayments.length ? `${filteredPayments.length} invoice(s)` : 'No records in range',
-      accent: 'green',
-    },
-    {
-      label: 'Pending Payments',
-      value: `₹ ${filteredPendingPayments.reduce((sum, payment) => sum + paymentPendingAmount(payment), 0).toLocaleString('en-IN')}`,
-      delta: filteredPendingPayments.length ? `${filteredPendingPayments.length} invoice(s)` : 'No records in range',
-      accent: 'teal',
-    },
-    {
-      label: 'Follow-ups Due',
-      value: String(filteredFollowUps.length),
-      delta: filteredFollowUps.length ? `${selectedRangeLabel} range` : 'No records in range',
-      accent: 'gold',
-    },
-  ];
+
+  const totalBillingSum = useMemo(() => {
+    return filteredPayments.reduce((sum, payment) => sum + parseLiveAmount(payment?.amount ?? payment?.['Total Amount'] ?? payment?.Amount), 0);
+  }, [filteredPayments]);
+
+  const pendingPaymentsSum = useMemo(() => {
+    return filteredPendingPayments.reduce((sum, payment) => sum + paymentPendingAmount(payment), 0);
+  }, [filteredPendingPayments]);
+
   const paymentAging = buildPaymentAging(filteredPayments);
   const leadSources = buildLeadSourcePerformance(filteredLeads);
   const staffWorkload = buildStaffWorkload(filteredAppointments, staff);
   const lowStockAlerts = buildLowStockAlerts(inventory);
   const salesSummary = buildSalesSummary(filteredPayments, packages, treatments);
-  const treatmentProgress = buildTreatmentProgress(treatments, clients);
   const reminders = buildClientReminders(clients);
   const actionQueue = buildActionQueue(urgentTasks, leads, payments, lowStockAlerts, reminders);
 
-  const kpiRoute = (label) => {
-    if (label.includes('Appointment')) return '/appointments';
-    if (label.includes('Payment') || label.includes('Billing')) return '/payments';
-    return '/crm';
-  };
-  const quickActions = [
-    ['Add Lead', '/crm?action=add', 'Create new enquiry'],
-    ['Add Patient', '/clients?action=add', 'Create patient profile'],
-    ['Book Appointment', '/appointments?action=add', 'Schedule visit'],
-    ['Send Form', '/operations?tab=forms', 'Open forms'],
-    ['Create Invoice', '/finance?tab=payments&action=add', 'Prepare bill'],
-    ['Add Payment', '/finance?tab=payments&action=add', 'Record collection'],
-    ['Create Treatment Plan', '/operations?tab=treatments&action=add', 'Start plan'],
-    ['Add Coaching Student', '/operations?tab=coaching&action=add', 'Add student'],
-  ].map(([label, path, description]) => ({ label, description, onClick: () => navigate(path) }));
+  const filteredActionQueue = useMemo(() => {
+    if (priorityFilter === 'all') return actionQueue;
+    return actionQueue.filter((item) => item.category === priorityFilter);
+  }, [actionQueue, priorityFilter]);
+
+  const kpis = [
+    {
+      label: "Appointments",
+      value: String(filteredAppointments.length),
+      delta: `${filteredAppointments.length} in range`,
+      tone: 'green',
+      icon: '🩺',
+      onClick: () => navigate('/appointments'),
+    },
+    {
+      label: 'Open Leads',
+      value: String(filteredOpenLeads.length),
+      delta: `${filteredFollowUps.length} follow-ups due`,
+      tone: 'gold',
+      icon: '👥',
+      onClick: () => navigate('/crm'),
+    },
+    {
+      label: 'Total Billing',
+      value: `₹ ${totalBillingSum.toLocaleString('en-IN')}`,
+      delta: `${filteredPayments.length} invoices`,
+      tone: 'green',
+      icon: '💰',
+      onClick: () => navigate('/payments'),
+    },
+    {
+      label: 'Pending Dues',
+      value: `₹ ${pendingPaymentsSum.toLocaleString('en-IN')}`,
+      delta: `${filteredPendingPayments.length} pending collections`,
+      tone: 'hot',
+      icon: '⏳',
+      onClick: () => navigate('/payments'),
+    },
+    {
+      label: 'Action Queue',
+      value: String(actionQueue.length),
+      delta: 'Urgent clinic tasks',
+      tone: 'teal',
+      icon: '⚡',
+      onClick: () => setOperationalView('queue'),
+    },
+  ];
 
   return (
     <>
-      <section className="dashboard-primary-workflow" aria-labelledby="client-journey-title">
-        <div className="workflow-copy">
-          <span className="workflow-label">Today&apos;s work</span>
-          <h1 id="client-journey-title">Patient Journey Command Center</h1>
-          <p>Reception, appointment, form, consultation, treatment ane payment ekaj focused flow ma complete karo.</p>
-        </div>
-        <div className="workflow-summary" aria-label="Patient journey summary">
-          <span><strong>{clients.length}</strong> Registered patients</span>
-          <span><strong>{todaySchedule.length}</strong> Today&apos;s visits</span>
-          <span><strong>{actionQueue.length}</strong> Pending actions</span>
-        </div>
-        <button className="workflow-primary-action" type="button" onClick={() => navigate('/journey')}>
-          Open Patient Journey <ChevronRight />
-        </button>
-      </section>
-
-      <section className="dashboard-patient-search" aria-labelledby="dashboard-patient-search-title">
-        <div className="patient-search-copy">
-          <span className="control-label">Quick patient lookup</span>
-          <h2 id="dashboard-patient-search-title">Search Patient</h2>
-          <p>Name, mobile number, patient ID અથવા serviceથી શોધો.</p>
-        </div>
-        <div className="patient-search-panel">
-          <label className="patient-search-input">
-            <SearchIcon />
-            <span className="sr-only">Search patient by name, mobile number, ID, or service</span>
-            <input
-              value={patientSearch}
-              onChange={(event) => setPatientSearch(event.target.value)}
-              placeholder="Search name, mobile, patient ID, or service..."
-              autoComplete="off"
-            />
-            {hasPatientSearch && <button type="button" onClick={() => setPatientSearch('')} aria-label="Clear patient search">Clear</button>}
-          </label>
-          {hasPatientSearch && (
-            <div className="patient-search-results" aria-live="polite">
-              {patientResults.length ? patientResults.map((patient) => (
-                <button className="patient-search-result" type="button" key={patient.id || `${patient.name}-${patient.mobile}`} onClick={() => navigate(`/journey?client=${encodeURIComponent(patient.name)}`)}>
-                  <span className="patient-result-main">
-                    <strong>{patient.name}</strong>
-                    <small>{patient.id || 'No ID'} · {patient.mobile || 'No mobile'}</small>
-                  </span>
-                  <span className="patient-result-service">{patient.service || 'No service'}</span>
-                  <span className="patient-result-open">Open Journey <ChevronRight /></span>
-                </button>
-              )) : (
-                <div className="empty-state compact-empty patient-search-empty">
-                  <strong>No patient found.</strong>
-                  <p>Try another name, mobile number, ID, or service.</p>
-                  <button className="pill" type="button" onClick={() => navigate('/clients?action=add')}>+ Add Patient</button>
-                </div>
-              )}
+      {/* 1. Hero Command Center */}
+      <section className="dashboard-hero-command" aria-label="Hospital Command Center">
+        <div className="dashboard-hero-top">
+          <div className="dashboard-hero-info">
+            <div className="dashboard-hero-badge-row">
+              <span className="dashboard-status-chip">● Live Clinic System</span>
+              <span className="dashboard-branch-chip">🏥 Workspace: {currentBranch}</span>
             </div>
-          )}
-        </div>
-      </section>
-
-      <section className="appointment-calendar-card" aria-labelledby="appointment-calendar-title">
-        <div className="appointment-calendar-head">
-          <div>
-            <span className="control-label">Appointment history</span>
-            <h2 id="appointment-calendar-title">Patient Appointment Calendar</h2>
-            <p>Select any date to review its appointments and open the patient&apos;s complete journey.</p>
+            <h1 className="dashboard-hero-title">🌿 Dr. Shree Ayurved Hospital</h1>
+            <p className="dashboard-hero-desc">
+              <span>{todayFormatted}</span>
+              <span>•</span>
+              <span><strong>{clients.length}</strong> Registered Patients</span>
+              <span>•</span>
+              <span><strong>{todayAppointments.length}</strong> Today&apos;s Visits</span>
+            </p>
           </div>
-          <div className="calendar-month-actions" aria-label="Calendar month controls">
-            <button type="button" onClick={() => setCalendarMonth((month) => addMonths(month, -1))} aria-label="Previous month">‹</button>
-            <strong>{calendarMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</strong>
-            <button type="button" onClick={() => setCalendarMonth((month) => addMonths(month, 1))} aria-label="Next month">›</button>
-            <button
-              className="calendar-today-button"
-              type="button"
-              onClick={() => {
-                const today = new Date();
-                setCalendarMonth(startOfMonth(today));
-                setSelectedCalendarDate(toLocalIsoDate(today));
-              }}
-            >
-              Today
+
+          <div className="dashboard-hero-actions">
+            <button className="dash-btn" type="button" onClick={() => navigate('/appointments?action=add')}>
+              📅 Book Appointment
+            </button>
+            <button className="dash-btn" type="button" onClick={() => navigate('/clients?action=add')}>
+              👤 Add Patient
+            </button>
+            <button className="dash-btn" type="button" onClick={() => navigate('/finance?tab=payments&action=add')}>
+              💳 New Invoice
+            </button>
+            <button className="dash-btn primary" type="button" onClick={() => navigate('/journey')}>
+              ✨ Open Patient Journey →
             </button>
           </div>
         </div>
 
-        <div className="appointment-calendar-layout">
-          <div className="calendar-panel">
-            <div className="calendar-weekdays" aria-hidden="true">
-              {CALENDAR_WEEKDAYS.map((day) => <span key={day}>{day}</span>)}
+        {/* Hero Subbar: Omnisearch & Date Range */}
+        <div className="dashboard-hero-subbar">
+          <div className="dashboard-omni-search-wrap">
+            <div className="dashboard-omni-search-box">
+              <SearchIcon />
+              <input
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+                placeholder="Instant search patient by name, mobile, patient ID, or service..."
+                autoComplete="off"
+              />
+              {hasPatientSearch && (
+                <button
+                  type="button"
+                  className="omni-clear-btn"
+                  onClick={() => setPatientSearch('')}
+                  aria-label="Clear search"
+                >
+                  ✕
+                </button>
+              )}
             </div>
-            <div className="calendar-grid" role="grid" aria-label={`${calendarMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} appointments`}>
-              {calendarDays.map((day) => {
-                const dateKey = toLocalIsoDate(day);
-                const appointmentCount = appointmentsByDate.get(dateKey)?.length ?? 0;
-                const isCurrentMonth = day.getMonth() === calendarMonth.getMonth();
-                const isSelected = dateKey === selectedCalendarDate;
-                const isToday = dateKey === toLocalIsoDate(new Date());
-                return (
-                  <button
-                    className={`calendar-day${isCurrentMonth ? '' : ' outside'}${isSelected ? ' selected' : ''}${isToday ? ' today' : ''}${appointmentCount ? ' has-appointments' : ''}`}
-                    type="button"
-                    role="gridcell"
-                    key={dateKey}
-                    aria-selected={isSelected}
-                    aria-label={`${day.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}, ${appointmentCount} appointment${appointmentCount === 1 ? '' : 's'}`}
-                    onClick={() => {
-                      setSelectedCalendarDate(dateKey);
-                      if (!isCurrentMonth) setCalendarMonth(startOfMonth(day));
-                    }}
-                  >
-                    <span className="calendar-day-number">{day.getDate()}</span>
-                    {appointmentCount > 0 && <span className="calendar-appointment-count">{appointmentCount}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
-          <aside className="calendar-day-agenda" aria-live="polite">
-            <div className="calendar-agenda-head">
-              <div>
-                <span className="control-label">Selected date</span>
-                <h3>{formatCalendarDate(selectedCalendarDate)}</h3>
-              </div>
-              <span className="calendar-total">{selectedDateAppointments.length} appointment{selectedDateAppointments.length === 1 ? '' : 's'}</span>
-            </div>
-            {selectedDateAppointments.length ? (
-              <div className="calendar-agenda-list">
-                {selectedDateAppointments.map((appointment) => (
-                  <button
-                    className="calendar-agenda-item"
-                    type="button"
-                    key={appointment.id}
-                    disabled={!appointment.name}
-                    onClick={() => navigate(`/journey?client=${encodeURIComponent(appointment.name)}`)}
-                  >
-                    <span className="calendar-agenda-time">{appointment.time || 'Time pending'}</span>
-                    <span className="calendar-agenda-patient">
-                      <strong>{appointment.name || 'Unnamed patient'}</strong>
-                      <small>{appointment.type || 'Appointment'}{appointment.mobile ? ` · ${appointment.mobile}` : ''}</small>
-                    </span>
-                    <span className="calendar-agenda-open">View Journey <ChevronRight /></span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="calendar-empty-state">
-                <strong>No appointments on this date.</strong>
-                <p>Select a date with a count badge or book a new appointment.</p>
-                <button className="pill" type="button" onClick={() => navigate('/appointments?action=add')}>Book Appointment</button>
+            {hasPatientSearch && (
+              <div className="omnisearch-dropdown" aria-live="polite">
+                <div className="omnisearch-dropdown-head">
+                  Found {patientResults.length} patient{patientResults.length === 1 ? '' : 's'}
+                </div>
+                {patientResults.length ? (
+                  patientResults.map((patient) => {
+                    const initials = String(patient.name || 'P').trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+                    return (
+                      <button
+                        className="omnisearch-item"
+                        type="button"
+                        key={patient.id || `${patient.name}-${patient.mobile}`}
+                        onClick={() => {
+                          setPatientSearch('');
+                          navigate(`/journey?client=${encodeURIComponent(patient.name)}`);
+                        }}
+                      >
+                        <div className="omnisearch-item-left">
+                          <div className="omnisearch-avatar">{initials}</div>
+                          <div className="omnisearch-meta">
+                            <strong>{patient.name}</strong>
+                            <span>{patient.id ? `#${patient.id} · ` : ''}{patient.mobile || 'No mobile'}</span>
+                          </div>
+                        </div>
+                        {patient.service && <span className="omnisearch-service-tag">{patient.service}</span>}
+                        <span className="omnisearch-cta">Open Journey <ChevronRight /></span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div style={{ padding: '16px', textAlign: 'center', color: '#597a6e' }}>
+                    <p style={{ margin: '0 0 10px', fontSize: '0.84rem' }}>No patient matched &ldquo;{patientSearch}&rdquo;</p>
+                    <button className="dash-btn" type="button" onClick={() => navigate('/clients?action=add')}>
+                      + Add New Patient Profile
+                    </button>
+                  </div>
+                )}
               </div>
             )}
-          </aside>
-        </div>
-      </section>
+          </div>
 
-      <section className="dashboard-controls" aria-label="Dashboard filters">
-        <div>
-          <span className="control-label">Date range</span>
-          <div className="segmented-control" role="group" aria-label="Date range">
+          <div className="dashboard-date-presets" role="group" aria-label="Date range filter">
             {DATE_PRESETS.map((preset) => (
               <button
-                className={datePreset === preset.label ? 'active' : ''}
-                type="button"
                 key={preset.label}
-                onClick={() => { setDatePreset(preset.label); setCustomDateRange(null); }}
+                type="button"
+                className={`dash-preset-chip ${datePreset === preset.label ? 'active' : ''}`}
+                onClick={() => {
+                  setDatePreset(preset.label);
+                  setCustomDateRange(null);
+                }}
               >
                 {preset.label}
               </button>
             ))}
           </div>
         </div>
-        <div className="branch-select">
-          <span className="control-label">Workspace</span>
-          <strong>{currentBranch}</strong>
-        </div>
       </section>
 
-      <section className="kpis">
+      {/* 2. Executive 5-Column KPI Stat Cards */}
+      <section className="dashboard-kpi-grid" aria-label="Key Performance Indicators">
         {kpis.map((kpi) => (
-          <article className="kpi action-card" key={kpi.label} role="button" tabIndex={0} onClick={() => navigate(kpiRoute(kpi.label))} onKeyDown={(event) => { if (event.key === 'Enter') navigate(kpiRoute(kpi.label)); }}>
-            <div className="kpi-head">
-              <KpiIcon accent={kpi.accent} />
-              <div>
-                <h3>{kpi.label}</h3>
-                <div className="value">{kpi.value}</div>
-              </div>
+          <article
+            key={kpi.label}
+            className={`dash-kpi-card tone-${kpi.tone}`}
+            role="button"
+            tabIndex={0}
+            onClick={kpi.onClick}
+            onKeyDown={(e) => { if (e.key === 'Enter') kpi.onClick(); }}
+          >
+            <div className="dash-kpi-head">
+              <span className="dash-kpi-label">{kpi.label}</span>
+              <div className="dash-kpi-icon-pill">{kpi.icon}</div>
             </div>
-            <div className="delta">{kpi.delta}</div>
-            <div className="kpi-footer">
-              <ChevronRight />
-              View Details
+            <div className="dash-kpi-value">{kpi.value}</div>
+            <div className="dash-kpi-foot">
+              <span className="dash-kpi-delta">{kpi.delta}</span>
+              <span className="dash-kpi-link">View <ChevronRight /></span>
             </div>
           </article>
         ))}
       </section>
 
-      <section className="dashboard-action-strip" aria-label="Dashboard actions">
-        <p className="command-message">Fast entry actions are grouped here; analytics stay behind More insights so daily work stays clean.</p>
-        <div className="sheet-actions toolbar-actions">
-          <ActionMenu label="Actions" items={quickActions} />
-          <button className="pill" type="button" onClick={() => setMoreInsightsOpen(true)}>More insights <ChevronRight /></button>
-        </div>
-      </section>
-
-      <section className="dashboard-focus-grid">
-        <Card title="Action Queue" subtitle="The next best work items for today.">
-          {actionQueue.length ? (
-            <div className="action-queue">
-              {actionQueue.map((item) => (
-                <button className="queue-item" type="button" key={`${item.title}-${item.route}`} onClick={() => navigate(item.route)}>
-                  <span className={`queue-priority ${item.tone}`} />
-                  <span>
-                    <strong>{item.title}</strong>
-                    <small>{item.note}</small>
-                  </span>
-                  <ChevronRight />
-                </button>
-              ))}
+      {/* 3. Balanced 2-Column Operational Center */}
+      <section className="dashboard-main-grid" aria-label="Daily Operations and Priority Queue">
+        {/* Left Column: Today's Schedule & Interactive Calendar */}
+        <div className="dash-panel">
+          <div className="dash-panel-head">
+            <div className="dash-panel-title-wrap">
+              <h2 className="dash-panel-title">📋 Patient Scheduling</h2>
+              <span className="dash-count-pill">{todayAppointments.length} Today</span>
             </div>
-          ) : (
-            <div className="empty-state compact-empty">
-              <strong>No actions pending.</strong>
-              <p>Follow-ups and unpaid invoices will appear here automatically.</p>
+            <div className="dash-panel-tabs">
+              <button
+                type="button"
+                className={`dash-panel-tab-btn ${operationalView === 'queue' ? 'active' : ''}`}
+                onClick={() => setOperationalView('queue')}
+              >
+                Today&apos;s Queue ({todayAppointments.length})
+              </button>
+              <button
+                type="button"
+                className={`dash-panel-tab-btn ${operationalView === 'calendar' ? 'active' : ''}`}
+                onClick={() => setOperationalView('calendar')}
+              >
+                Monthly Calendar
+              </button>
             </div>
-          )}
-        </Card>
+          </div>
 
-        <Card title="Today&apos;s Schedule" action={<button className="icon-btn inline-icon" type="button" onClick={() => navigate('/appointments')} aria-label="Open appointments"><ChevronRight /></button>}>
-          {todaySchedule.length ? (
-            <div className="schedule-list">
-              {todaySchedule.slice(0, 5).map((item) => (
-                <div className="schedule-item" key={`${item.time}-${item.name}`}>
-                  <div className="time">{item.time}</div>
-                  <div>
-                    <div className="item-title">{item.name}</div>
-                    <div className="item-sub">{item.note}</div>
+          <div className="dash-panel-body">
+            {operationalView === 'queue' ? (
+              <div className="today-queue-container">
+                {todayAppointments.length ? (
+                  todayAppointments.map((appointment) => {
+                    const initials = String(appointment.name || 'P').trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+                    return (
+                      <div className="today-queue-item" key={appointment.id}>
+                        <div className="today-queue-left">
+                          <span className="today-queue-time-badge">{appointment.time || 'Time TBD'}</span>
+                          <div className="today-queue-avatar">{initials}</div>
+                          <div className="today-queue-info">
+                            <strong>{appointment.name || 'Unnamed Patient'}</strong>
+                            <span>
+                              {appointment.type || 'Consultation'}
+                              {appointment.mobile ? ` • 📞 ${appointment.mobile}` : ''}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="today-queue-right">
+                          <span className="today-status-pill status-checked-in">Scheduled</span>
+                          <button
+                            className="today-open-journey-btn"
+                            type="button"
+                            onClick={() => navigate(`/journey?client=${encodeURIComponent(appointment.name)}`)}
+                          >
+                            Open Journey <ChevronRight />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div style={{ padding: '36px 16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '2.2rem', marginBottom: '8px' }}>🌿</div>
+                    <strong style={{ fontSize: '1.05rem', color: '#0e382d', display: 'block' }}>
+                      No Appointments Scheduled For Today
+                    </strong>
+                    <p style={{ color: '#5b7a6e', margin: '6px auto 18px', maxWidth: '380px', fontSize: '0.84rem', lineHeight: '1.45' }}>
+                      Book a patient appointment or open the Patient Journey to check-in a walk-in patient.
+                    </p>
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <button className="dash-btn" type="button" onClick={() => navigate('/appointments?action=add')}>
+                        📅 Book Appointment
+                      </button>
+                      <button className="dash-btn primary" type="button" onClick={() => navigate('/journey')}>
+                        ✨ Open Patient Journey
+                      </button>
+                    </div>
                   </div>
-                  <StatusPill tone={`st-${item.tone}`}>{item.status}</StatusPill>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state compact-empty">
-              <strong>No appointments today.</strong>
-              <p>Patient Journey mathi check-in karo athva appointment book karo.</p>
-            </div>
-          )}
-          <button className="footer-action button-reset" type="button" onClick={() => navigate('/appointments')}>
-            <span>Open Appointments</span><ChevronRight />
-          </button>
-        </Card>
-      </section>
-
-      {moreInsightsOpen && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setMoreInsightsOpen(false)}>
-          <div className="modal-shell wide-modal" role="dialog" aria-modal="true" aria-label="More dashboard insights" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head">
-              <div>
-                <h2>More Insights</h2>
-                <p>Operational details are grouped here to keep the main dashboard clean.</p>
+                )}
               </div>
-              <button className="icon-btn" type="button" onClick={() => setMoreInsightsOpen(false)} aria-label="Close modal">x</button>
+            ) : (
+              /* Calendar View */
+              <div className="appointment-calendar-card" style={{ border: 'none', padding: 0, boxShadow: 'none', background: 'transparent' }}>
+                <div className="appointment-calendar-head" style={{ marginBottom: '12px' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1rem', color: '#0e382d' }}>Appointment Calendar</h3>
+                    <p style={{ margin: '2px 0 0', color: '#5c7a6e', fontSize: '0.78rem' }}>Click any day with badge to inspect scheduled visits.</p>
+                  </div>
+                  <div className="calendar-month-actions">
+                    <button type="button" onClick={() => setCalendarMonth((m) => addMonths(m, -1))} aria-label="Previous month">‹</button>
+                    <strong>{calendarMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</strong>
+                    <button type="button" onClick={() => setCalendarMonth((m) => addMonths(m, 1))} aria-label="Next month">›</button>
+                    <button
+                      className="calendar-today-button"
+                      type="button"
+                      onClick={() => {
+                        const today = new Date();
+                        setCalendarMonth(startOfMonth(today));
+                        setSelectedCalendarDate(toLocalIsoDate(today));
+                      }}
+                    >
+                      Today
+                    </button>
+                  </div>
+                </div>
+
+                <div className="appointment-calendar-layout">
+                  <div className="calendar-panel">
+                    <div className="calendar-weekdays" aria-hidden="true">
+                      {CALENDAR_WEEKDAYS.map((day) => <span key={day}>{day}</span>)}
+                    </div>
+                    <div className="calendar-grid" role="grid">
+                      {calendarDays.map((day) => {
+                        const dateKey = toLocalIsoDate(day);
+                        const appointmentCount = appointmentsByDate.get(dateKey)?.length ?? 0;
+                        const isCurrentMonth = day.getMonth() === calendarMonth.getMonth();
+                        const isSelected = dateKey === selectedCalendarDate;
+                        const isToday = dateKey === toLocalIsoDate(new Date());
+                        return (
+                          <button
+                            className={`calendar-day${isCurrentMonth ? '' : ' outside'}${isSelected ? ' selected' : ''}${isToday ? ' today' : ''}${appointmentCount ? ' has-appointments' : ''}`}
+                            type="button"
+                            key={dateKey}
+                            onClick={() => {
+                              setSelectedCalendarDate(dateKey);
+                              if (!isCurrentMonth) setCalendarMonth(startOfMonth(day));
+                            }}
+                          >
+                            <span className="calendar-day-number">{day.getDate()}</span>
+                            {appointmentCount > 0 && <span className="calendar-appointment-count">{appointmentCount}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <aside className="calendar-day-agenda">
+                    <div className="calendar-agenda-head">
+                      <div>
+                        <span className="control-label">Selected Date</span>
+                        <h3>{formatCalendarDate(selectedCalendarDate)}</h3>
+                      </div>
+                      <span className="calendar-total">{selectedDateAppointments.length} visit{selectedDateAppointments.length === 1 ? '' : 's'}</span>
+                    </div>
+
+                    {selectedDateAppointments.length ? (
+                      <div className="calendar-agenda-list">
+                        {selectedDateAppointments.map((app) => (
+                          <button
+                            className="calendar-agenda-item"
+                            type="button"
+                            key={app.id}
+                            disabled={!app.name}
+                            onClick={() => navigate(`/journey?client=${encodeURIComponent(app.name)}`)}
+                          >
+                            <span className="calendar-agenda-time">{app.time || 'TBD'}</span>
+                            <span className="calendar-agenda-patient">
+                              <strong>{app.name || 'Unnamed patient'}</strong>
+                              <small>{app.type || 'Appointment'}{app.mobile ? ` · ${app.mobile}` : ''}</small>
+                            </span>
+                            <span className="calendar-agenda-open">Journey <ChevronRight /></span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="calendar-empty-state">
+                        <strong>No appointments on this date.</strong>
+                        <p>Select a date with a badge count or schedule a new visit.</p>
+                        <button className="pill" type="button" onClick={() => navigate('/appointments?action=add')}>
+                          Book Appointment
+                        </button>
+                      </div>
+                    )}
+                  </aside>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Priority Action Queue */}
+        <div className="dash-panel">
+          <div className="dash-panel-head">
+            <div className="dash-panel-title-wrap">
+              <h2 className="dash-panel-title">⚡ Priority Action Queue</h2>
+              <span className="dash-count-pill">{actionQueue.length}</span>
             </div>
-            <div className="more-insights-grid">
-              <Card title="Payment Aging" subtitle="Unpaid collections grouped by age.">
-                <InsightBars rows={paymentAging} emptyTitle="No pending payments." emptyCopy="Pending invoices will appear here by age bucket." valueFormatter={(row) => `₹ ${row.amount.toLocaleString('en-IN')}`} />
-              </Card>
+            <button className="dash-btn" type="button" onClick={() => navigate('/crm')}>
+              Open CRM <ChevronRight />
+            </button>
+          </div>
 
-              <Card title="Lead Source Performance" subtitle={`Showing ${datePreset.toLowerCase()} performance.`}>
-                <InsightBars rows={leadSources} emptyTitle="No lead sources yet." emptyCopy="Add leads with sources to compare performance." valueFormatter={(row) => `${row.count} lead${row.count === 1 ? '' : 's'}`} />
-              </Card>
+          <div className="dash-panel-body">
+            <div className="priority-filter-bar">
+              <button
+                type="button"
+                className={`priority-filter-btn ${priorityFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setPriorityFilter('all')}
+              >
+                All ({actionQueue.length})
+              </button>
+              <button
+                type="button"
+                className={`priority-filter-btn ${priorityFilter === 'collection' ? 'active' : ''}`}
+                onClick={() => setPriorityFilter('collection')}
+              >
+                💰 Dues ({actionQueue.filter((i) => i.category === 'collection').length})
+              </button>
+              <button
+                type="button"
+                className={`priority-filter-btn ${priorityFilter === 'followup' ? 'active' : ''}`}
+                onClick={() => setPriorityFilter('followup')}
+              >
+                📞 Follow-ups ({actionQueue.filter((i) => i.category === 'followup').length})
+              </button>
+              <button
+                type="button"
+                className={`priority-filter-btn ${priorityFilter === 'stock' ? 'active' : ''}`}
+                onClick={() => setPriorityFilter('stock')}
+              >
+                📦 Stock ({actionQueue.filter((i) => i.category === 'stock').length})
+              </button>
+              <button
+                type="button"
+                className={`priority-filter-btn ${priorityFilter === 'reminder' ? 'active' : ''}`}
+                onClick={() => setPriorityFilter('reminder')}
+              >
+                🎂 Birthdays ({actionQueue.filter((i) => i.category === 'reminder').length})
+              </button>
+            </div>
 
-              <Card title="Staff Workload" subtitle={`Appointments per team member (${datePreset.toLowerCase()}).`}>
-                <InsightBars
-                  rows={staffWorkload}
-                  emptyTitle="No staff workload yet."
-                  emptyCopy="Add staff names to appointments to compare booking load."
-                  valueFormatter={(row) => `${row.count} appointment${row.count === 1 ? '' : 's'}`}
-                />
-              </Card>
-
-              <Card title="Inventory Alerts" subtitle="Low-stock and near-expiry items.">
-                <AlertList
-                  rows={lowStockAlerts}
-                  emptyTitle="Inventory looks healthy."
-                  emptyCopy="Low stock and expiry alerts will appear here."
-                  route="/inventory"
-                />
-              </Card>
-
-              <Card title="Medicine & Package Sales" subtitle="Paid collections grouped by sale type.">
-                <InsightBars
-                  rows={salesSummary}
-                  emptyTitle="No sales summary yet."
-                  emptyCopy="Paid invoices will be grouped into medicine, package, and treatment sales."
-                  valueFormatter={(row) => `₹ ${row.amount.toLocaleString('en-IN')}`}
-                />
-              </Card>
-
-              <Card title="Treatment Progress" subtitle="Active, completed, and paused plans.">
-                <InsightBars
-                  rows={treatmentProgress}
-                  emptyTitle="No treatment progress yet."
-                  emptyCopy="Create treatment plans or update client progress to track outcomes."
-                  valueFormatter={(row) => `${row.count} record${row.count === 1 ? '' : 's'}`}
-                />
-              </Card>
-
-              <Card title="Birthday Reminders" subtitle="Upcoming client birthdays.">
-                <AlertList
-                  rows={reminders}
-                  emptyTitle="No reminders due."
-                  emptyCopy="Add birthdays in patient profiles."
-                  route="/clients"
-                />
-              </Card>
+            <div className="priority-stream-list">
+              {filteredActionQueue.length ? (
+                filteredActionQueue.map((item, idx) => (
+                  <button
+                    key={`${item.title}-${idx}`}
+                    type="button"
+                    className="priority-stream-item"
+                    onClick={() => navigate(item.route)}
+                  >
+                    <div className="priority-stream-item-left">
+                      <span className={`priority-indicator ${item.tone}`} />
+                      <div className={`priority-icon-pill ${item.tone}`}>{item.icon || '⚡'}</div>
+                      <div className="priority-stream-info">
+                        <strong>{item.title}</strong>
+                        <span>{item.note}</span>
+                      </div>
+                    </div>
+                    <span className="priority-stream-arrow"><ChevronRight /></span>
+                  </button>
+                ))
+              ) : (
+                <div style={{ padding: '30px 14px', textAlign: 'center', color: '#57796d' }}>
+                  <div style={{ fontSize: '1.8rem', marginBottom: '6px' }}>✓</div>
+                  <strong style={{ fontSize: '0.94rem', color: '#0e382d', display: 'block' }}>
+                    All Clear in This Category
+                  </strong>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>
+                    No pending items require immediate attention.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      )}
+      </section>
+
+      {/* 4. Interactive Clinic Insights Hub (Zero Modals!) */}
+      <section className="dashboard-insights-hub" aria-label="Clinic Insights and Analytics">
+        <div className="insights-hub-head">
+          <div className="dash-panel-title-wrap">
+            <h2 className="dash-panel-title">📊 Clinic Insights & Performance Hub</h2>
+          </div>
+
+          <div className="insights-hub-tabs">
+            <button
+              type="button"
+              className={`insights-hub-tab-btn ${activeInsightsTab === 'aging' ? 'active' : ''}`}
+              onClick={() => setActiveInsightsTab('aging')}
+            >
+              💳 Payment Aging
+            </button>
+            <button
+              type="button"
+              className={`insights-hub-tab-btn ${activeInsightsTab === 'sales' ? 'active' : ''}`}
+              onClick={() => setActiveInsightsTab('sales')}
+            >
+              🛍️ Sales Breakdown
+            </button>
+            <button
+              type="button"
+              className={`insights-hub-tab-btn ${activeInsightsTab === 'leads' ? 'active' : ''}`}
+              onClick={() => setActiveInsightsTab('leads')}
+            >
+              🌐 Lead Sources
+            </button>
+            <button
+              type="button"
+              className={`insights-hub-tab-btn ${activeInsightsTab === 'staff' ? 'active' : ''}`}
+              onClick={() => setActiveInsightsTab('staff')}
+            >
+              👨‍⚕️ Staff Workload
+            </button>
+            <button
+              type="button"
+              className={`insights-hub-tab-btn ${activeInsightsTab === 'inventory' ? 'active' : ''}`}
+              onClick={() => setActiveInsightsTab('inventory')}
+            >
+              📦 Stock Health
+            </button>
+            <button
+              type="button"
+              className={`insights-hub-tab-btn ${activeInsightsTab === 'birthdays' ? 'active' : ''}`}
+              onClick={() => setActiveInsightsTab('birthdays')}
+            >
+              🎂 Patient Birthdays
+            </button>
+          </div>
+        </div>
+
+        <div className="insights-hub-body">
+          {activeInsightsTab === 'aging' && (
+            <InsightBars
+              rows={paymentAging}
+              emptyTitle="No pending payments."
+              emptyCopy="Unpaid client invoices will appear here grouped by age bucket."
+              valueFormatter={(row) => `₹ ${row.amount.toLocaleString('en-IN')}`}
+            />
+          )}
+
+          {activeInsightsTab === 'sales' && (
+            <InsightBars
+              rows={salesSummary}
+              emptyTitle="No sales data recorded in range."
+              emptyCopy="Paid invoices will be grouped into medicine, package, and treatment collections."
+              valueFormatter={(row) => `₹ ${row.amount.toLocaleString('en-IN')}`}
+            />
+          )}
+
+          {activeInsightsTab === 'leads' && (
+            <InsightBars
+              rows={leadSources}
+              emptyTitle="No lead sources registered yet."
+              emptyCopy="Inquiry sources (Google, Instagram, Referrals) will display their relative contribution here."
+              valueFormatter={(row) => `${row.count} lead${row.count === 1 ? '' : 's'}`}
+            />
+          )}
+
+          {activeInsightsTab === 'staff' && (
+            <InsightBars
+              rows={staffWorkload}
+              emptyTitle="No staff workload recorded yet."
+              emptyCopy="Add doctor and therapist names to appointments to track appointment distribution."
+              valueFormatter={(row) => `${row.count} appointment${row.count === 1 ? '' : 's'}`}
+            />
+          )}
+
+          {activeInsightsTab === 'inventory' && (
+            <AlertList
+              rows={lowStockAlerts}
+              emptyTitle="Medicine Inventory is Healthy."
+              emptyCopy="Items below 10 units or expiring within 30 days will alert here."
+              route="/inventory"
+            />
+          )}
+
+          {activeInsightsTab === 'birthdays' && (
+            <AlertList
+              rows={reminders}
+              emptyTitle="No Patient Birthdays in Next 30 Days."
+              emptyCopy="Birthdays and anniversaries recorded in patient profiles will appear here for warm wishes."
+              route="/clients"
+            />
+          )}
+        </div>
+      </section>
+
+      {/* 5. Quick Module Shortcuts */}
+      <section className="dashboard-shortcuts-panel" aria-label="Hospital Navigation Shortcuts">
+        <div className="dashboard-shortcuts-head">
+          <h3>🚀 Quick Module Access</h3>
+          <span style={{ fontSize: '0.78rem', color: '#5b7a6e' }}>Direct 1-click launch to primary hospital departments</span>
+        </div>
+
+        <div className="dashboard-shortcuts-grid">
+          <div className="module-shortcut-card" role="button" tabIndex={0} onClick={() => navigate('/journey')} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/journey'); }}>
+            <div className="module-shortcut-icon">🌟</div>
+            <div className="module-shortcut-title">Patient Journey</div>
+            <div className="module-shortcut-desc">All-in-one clinic flow: intake, consult, diet, therapy & checkout.</div>
+          </div>
+
+          <div className="module-shortcut-card" role="button" tabIndex={0} onClick={() => navigate('/appointments')} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/appointments'); }}>
+            <div className="module-shortcut-icon">📅</div>
+            <div className="module-shortcut-title">Appointments</div>
+            <div className="module-shortcut-desc">Patient bookings, calendar schedules, and room allocations.</div>
+          </div>
+
+          <div className="module-shortcut-card" role="button" tabIndex={0} onClick={() => navigate('/treatments')} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/treatments'); }}>
+            <div className="module-shortcut-icon">🌿</div>
+            <div className="module-shortcut-title">Treatments & Diets</div>
+            <div className="module-shortcut-desc">Prescription plans, Panchakarma cycles, and nutrition schedules.</div>
+          </div>
+
+          <div className="module-shortcut-card" role="button" tabIndex={0} onClick={() => navigate('/medicines')} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/medicines'); }}>
+            <div className="module-shortcut-icon">💊</div>
+            <div className="module-shortcut-title">Medicines Catalog</div>
+            <div className="module-shortcut-desc">Ayurvedic formulations, dosages, herbs, and therapeutic usage.</div>
+          </div>
+
+          <div className="module-shortcut-card" role="button" tabIndex={0} onClick={() => navigate('/payments')} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/payments'); }}>
+            <div className="module-shortcut-icon">💳</div>
+            <div className="module-shortcut-title">Billing & Accounts</div>
+            <div className="module-shortcut-desc">Invoices, pending collections, payment receipts, and reports.</div>
+          </div>
+
+          <div className="module-shortcut-card" role="button" tabIndex={0} onClick={() => navigate('/forms')} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/forms'); }}>
+            <div className="module-shortcut-icon">📋</div>
+            <div className="module-shortcut-title">Clinical Forms</div>
+            <div className="module-shortcut-desc">Patient health questionnaires, consent, and intake surveys.</div>
+          </div>
+        </div>
+      </section>
 
     </>
   );
@@ -774,41 +1046,51 @@ function buildClientReminders(clients) {
 function buildActionQueue(tasks, leads, payments, lowStockAlerts = [], reminders = []) {
   const followUps = leads
     .filter((lead) => String(lead.status ?? '').toLowerCase().includes('follow'))
-    .slice(0, 3)
+    .slice(0, 4)
     .map((lead) => ({
       title: `Follow up: ${lead.name || 'Unnamed lead'}`,
       note: `${lead.source || 'Lead'} · score ${lead.score || '?'}`,
       route: '/crm',
       tone: 'warm',
+      icon: '📞',
+      category: 'followup',
     }));
   const collections = payments
     .filter((payment) => paymentPendingAmount(payment) > 0)
-    .slice(0, 2)
+    .slice(0, 4)
     .map((payment) => ({
       title: `Collect ${payment.invoice || 'pending invoice'}`,
       note: `${payment.client || 'Patient'} · ₹ ${paymentPendingAmount(payment).toLocaleString('en-IN')} pending`,
       route: '/payments',
       tone: 'hot',
+      icon: '💰',
+      category: 'collection',
     }));
-  const stockTasks = lowStockAlerts.slice(0, 1).map((item) => ({
+  const stockTasks = lowStockAlerts.slice(0, 3).map((item) => ({
     title: `Inventory: ${item.title}`,
     note: item.note,
     route: '/inventory',
     tone: item.tone,
+    icon: '📦',
+    category: 'stock',
   }));
-  const reminderTasks = reminders.slice(0, 1).map((item) => ({
+  const reminderTasks = reminders.slice(0, 3).map((item) => ({
     title: item.title,
     note: item.note,
     route: '/clients',
     tone: item.tone,
+    icon: '🎂',
+    category: 'reminder',
   }));
   const fallback = tasks.slice(0, 3).map((task) => ({
     title: task.title,
     note: task.note,
     route: '/crm',
     tone: 'cool',
+    icon: '⚡',
+    category: 'task',
   }));
-  return [...collections, ...stockTasks, ...reminderTasks, ...followUps, ...fallback].slice(0, 5);
+  return [...collections, ...stockTasks, ...reminderTasks, ...followUps, ...fallback];
 }
 
 function AlertList({ rows, emptyTitle, emptyCopy, route }) {
