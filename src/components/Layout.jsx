@@ -253,8 +253,11 @@ export function Layout() {
               </div>
             </div>
           )}
-          <button className="icon-btn" aria-label="Notifications" type="button" onClick={toggleNotifications} aria-expanded={notificationsOpen}>
+          <button className="icon-btn notif-btn" aria-label="Notifications" type="button" onClick={toggleNotifications} aria-expanded={notificationsOpen}>
             <BellIcon />
+            {(notificationSummary.followUps > 0 || notificationSummary.pendingPayments > 0) && (
+              <span className="topbar-notif-dot" aria-hidden="true" />
+            )}
           </button>
           {notificationsOpen && (
             <div className="popover-panel">

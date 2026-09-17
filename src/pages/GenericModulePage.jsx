@@ -89,7 +89,7 @@ function SearchableFieldPicker({ value, options, placeholder, onChange, onSelect
 }
 
 export function GenericModulePage({ title, description, stats, columns, rows, fieldOptions = {}, searchableFieldOptions = {}, fieldTypes = {}, rowActions = null, filterPresets = [], viewPresets = [], normalizeRows = (value) => value, sortRows = null }) {
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRow, setSelectedRow] = useState(null);
   const [recentlyAddedRow, setRecentlyAddedRow] = useState(null);
@@ -277,11 +277,14 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
         <div>
           <h1>{title}</h1>
           <p>{description}</p>
-          <p className="subtle">Shared cloud workspace</p>
+          <div className="module-hero-meta">
+            <span className="module-branch-pill">📍 {currentBranch || 'Main Clinic'}</span>
+            <span className="module-record-badge">📋 {tableRows.length} Total Records</span>
+          </div>
         </div>
         <div className="module-stats">
-          {stats.map((stat) => (
-            <div className="mini-stat" key={stat.label}>
+          {stats.map((stat, index) => (
+            <div className={`mini-stat mini-stat-${index % 3}`} key={stat.label}>
               <span>{stat.label}</span>
               <strong>{stat.value}</strong>
             </div>
@@ -290,11 +293,23 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
       </div>
 
       <Card
-        title={`${title} List`}
-        subtitle={`${actionMessage}${viewPresets.length ? ` Selected view: ${activeViewLabel}.` : ''}`}
+        title={`${title} Directory`}
+        subtitle={`${filteredRows.length} record(s) listed · ${actionMessage}${viewPresets.length ? ` · View: ${activeViewLabel}` : ''}`}
         action={(
           <div className="card-action-group">
-            <button className="pill primary-action" type="button" onClick={openAddModal}>+ Add {title}</button>
+            <button className="pill primary-action" type="button" onClick={openAddModal}>
+              <span aria-hidden="true">+</span> Add {title}
+            </button>
+            <button
+              className={`pill ${filterOpen ? 'filter-pill active' : ''}`}
+              type="button"
+              onClick={() => {
+                setFilterOpen((current) => !current);
+                setActionMessage(filterOpen ? 'Filters closed.' : 'Filter bar opened.');
+              }}
+            >
+              🔍 {filterOpen ? 'Hide Filters' : 'Filter & Search'}
+            </button>
             {viewPresets.length > 0 && <ActionMenu label="Views" items={viewItems} />}
             <ActionMenu label="Actions" items={actionItems} />
           </div>
@@ -344,12 +359,25 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
                 ))}
               </div>
             )}
-            <input
-              className="lead-input compact-filter"
-              value={filterText}
-              onChange={(event) => setFilterText(event.target.value)}
-              placeholder={activeFilter ? `Search by ${activeFilter.toLowerCase()}...` : `Filter ${title.toLowerCase()}...`}
-            />
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                className="lead-input compact-filter"
+                value={filterText}
+                onChange={(event) => setFilterText(event.target.value)}
+                placeholder={activeFilter ? `Search by ${activeFilter.toLowerCase()}...` : `Filter ${title.toLowerCase()}...`}
+                autoFocus
+              />
+              {filterText && (
+                <button
+                  className="pill"
+                  type="button"
+                  onClick={() => setFilterText('')}
+                  title="Clear search text"
+                >
+                  ✕ Clear
+                </button>
+              )}
+            </div>
           </div>
         )}
         {(selectedRow || actionMessage !== 'Ready.') && (
