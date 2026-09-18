@@ -2015,6 +2015,14 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                 const phone = clientMobile(row);
                 const visitMeta = clientVisitMeta.get(normalizePersonName(name));
                 const isSelected = selectedClient === name;
+                const initials = String(name || 'P')
+                  .trim()
+                  .split(/\s+/)
+                  .map((n) => n[0])
+                  .slice(0, 2)
+                  .join('')
+                  .toUpperCase() || 'P';
+
                 return (
                   <button
                     className={`journey-client ${isSelected ? 'active' : ''}`}
@@ -2025,21 +2033,29 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                       setShowMobileList(false);
                     }}
                   >
-                    <div className="journey-client-main">
-                      <div className="journey-client-avatar">
-                        {name.charAt(0).toUpperCase()}
+                    <div className="journey-client-avatar" aria-hidden="true">
+                      {initials}
+                    </div>
+                    <div className="journey-client-content">
+                      <div className="journey-client-name" title={name}>
+                        {name}
                       </div>
-                      <div className="journey-client-info">
-                        <strong>{id ? `#${id.replace(/^#/, '')} · ${name}` : name}</strong>
-                        <span>{phone || 'No mobile saved'}</span>
+                      <div className="journey-client-details">
+                        {id && <span className="journey-client-id">#{id.replace(/^#/, '')}</span>}
+                        <span className="journey-client-phone">📞 {phone || 'No mobile saved'}</span>
+                      </div>
+                      <div className="journey-client-footer">
+                        <span className={`journey-status-pill ${journeys[name] ? 'in-progress' : 'ready'}`}>
+                          {journeys[name] ? '● In progress' : '○ Ready'}
+                        </span>
+                        <time
+                          className="journey-client-time"
+                          dateTime={visitMeta ? `${visitMeta.date}${visitMeta.time ? `T${visitMeta.time}` : ''}` : undefined}
+                        >
+                          🕒 {visitMeta ? formatJourneyDateTime(visitMeta.date, visitMeta.time) : 'No visit yet'}
+                        </time>
                       </div>
                     </div>
-                    <span className="journey-client-meta">
-                      <small>{journeys[name] ? 'In progress' : 'Ready'}</small>
-                      <time dateTime={visitMeta ? `${visitMeta.date}${visitMeta.time ? `T${visitMeta.time}` : ''}` : undefined}>
-                        {visitMeta ? formatJourneyDateTime(visitMeta.date, visitMeta.time) : 'No visit yet'}
-                      </time>
-                    </span>
                   </button>
                 );
               }) : (
