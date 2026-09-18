@@ -4446,7 +4446,7 @@ export function TreatmentPlansPage() {
       `--------------------------------\n\n` +
       (mealText || 'No meals scheduled yet.') +
       (dietForm.instructions ? `\n\n--------------------------------\n🌿 *INSTRUCTIONS & AYURVEDIC GUIDELINES*\n--------------------------------\n${dietForm.instructions}` : '') +
-      `\n\n_Wish you healthy healing!_\n*Dr. Shree Ayurved Hospital*`;
+      `\n\n_Wish you healthy healing!_\n*Shree Ayurved Hospital*`;
 
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(message);

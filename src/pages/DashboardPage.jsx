@@ -201,7 +201,7 @@ export function DashboardPage() {
               <span className="dashboard-status-chip">● Live Clinic System</span>
               <span className="dashboard-branch-chip">🏥 Workspace: {currentBranch}</span>
             </div>
-            <h1 className="dashboard-hero-title">🌿 Dr. Shree Ayurved Hospital</h1>
+            <h1 className="dashboard-hero-title">🌿 Shree Ayurved Hospital</h1>
             <p className="dashboard-hero-desc">
               <span>{todayFormatted}</span>
               <span>•</span>
