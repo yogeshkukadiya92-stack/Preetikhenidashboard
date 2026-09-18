@@ -330,7 +330,16 @@ app.post('/api/attendance/forms/:slug/responses', asyncHandler(async (request, r
     if (inserted.rowCount) {
       const stateResult = await client.query('select value from app_state where branch = $1 and key = $2 for update', [WORKSPACE_BRANCH, ATTENDANCE_STATE_KEY]);
       const sessions = Array.isArray(stateResult.rows[0]?.value) ? stateResult.rows[0].value : [];
-      const record = { id: String(submitted.id), name: String(submitted.name).trim(), mobile: String(submitted.mobile ?? '').trim(), source: 'Public Form', status: 'Present', note: 'Marked through public attendance form', submittedAt: submitted.submittedAt ?? new Date().toISOString() };
+      const record = {
+        id: String(submitted.id),
+        name: String(submitted.name).trim(),
+        mobile: String(submitted.mobile ?? '').trim(),
+        source: 'Public Form',
+        status: 'Present',
+        note: submitted.note || 'Marked through public attendance form',
+        answers: submitted.answers ?? {},
+        submittedAt: submitted.submittedAt ?? new Date().toISOString(),
+      };
       const sessionIndex = sessions.findIndex((session) => session.id === form.sessionId || session.publicSlug === slug);
       if (sessionIndex >= 0) sessions[sessionIndex] = { ...sessions[sessionIndex], records: [...(sessions[sessionIndex].records ?? []).filter((item) => item.id !== record.id), record] };
       else sessions.unshift({ id: form.sessionId, title: form.title, group: form.group ?? 'Mixed Group', date: form.date ?? '', time: form.time ?? '', mode: form.mode ?? 'Offline', notes: form.notes ?? '', publicSlug: slug, records: [record], createdAt: new Date().toISOString() });
