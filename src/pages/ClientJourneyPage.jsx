@@ -78,6 +78,80 @@ function clinicalMedicines(treatmentData = {}) {
   })).filter((item) => item.medicine);
 }
 
+function consultationSectionsFromData(data = {}) {
+  if (Array.isArray(data?.sections) && data.sections.length > 0) {
+    return data.sections.map((sec, idx) => ({
+      id: sec.id || `consultation-sec-${idx + 1}`,
+      service: sec.service || 'Consultation',
+      complaint: sec.complaint || '',
+      notes: sec.notes || '',
+      vitals: sec.vitals || '',
+      diagnosis: sec.diagnosis || '',
+      investigation: sec.investigation || '',
+      doctorNotes: sec.doctorNotes || '',
+    }));
+  }
+  if (data && (data.complaint || data.notes || data.vitals || data.diagnosis || data.investigation || data.doctorNotes || data.service)) {
+    return [{
+      id: 'consultation-sec-1',
+      service: data.service || 'Consultation',
+      complaint: data.complaint || '',
+      notes: data.notes || '',
+      vitals: data.vitals || '',
+      diagnosis: data.diagnosis || '',
+      investigation: data.investigation || '',
+      doctorNotes: data.doctorNotes || '',
+    }];
+  }
+  return [{
+    id: 'consultation-sec-1',
+    service: 'Consultation',
+    complaint: '',
+    notes: '',
+    vitals: '',
+    diagnosis: '',
+    investigation: '',
+    doctorNotes: '',
+  }];
+}
+
+function treatmentSectionsFromData(data = {}) {
+  if (Array.isArray(data?.sections) && data.sections.length > 0) {
+    return data.sections.map((sec, idx) => {
+      const medicines = Array.isArray(sec.medicines) && sec.medicines.length > 0
+        ? sec.medicines
+        : (sec.medicine ? clinicalMedicines(sec) : [{ medicine: '', dose: '', timing: '' }]);
+      return {
+        id: sec.id || `treatment-sec-${idx + 1}`,
+        service: sec.service || 'Consultation',
+        goal: sec.goal || '',
+        duration: sec.duration || '30 days',
+        status: sec.status || 'Active',
+        medicines: medicines.length ? medicines : [{ medicine: '', dose: '', timing: '' }],
+      };
+    });
+  }
+  if (data && (data.service || data.goal || data.medicines?.length || data.medicine)) {
+    const medicines = clinicalMedicines(data);
+    return [{
+      id: 'treatment-sec-1',
+      service: data.service || 'Consultation',
+      goal: data.goal || '',
+      duration: data.duration || '30 days',
+      status: data.status || 'Active',
+      medicines: medicines.length > 0 ? medicines : [{ medicine: '', dose: '', timing: '' }],
+    }];
+  }
+  return [{
+    id: 'treatment-sec-1',
+    service: 'Consultation',
+    goal: '',
+    duration: '30 days',
+    status: 'Active',
+    medicines: [{ medicine: '', dose: '', timing: '' }],
+  }];
+}
+
 function clientVisitDate(row) {
   if (Array.isArray(row)) return row.length >= 8 ? row[3] ?? '' : '';
   return row?.visitDate ?? row?.['Visit Date'] ?? row?.createdAt ?? row?.date ?? '';
@@ -811,6 +885,10 @@ export function ClientJourneyPage() {
   const [todayKey, setTodayKey] = useState(() => localDateKey());
   const [consultationOpen, setConsultationOpen] = useState(false);
   const [consultation, setConsultation] = useState({ complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
+  const [consultationSections, setConsultationSections] = useState(() => [
+    { id: 'c-1', service: 'Consultation', complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' }
+  ]);
+  const [sectionDoctorNoteChoices, setSectionDoctorNoteChoices] = useState({});
   const [consultationTemplates, setConsultationTemplates] = useState(() => loadValue(consultationTemplatesKey, []));
   const [consultationTemplateName, setConsultationTemplateName] = useState('');
   const [selectedConsultationTemplate, setSelectedConsultationTemplate] = useState('');
@@ -839,6 +917,9 @@ export function ClientJourneyPage() {
   const [treatmentForm, setTreatmentForm] = useState({ service: 'Consultation', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
   const [dietPlanForm, setDietPlanForm] = useState(() => newDietPlan());
   const [treatmentMedicineRows, setTreatmentMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
+  const [treatmentSections, setTreatmentSections] = useState(() => [
+    { id: 't-1', service: 'Consultation', goal: '', duration: '30 days', status: 'Active', medicines: [{ medicine: '', dose: '', timing: '' }] }
+  ]);
   const [treatmentSaveError, setTreatmentSaveError] = useState('');
   const [medicineCatalogRevision, setMedicineCatalogRevision] = useState(0);
   const [paymentForm, setPaymentForm] = useState({ invoice: '', amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
@@ -1144,20 +1225,31 @@ export function ClientJourneyPage() {
 
     if (id === 'consultation') {
       const data = journey.consultationData;
+      const sections = consultationSectionsFromData(data);
       const parts = [];
-      if (data?.diagnosis) parts.push(`Diagnosis: ${data.diagnosis}`);
-      if (data?.vitals) parts.push(`Vitals: ${data.vitals}`);
-      if (data?.complaint) parts.push(`Complaints: ${data.complaint}`);
+      if (sections.length > 1) {
+        sections.forEach((sec) => {
+          const secParts = [];
+          if (sec.diagnosis) secParts.push(`Diagnosis: ${sec.diagnosis}`);
+          if (sec.complaint) secParts.push(`Complaints: ${sec.complaint}`);
+          parts.push(`[${sec.service || 'Service'}]: ${secParts.join(', ') || 'Recorded'}`);
+        });
+      } else if (data) {
+        if (data.diagnosis) parts.push(`Diagnosis: ${data.diagnosis}`);
+        if (data.vitals) parts.push(`Vitals: ${data.vitals}`);
+        if (data.complaint) parts.push(`Complaints: ${data.complaint}`);
+      }
       const summary = complete && parts.length
         ? parts.join(' · ')
         : (complete ? 'Doctor consultation notes recorded.' : 'Record presenting complaints, vitals, diagnosis & clinical examination.');
+      const tags = complete ? [...new Set(sections.map((s) => s.service).filter(Boolean))] : [];
       return {
         title: 'Doctor Consultation',
         complete,
         status: complete ? 'Completed' : (isCurrent ? 'In Progress' : 'Pending'),
         statusTone: complete ? 'complete' : (isCurrent ? 'current' : 'pending'),
         summary,
-        tags: complete && data ? [data.diagnosis, data.vitals].filter(Boolean) : [],
+        tags,
         buttonText: complete ? 'Edit Consultation' : 'Start Consultation',
         onClick: () => runStage('consultation'),
       };
@@ -1165,20 +1257,29 @@ export function ClientJourneyPage() {
 
     if (id === 'treatment') {
       const data = journey.treatmentData;
-      const medicines = clinicalMedicines(data);
+      const sections = treatmentSectionsFromData(data);
       let summary = 'Prescribe Ayurveda therapies, medications, dosage & duration.';
       if (complete && data) {
-        const parts = [data.service || 'Treatment', data.duration ? `Duration: ${data.duration}` : '', data.goal ? `Goal: ${data.goal}` : ''].filter(Boolean);
-        if (medicines.length) parts.push(`${medicines.length} medicine(s)`);
-        summary = parts.join(' · ');
+        if (sections.length > 1) {
+          summary = sections.map((s) => {
+            const medCount = (s.medicines || []).filter((m) => m.medicine).length;
+            return `${s.service} (${s.duration || '30 days'}${medCount ? `, ${medCount} meds` : ''})`;
+          }).join(' · ');
+        } else {
+          const medicines = clinicalMedicines(data);
+          const parts = [data.service || 'Treatment', data.duration ? `Duration: ${data.duration}` : '', data.goal ? `Goal: ${data.goal}` : ''].filter(Boolean);
+          if (medicines.length) parts.push(`${medicines.length} medicine(s)`);
+          summary = parts.join(' · ');
+        }
       }
+      const tags = complete ? [...new Set(sections.map((s) => s.service).filter(Boolean))] : (data?.service ? [data.service] : []);
       return {
         title: 'Treatment Plan & Medicines',
         complete,
         status: complete ? 'Completed' : (isCurrent ? 'In Progress' : 'Pending'),
         statusTone: complete ? 'complete' : (isCurrent ? 'current' : 'pending'),
         summary,
-        tags: complete && medicines.length ? medicines.map((m) => m.medicine).slice(0, 3) : (data?.service ? [data.service] : []),
+        tags,
         buttonText: complete ? 'Edit Treatment' : 'Add Treatment',
         onClick: () => runStage('treatment'),
       };
@@ -1295,8 +1396,42 @@ export function ClientJourneyPage() {
 
   const openConsultation = () => {
     const savedConsultation = journey.consultationData ?? previousConsultationVisit?.consultationData;
-    setConsultation(savedConsultation ? { investigation: '', doctorNotes: '', ...savedConsultation } : { complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
+    const initialSections = consultationSectionsFromData(savedConsultation);
+    if (!savedConsultation && journey.appointmentData?.type) {
+      initialSections[0].service = journey.appointmentData.type;
+    }
+    setConsultationSections(initialSections);
+    setConsultation(initialSections[0] || { complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
     setConsultationOpen(true);
+  };
+
+  const addConsultationSection = () => {
+    const newIndex = consultationSections.length + 1;
+    const existingServices = consultationSections.map((s) => s.service);
+    const nextService = SERVICE_OPTIONS.find((s) => !existingServices.includes(s)) || 'Consultation';
+    const newSection = {
+      id: `consultation-sec-${Date.now()}-${newIndex}`,
+      service: nextService,
+      complaint: '',
+      diagnosis: '',
+      investigation: '',
+      notes: '',
+      doctorNotes: '',
+      vitals: consultationSections[0]?.vitals || '',
+    };
+    setConsultationSections((prev) => [...prev, newSection]);
+  };
+
+  const updateConsultationSection = (index, field, value) => {
+    setConsultationSections((prev) => prev.map((sec, i) => (i === index ? { ...sec, [field]: value } : sec)));
+    if (index === 0) {
+      setConsultation((prev) => ({ ...prev, [field]: value }));
+    }
+  };
+
+  const removeConsultationSection = (index) => {
+    if (consultationSections.length <= 1) return;
+    setConsultationSections((prev) => prev.filter((_, i) => i !== index));
   };
 
   const openPregnancyHistory = () => {
@@ -1325,48 +1460,107 @@ export function ClientJourneyPage() {
   };
 
   const saveConsultation = () => {
-    if (!consultation.complaint.trim() && !consultation.notes.trim() && !consultation.doctorNotes.trim() && !consultation.diagnosis.trim() && !consultation.investigation.trim()) return;
-    updateJourney({ consultation: true, consultationData: consultation, consultedAt: new Date().toISOString() });
+    const cleanedSections = consultationSections.map((sec) => ({
+      ...sec,
+      service: sec.service || 'Consultation',
+      complaint: sec.complaint?.trim() || '',
+      notes: sec.notes?.trim() || '',
+      vitals: sec.vitals?.trim() || '',
+      diagnosis: sec.diagnosis?.trim() || '',
+      investigation: sec.investigation?.trim() || '',
+      doctorNotes: sec.doctorNotes?.trim() || '',
+    }));
+    const hasAnyContent = cleanedSections.some((sec) => (
+      sec.complaint || sec.notes || sec.doctorNotes || sec.diagnosis || sec.investigation || sec.vitals
+    ));
+    if (!hasAnyContent) return;
+
+    const primary = cleanedSections[0] || {};
+    const consultationData = {
+      ...primary,
+      sections: cleanedSections,
+    };
+    updateJourney({ consultation: true, consultationData, consultedAt: new Date().toISOString() });
     setConsultationOpen(false);
   };
 
-  const addDoctorNote = (selectedNote = doctorNoteChoice) => {
-    const note = String(selectedNote ?? '').trim().replace(/\s+/g, ' ');
+  const addDoctorNoteToSection = (sectionIndex, selectedNote) => {
+    const note = String(selectedNote ?? sectionDoctorNoteChoices[sectionIndex] ?? doctorNoteChoice ?? '').trim().replace(/\s+/g, ' ');
     if (!note) return;
-    const current = String(consultation.doctorNotes ?? '').split('\n').map((item) => item.trim()).filter(Boolean);
+    const targetSection = consultationSections[sectionIndex];
+    if (!targetSection) return;
+    const current = String(targetSection.doctorNotes ?? '').split('\n').map((item) => item.trim()).filter(Boolean);
     if (!current.some((item) => item.toLowerCase() === note.toLowerCase())) current.push(note);
     if (![...NOTE_OPTIONS, ...customDoctorNotes].some((item) => item.toLowerCase() === note.toLowerCase())) {
       setCustomDoctorNotes((items) => [...items, note]);
     }
-    setConsultation((value) => ({ ...value, doctorNotes: current.join('\n') }));
+    updateConsultationSection(sectionIndex, 'doctorNotes', current.join('\n'));
+    setSectionDoctorNoteChoices((prev) => ({ ...prev, [sectionIndex]: '' }));
     setDoctorNoteChoice('');
   };
 
+  const removeDoctorNoteFromSection = (sectionIndex, note) => {
+    const targetSection = consultationSections[sectionIndex];
+    if (!targetSection) return;
+    const updated = String(targetSection.doctorNotes ?? '')
+      .split('\n')
+      .map((item) => item.trim())
+      .filter((item) => item && item !== note)
+      .join('\n');
+    updateConsultationSection(sectionIndex, 'doctorNotes', updated);
+  };
+
+  const addDoctorNote = (selectedNote = doctorNoteChoice) => {
+    addDoctorNoteToSection(0, selectedNote);
+  };
+
   const removeDoctorNote = (note) => {
-    setConsultation((value) => ({
-      ...value,
-      doctorNotes: String(value.doctorNotes ?? '').split('\n').map((item) => item.trim()).filter((item) => item && item !== note).join('\n'),
-    }));
+    removeDoctorNoteFromSection(0, note);
+  };
+
+  const applyConsultationTemplateToSection = (sectionIndex, indexValue) => {
+    if (indexValue === '') return;
+    const template = consultationTemplates[Number(indexValue)];
+    if (!template) return;
+    updateConsultationSection(sectionIndex, 'complaint', template.complaint ?? '');
+    updateConsultationSection(sectionIndex, 'diagnosis', template.diagnosis ?? '');
+    updateConsultationSection(sectionIndex, 'investigation', template.investigation ?? '');
+    updateConsultationSection(sectionIndex, 'notes', template.notes ?? '');
+    updateConsultationSection(sectionIndex, 'doctorNotes', template.doctorNotes ?? '');
+    if (template.vitals) updateConsultationSection(sectionIndex, 'vitals', template.vitals);
   };
 
   const applyConsultationTemplate = (indexValue) => {
     setSelectedConsultationTemplate(indexValue);
-    if (indexValue === '') return;
-    const template = consultationTemplates[Number(indexValue)];
-    if (!template) return;
-    setConsultationTemplateName(template.name ?? '');
-    setConsultation({ complaint: template.complaint ?? '', diagnosis: template.diagnosis ?? '', investigation: template.investigation ?? '', notes: template.notes ?? '', doctorNotes: template.doctorNotes ?? '', vitals: template.vitals ?? '' });
+    applyConsultationTemplateToSection(0, indexValue);
   };
 
   const saveConsultationTemplate = () => {
     const name = consultationTemplateName.trim();
     if (!name) return;
-    const template = { name, ...consultation, updatedAt: new Date().toISOString() };
+    const primary = consultationSections[0] || consultation;
+    const template = { name, ...primary, updatedAt: new Date().toISOString() };
     setConsultationTemplates((current) => {
       const existing = current.findIndex((item) => item.name?.toLowerCase() === name.toLowerCase());
-      return existing === -1 ? [...current, template] : current.map((item, index) => index === existing ? template : item);
+      return existing === -1 ? [...current, template] : current.map((item, index) => (index === existing ? template : item));
     });
     setSelectedConsultationTemplate('');
+  };
+
+  const applyQuickConsultationToSection = (sectionIndex, preset) => {
+    setConsultationSections((prev) => prev.map((sec, i) => (i === sectionIndex ? {
+      ...sec,
+      service: preset.label || sec.service,
+      complaint: preset.complaint,
+      diagnosis: preset.diagnosis,
+      investigation: '',
+      notes: preset.notes,
+      doctorNotes: '',
+      vitals: preset.vitals || sec.vitals,
+    } : sec)));
+    if (sectionIndex === 0) {
+      applyQuickConsultation(preset);
+    }
   };
 
   const applyQuickConsultation = (preset) => {
@@ -1390,8 +1584,87 @@ export function ClientJourneyPage() {
     if (preset === 'month') setAppointmentForm((value) => ({ ...value, date: addDays(30), type: 'Follow-up', status: 'Confirmed' }));
   };
 
+  const addTreatmentSection = () => {
+    const newIndex = treatmentSections.length + 1;
+    const existingServices = treatmentSections.map((s) => s.service);
+    const nextService = SERVICE_OPTIONS.find((s) => !existingServices.includes(s)) || 'Therapy Session';
+    const newSection = {
+      id: `treatment-sec-${Date.now()}-${newIndex}`,
+      service: nextService,
+      goal: '',
+      duration: '30 days',
+      status: 'Active',
+      medicines: [{ medicine: '', dose: '', timing: '' }],
+    };
+    setTreatmentSections((prev) => [...prev, newSection]);
+  };
+
+  const updateTreatmentSectionField = (sectionIndex, field, value) => {
+    setTreatmentSections((prev) => prev.map((sec, i) => (i === sectionIndex ? { ...sec, [field]: value } : sec)));
+    if (sectionIndex === 0) {
+      setTreatmentForm((prev) => ({ ...prev, [field]: value }));
+    }
+  };
+
+  const removeTreatmentSection = (sectionIndex) => {
+    if (treatmentSections.length <= 1) return;
+    setTreatmentSections((prev) => prev.filter((_, i) => i !== sectionIndex));
+  };
+
+  const addSectionMedicineRow = (sectionIndex) => {
+    setTreatmentSections((prev) => prev.map((sec, sIdx) => {
+      if (sIdx !== sectionIndex) return sec;
+      return { ...sec, medicines: [...(sec.medicines || []), { medicine: '', dose: '', timing: '' }] };
+    }));
+  };
+
+  const updateSectionMedicine = (sectionIndex, medicineIndex, field, value) => {
+    setTreatmentSections((prev) => prev.map((sec, sIdx) => {
+      if (sIdx !== sectionIndex) return sec;
+      const nextMedicines = (sec.medicines || []).map((row, rIdx) => (rIdx === medicineIndex ? { ...row, [field]: value } : row));
+      return { ...sec, medicines: nextMedicines };
+    }));
+  };
+
+  const selectSectionMedicine = (sectionIndex, medicineIndex, medicineName) => {
+    const entry = typeof medicineName === 'object' ? medicineName : medicineCatalog.find((item) => item.Medicine.toLowerCase() === medicineName.toLowerCase());
+    setTreatmentSections((prev) => prev.map((sec, sIdx) => {
+      if (sIdx !== sectionIndex) return sec;
+      const nextMedicines = (sec.medicines || []).map((row, rIdx) => (rIdx === medicineIndex ? {
+        medicine: entry?.Medicine ?? medicineName,
+        dose: entry?.['Default Dose'] ?? row.dose,
+        timing: entry?.Timing ?? row.timing,
+      } : row));
+      return { ...sec, medicines: nextMedicines };
+    }));
+  };
+
+  const addSectionMedicineToCatalog = (sectionIndex, medicineIndex) => {
+    const row = treatmentSections[sectionIndex]?.medicines?.[medicineIndex];
+    const name = row?.medicine?.trim();
+    if (!name || medicineCatalog.some((item) => item.Medicine.toLowerCase() === name.toLowerCase())) return;
+    const operations = loadValue(operationsKey, {});
+    const medicines = Array.isArray(operations.medicines) ? operations.medicines : [];
+    window.localStorage.setItem(operationsKey, JSON.stringify({
+      ...operations,
+      medicines: [[name, 'General', row.dose || '', row.timing || ''], ...medicines],
+    }));
+    setMedicineCatalogRevision((current) => current + 1);
+  };
+
+  const removeSectionMedicineRow = (sectionIndex, medicineIndex) => {
+    setTreatmentSections((prev) => prev.map((sec, sIdx) => {
+      if (sIdx !== sectionIndex) return sec;
+      const next = (sec.medicines || []).filter((_, rIdx) => rIdx !== medicineIndex);
+      return { ...sec, medicines: next.length ? next : [{ medicine: '', dose: '', timing: '' }] };
+    }));
+  };
+
   const applyQuickTreatment = (preset) => {
     setTreatmentForm((value) => ({ ...value, ...preset }));
+    updateTreatmentSectionField(0, 'service', preset.service || treatmentForm.service);
+    updateTreatmentSectionField(0, 'goal', preset.goal || treatmentForm.goal);
+    updateTreatmentSectionField(0, 'duration', preset.duration || treatmentForm.duration);
   };
 
   const treatmentRowsFromData = (data) => {
@@ -1405,18 +1678,18 @@ export function ClientJourneyPage() {
 
   const applyTreatmentData = (data) => {
     if (!data) return;
-    setTreatmentForm((value) => ({
-      ...value,
-      service: data.service ?? value.service,
-      goal: data.goal ?? value.goal,
-      duration: data.duration ?? value.duration,
-      medicine: data.medicine ?? value.medicine,
-      dose: data.dose ?? value.dose,
-      timing: data.timing ?? value.timing,
-      status: data.status ?? value.status,
-    }));
-    const medicines = treatmentRowsFromData(data);
-    setTreatmentMedicineRows(medicines.length ? medicines : [{ medicine: '', dose: '', timing: '' }]);
+    const sections = treatmentSectionsFromData(data);
+    setTreatmentSections(sections);
+    setTreatmentForm(sections[0] || {
+      service: data.service ?? 'Consultation',
+      goal: data.goal ?? '',
+      duration: data.duration ?? '30 days',
+      medicine: data.medicine ?? '',
+      dose: data.dose ?? '',
+      timing: data.timing ?? '',
+      status: data.status ?? 'Active',
+    });
+    setTreatmentMedicineRows(sections[0]?.medicines || [{ medicine: '', dose: '', timing: '' }]);
   };
 
   const applyPreviousTreatment = () => {
@@ -1440,12 +1713,13 @@ export function ClientJourneyPage() {
   const saveTreatmentTemplate = () => {
     const name = treatmentTemplateName.trim();
     if (!name) return;
-    const medicines = treatmentMedicineRows.filter((row) => row.medicine.trim());
+    const primary = treatmentSections[0] || {};
+    const medicines = (primary.medicines || []).filter((row) => row.medicine.trim());
     const template = {
       name,
-      service: treatmentForm.service,
-      goal: treatmentForm.goal,
-      duration: treatmentForm.duration,
+      service: primary.service || treatmentForm.service,
+      goal: primary.goal || treatmentForm.goal,
+      duration: primary.duration || treatmentForm.duration,
       medicine: medicines.map((row) => row.medicine).join(', '),
       dose: medicines.map((row) => row.dose).join(', '),
       timing: medicines.map((row) => row.timing).join(', '),
@@ -1473,6 +1747,7 @@ export function ClientJourneyPage() {
   const syncTreatmentMedicineRows = (rows) => {
     const nextRows = rows.length ? rows : [{ medicine: '', dose: '', timing: '' }];
     setTreatmentMedicineRows(nextRows);
+    setTreatmentSections((prev) => prev.map((sec, i) => (i === 0 ? { ...sec, medicines: nextRows } : sec)));
     setTreatmentForm((value) => ({
       ...value,
       medicine: nextRows.map((row) => row.medicine).filter(Boolean).join(', '),
@@ -1482,33 +1757,19 @@ export function ClientJourneyPage() {
   };
 
   const selectTreatmentMedicine = (index, medicineName) => {
-    const entry = typeof medicineName === 'object' ? medicineName : medicineCatalog.find((item) => item.Medicine.toLowerCase() === medicineName.toLowerCase());
-    syncTreatmentMedicineRows(treatmentMedicineRows.map((row, rowIndex) => rowIndex === index ? {
-      medicine: entry?.Medicine ?? medicineName,
-      dose: entry?.['Default Dose'] ?? row.dose,
-      timing: entry?.Timing ?? row.timing,
-    } : row));
+    selectSectionMedicine(0, index, medicineName);
   };
 
   const addTreatmentMedicineToCatalog = (index) => {
-    const row = treatmentMedicineRows[index];
-    const name = row?.medicine?.trim();
-    if (!name || medicineCatalog.some((item) => item.Medicine.toLowerCase() === name.toLowerCase())) return;
-    const operations = loadValue(operationsKey, {});
-    const medicines = Array.isArray(operations.medicines) ? operations.medicines : [];
-    window.localStorage.setItem(operationsKey, JSON.stringify({
-      ...operations,
-      medicines: [[name, 'General', row.dose || '', row.timing || ''], ...medicines],
-    }));
-    setMedicineCatalogRevision((current) => current + 1);
+    addSectionMedicineToCatalog(0, index);
   };
 
   const updateTreatmentMedicine = (index, field, value) => {
-    syncTreatmentMedicineRows(treatmentMedicineRows.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
+    updateSectionMedicine(0, index, field, value);
   };
 
   const removeTreatmentMedicine = (index) => {
-    syncTreatmentMedicineRows(treatmentMedicineRows.filter((_, rowIndex) => rowIndex !== index));
+    removeSectionMedicineRow(0, index);
   };
 
   const nextAction = () => STAGES.find(([id]) => id !== 'diet' && !stageDone(id))?.[0] ?? 'completed';
@@ -1522,10 +1783,39 @@ export function ClientJourneyPage() {
     }
     if (stage === 'treatment') {
       const savedTreatment = journey.treatmentData;
-      const nextForm = savedTreatment ?? { service: 'Consultation', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' };
-      setTreatmentForm(nextForm);
-      const medicines = treatmentRowsFromData(savedTreatment);
-      setTreatmentMedicineRows(medicines.length ? medicines : [{ medicine: '', dose: '', timing: '' }]);
+      if (savedTreatment) {
+        const sections = treatmentSectionsFromData(savedTreatment);
+        setTreatmentSections(sections);
+        setTreatmentForm(sections[0] || { service: 'Consultation', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
+        setTreatmentMedicineRows(sections[0]?.medicines || [{ medicine: '', dose: '', timing: '' }]);
+      } else {
+        const cSections = consultationSectionsFromData(journey.consultationData);
+        if (cSections.length > 0 && (cSections.length > 1 || cSections[0]?.service !== 'Consultation' || cSections[0]?.complaint || cSections[0]?.diagnosis)) {
+          const generatedSections = cSections.map((cSec, idx) => ({
+            id: `treatment-sec-${Date.now()}-${idx + 1}`,
+            service: cSec.service || 'Consultation',
+            goal: cSec.diagnosis ? `Manage ${cSec.diagnosis}` : '',
+            duration: '30 days',
+            status: 'Active',
+            medicines: [{ medicine: '', dose: '', timing: '' }],
+          }));
+          setTreatmentSections(generatedSections);
+          setTreatmentForm(generatedSections[0]);
+          setTreatmentMedicineRows(generatedSections[0].medicines);
+        } else {
+          const defaultSections = [{
+            id: 'treatment-sec-1',
+            service: journey.appointmentData?.type || 'Consultation',
+            goal: '',
+            duration: '30 days',
+            status: 'Active',
+            medicines: [{ medicine: '', dose: '', timing: '' }],
+          }];
+          setTreatmentSections(defaultSections);
+          setTreatmentForm(defaultSections[0]);
+          setTreatmentMedicineRows(defaultSections[0].medicines);
+        }
+      }
       setTreatmentSaveError('');
       setSelectedPastTreatmentService(pastTreatmentOptions[0]?.service ?? '');
       setPastTreatmentApplied(false);
@@ -1645,22 +1935,46 @@ export function ClientJourneyPage() {
     ].filter(Boolean).join('');
     const visitSections = selectedVisits.map((visit) => {
       const consultationData = visit.consultationData ?? {};
+      const cSections = consultationSectionsFromData(consultationData);
       const treatmentData = visit.treatmentData ?? {};
+      const tSections = treatmentSectionsFromData(treatmentData);
       const followupData = visit.followupData ?? {};
       const paymentData = visit.paymentData ?? {};
       const pregnancyHistory = Array.isArray(visit.pregnancyHistory) ? visit.pregnancyHistory : [];
-      const selectedMedicines = clinicalMedicines(treatmentData);
       const visitTitle = `${formatResponseDate(visit.visitDate) || 'Undated visit'} · ${visit.appointmentData?.time || 'Time not recorded'} · ${visit.appointmentData?.type || 'Patient visit'}`;
+
+      const symptomsHtml = cSections.map((s) => `<p>${cSections.length > 1 ? `<b>[${escapePrintHtml(s.service || 'Consultation')}]:</b> ` : ''}${escapePrintHtml(s.complaint || 'Not recorded')}</p>`).join('');
+      const vitalsHtml = `<p>${escapePrintHtml(consultationData.vitals || cSections[0]?.vitals || 'Not recorded')}</p>`;
+      const diagnosisHtml = cSections.map((s) => `<p>${cSections.length > 1 ? `<b>[${escapePrintHtml(s.service || 'Consultation')}]:</b> ` : ''}${escapePrintHtml(s.diagnosis || 'Not recorded')}</p>`).join('');
+      const investigationHtml = cSections.map((s) => s.investigation ? `<p>${cSections.length > 1 ? `<b>[${escapePrintHtml(s.service)}]:</b> ` : ''}${listSection(s.investigation)}</p>` : '').filter(Boolean).join('') || '<p>Not recorded</p>';
+      const historyHtml = cSections.map((s) => `<p>${cSections.length > 1 ? `<b>[${escapePrintHtml(s.service || 'Consultation')}]:</b> ` : ''}${escapePrintHtml(s.notes || 'Not recorded')}</p>`).join('');
+      const doctorNotesHtml = cSections.map((s) => `<p>${cSections.length > 1 ? `<b>[${escapePrintHtml(s.service || 'Consultation')}]:</b> ` : ''}${escapePrintHtml(s.doctorNotes || 'Not recorded')}</p>`).join('');
+
+      const treatmentHtml = tSections.map((s) => (
+        `<div class="details" style="margin-bottom:8px">` +
+        detail('Service', s.service) +
+        detail('Goal', s.goal) +
+        detail('Duration', s.duration) +
+        detail('Status', s.status) +
+        `</div>`
+      )).join('');
+
+      const medicinesHtml = tSections.map((s) => {
+        const meds = clinicalMedicines(s);
+        if (!meds.length) return '';
+        return `<div style="margin-bottom:10px"><strong>${escapePrintHtml(s.service)} Medicines:</strong><table><thead><tr><th style="width:36px">No.</th><th>Medicine / Product</th><th>Dose</th><th>Timing</th></tr></thead><tbody>${meds.map((item, index) => `<tr><td>${index + 1}</td><td>${escapePrintHtml(item.medicine)}</td><td>${escapePrintHtml(item.dose || '—')}</td><td>${escapePrintHtml(item.timing || '—')}</td></tr>`).join('')}</tbody></table></div>`;
+      }).join('') || '<p>No medicines recorded.</p>';
+
       return `<div class="visit-summary"><h1>${escapePrintHtml(visitTitle)}</h1>${[
-        clinicalPrintSections.symptoms && section('Presenting Complaints', `<p>${escapePrintHtml(consultationData.complaint || 'Not recorded')}</p>`),
-        clinicalPrintSections.vitals && section('Vitals', `<p>${escapePrintHtml(consultationData.vitals || 'Not recorded')}</p>`),
-        clinicalPrintSections.diagnosis && section('Diagnosis', `<p>${escapePrintHtml(consultationData.diagnosis || 'Not recorded')}</p>`),
-        clinicalPrintSections.investigation && section('Investigation', listSection(consultationData.investigation)),
-        clinicalPrintSections.history && section('History & Examination', `<p>${escapePrintHtml(consultationData.notes || 'Not recorded')}</p>`),
-        clinicalPrintSections.doctorNotes && section('Doctor Notes', `<p>${escapePrintHtml(consultationData.doctorNotes || 'Not recorded')}</p>`),
+        clinicalPrintSections.symptoms && section('Presenting Complaints', symptomsHtml),
+        clinicalPrintSections.vitals && section('Vitals', vitalsHtml),
+        clinicalPrintSections.diagnosis && section('Diagnosis', diagnosisHtml),
+        clinicalPrintSections.investigation && section('Investigation', investigationHtml),
+        clinicalPrintSections.history && section('History & Examination', historyHtml),
+        clinicalPrintSections.doctorNotes && section('Doctor Notes', doctorNotesHtml),
         clinicalPrintSections.pregnancyHistory && section('Pregnancy / Garbhsanskar History', pregnancyHistory.length ? pregnancyHistory.map((entry) => `<div class="detail"><span>${escapePrintHtml(formatResponseDate(entry.date) || 'Undated')} · ${escapePrintHtml(entry.pregnancyStage || 'Stage not recorded')}</span><strong>${escapePrintHtml(entry.gynecName ? `Gynec: ${entry.gynecName}` : 'Gynec not recorded')}</strong><p>${escapePrintHtml(entry.gynecAdvice || 'No gynec advice recorded')}</p>${entry.tests ? `<p><b>Reports / Tests:</b> ${escapePrintHtml(entry.tests)}</p>` : ''}${entry.medicines ? `<p><b>Medicines / Supplements:</b> ${escapePrintHtml(entry.medicines)}</p>` : ''}${entry.garbhsanskarAdvice ? `<p><b>Garbhsanskar Plan:</b> ${escapePrintHtml(entry.garbhsanskarAdvice)}</p>` : ''}${entry.nextFollowup ? `<p><b>Next Follow-up:</b> ${escapePrintHtml(formatResponseDate(entry.nextFollowup))}</p>` : ''}</div>`).join('') : '<p>No pregnancy history recorded.</p>'),
-        clinicalPrintSections.treatment && section('Treatment Plan', `<div class="details">${detail('Service', treatmentData.service)}${detail('Goal', treatmentData.goal)}${detail('Duration', treatmentData.duration)}${detail('Status', treatmentData.status)}</div>`),
-        clinicalPrintSections.medicines && section('Medicines / Products', selectedMedicines.length ? `<table><thead><tr><th style="width:36px">No.</th><th>Medicine / Product</th><th>Dose</th><th>Timing</th></tr></thead><tbody>${selectedMedicines.map((item, index) => `<tr><td>${index + 1}</td><td>${escapePrintHtml(item.medicine)}</td><td>${escapePrintHtml(item.dose || '—')}</td><td>${escapePrintHtml(item.timing || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>No medicines recorded.</p>'),
+        clinicalPrintSections.treatment && section('Treatment Plan', treatmentHtml),
+        clinicalPrintSections.medicines && section('Medicines / Products', medicinesHtml),
         clinicalPrintSections.followup && section('Next Follow-up', `<div class="details">${detail('Date', followupData.date)}${detail('Time', followupData.time)}${detail('Notes', followupData.notes)}${detail('Status', followupData.status)}</div>`),
         clinicalPrintSections.payment && section('Payment Details', `<div class="details">${detail('Invoice', paymentData.invoice)}${detail('Amount', paymentData.amount ? `₹ ${paymentData.amount}` : '')}${detail('Paid', paymentData.paidAmount ? `₹ ${paymentData.paidAmount}` : '')}${detail('Pending', paymentData.pendingAmount ? `₹ ${paymentData.pendingAmount}` : '')}${detail('Status', paymentData.status)}</div>`),
       ].filter(Boolean).join('')}</div>`;
@@ -1727,39 +2041,61 @@ export function ClientJourneyPage() {
 
   const saveTreatment = () => {
     const current = loadValue(operationsKey, {});
-    const medicines = treatmentMedicineRows
-      .map((row) => ({
-        medicine: String(row.medicine ?? '').trim(),
-        dose: String(row.dose ?? '').trim(),
-        timing: String(row.timing ?? '').trim(),
-      }))
-      .filter((row) => row.medicine);
-    if (!treatmentForm.goal.trim() && !medicines.length) {
+    const cleanedSections = treatmentSections.map((sec) => {
+      const validMedicines = (sec.medicines || [])
+        .map((row) => ({
+          medicine: String(row.medicine ?? '').trim(),
+          dose: String(row.dose ?? '').trim(),
+          timing: String(row.timing ?? '').trim(),
+        }))
+        .filter((row) => row.medicine);
+      return {
+        ...sec,
+        service: sec.service || 'Consultation',
+        goal: sec.goal?.trim() || '',
+        duration: sec.duration || '30 days',
+        status: sec.status || 'Active',
+        medicines: validMedicines,
+        medicine: validMedicines.map((m) => m.medicine).join(', '),
+        dose: validMedicines.map((m) => m.dose).join(', '),
+        timing: validMedicines.map((m) => m.timing).join(', '),
+      };
+    });
+
+    const hasAnyContent = cleanedSections.some((s) => s.goal.trim() || s.medicines.length);
+    if (!hasAnyContent) {
       setTreatmentSaveError('Add a treatment goal or at least one medicine before saving.');
       return;
     }
     setTreatmentSaveError('');
-    const previousTreatmentData = journey.treatmentData;
+
+    const primarySection = cleanedSections[0] || {};
+    const allMedicines = cleanedSections.flatMap((s) => s.medicines);
     const treatmentData = {
-      ...treatmentForm,
-      medicines,
-      medicine: medicines.map((row) => row.medicine).join(', '),
-      dose: medicines.map((row) => row.dose).join(', '),
-      timing: medicines.map((row) => row.timing).join(', '),
+      ...primarySection,
+      sections: cleanedSections,
+      medicines: allMedicines,
+      medicine: allMedicines.map((m) => m.medicine).join(', '),
+      dose: allMedicines.map((m) => m.dose).join(', '),
+      timing: allMedicines.map((m) => m.timing).join(', '),
     };
-    const row = [selectedClient, treatmentForm.service, treatmentData.medicine, treatmentData.dose, treatmentData.timing, treatmentForm.goal, treatmentForm.duration, treatmentForm.status];
-    const sameSavedTreatmentRow = (savedRow) => Array.isArray(savedRow)
-      && savedRow[0] === selectedClient
-      && savedRow[1] === previousTreatmentData?.service
-      && savedRow[2] === previousTreatmentData?.medicine
-      && savedRow[3] === previousTreatmentData?.dose
-      && savedRow[4] === previousTreatmentData?.timing
-      && savedRow[5] === previousTreatmentData?.goal
-      && savedRow[6] === previousTreatmentData?.duration
-      && savedRow[7] === previousTreatmentData?.status;
+
     const existingRows = Array.isArray(current.treatments) ? current.treatments : [];
-    const nextRows = previousTreatmentData ? existingRows.filter((savedRow) => !sameSavedTreatmentRow(savedRow)) : existingRows;
-    window.localStorage.setItem(operationsKey, JSON.stringify({ ...current, treatments: [row, ...nextRows] }));
+    const nextRows = existingRows.filter((savedRow) => !(
+      Array.isArray(savedRow) && savedRow[0] === selectedClient
+    ));
+    const newClientRows = cleanedSections.map((sec) => [
+      selectedClient,
+      sec.service,
+      sec.medicine,
+      sec.dose,
+      sec.timing,
+      sec.goal,
+      sec.duration,
+      sec.status,
+    ]);
+
+    window.localStorage.setItem(operationsKey, JSON.stringify({ ...current, treatments: [...newClientRows, ...nextRows] }));
     updateJourney({ treatment: true, treatmentData, treatmentAt: new Date().toISOString() });
     setStageModal('');
   };
@@ -2352,8 +2688,13 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                   <div className="journey-handout-grid">
                     <div className="journey-handout-item">
                       <strong>Diagnosis & Complaints</strong>
-                      <p>{journey.consultationData?.diagnosis || 'No diagnosis recorded'}</p>
-                      {journey.consultationData?.complaint && <small style={{ color: 'var(--muted)', display: 'block', marginTop: '4px' }}>Complaints: {journey.consultationData.complaint}</small>}
+                      {consultationSectionsFromData(journey.consultationData).map((sec, idx) => (
+                        <div key={sec.id || idx} style={{ marginTop: idx > 0 ? '6px' : '0' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--green)' }}>[{sec.service || 'Consultation'}]: </span>
+                          <span>{sec.diagnosis || 'No diagnosis'}</span>
+                          {sec.complaint && <small style={{ color: 'var(--muted)', display: 'block', marginTop: '2px' }}>Complaints: {sec.complaint}</small>}
+                        </div>
+                      ))}
                     </div>
                     <div className="journey-handout-item">
                       <strong>Vitals & Examination</strong>
@@ -2361,11 +2702,24 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                     </div>
                     <div className="journey-handout-item">
                       <strong>Treatment Plan</strong>
-                      <p>{[journey.treatmentData?.service, journey.treatmentData?.duration, journey.treatmentData?.goal].filter(Boolean).join(' · ') || 'No treatment plan saved'}</p>
+                      {treatmentSectionsFromData(journey.treatmentData).map((sec, idx) => (
+                        <div key={sec.id || idx} style={{ marginTop: idx > 0 ? '4px' : '0' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--green)' }}>[{sec.service}]: </span>
+                          <span>{[sec.duration, sec.goal].filter(Boolean).join(' · ') || 'Active'}</span>
+                        </div>
+                      ))}
                     </div>
                     <div className="journey-handout-item">
                       <strong>Prescribed Medicines</strong>
-                      <p>{clinicalMedicines(journey.treatmentData).length ? clinicalMedicines(journey.treatmentData).map((m) => `${m.medicine} (${m.dose || ''} ${m.timing || ''})`).join(', ') : 'No medicines prescribed'}</p>
+                      {treatmentSectionsFromData(journey.treatmentData).map((sec, idx) => {
+                        const meds = clinicalMedicines(sec);
+                        return (
+                          <div key={sec.id || idx} style={{ marginTop: idx > 0 ? '6px' : '0' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--green)' }}>[{sec.service}]: </span>
+                            <span>{meds.length ? meds.map((m) => `${m.medicine} (${m.dose || ''} ${m.timing || ''})`).join(', ') : 'No medicines prescribed'}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                     <div className="journey-handout-item">
                       <strong>Next Review Date</strong>
@@ -2448,19 +2802,74 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                   const followupData = visit.followupData ?? {};
                   const paymentData = visit.paymentData ?? {};
                   const pregnancyHistory = Array.isArray(visit.pregnancyHistory) ? visit.pregnancyHistory : [];
-                  const medicines = clinicalMedicines(treatmentData);
                   const visitTitle = `${formatResponseDate(visit.visitDate)} · ${visit.appointmentData?.time || 'Time not recorded'} · ${visit.appointmentData?.type || 'Patient visit'}`;
                   return <div className="clinical-preview-visit" key={visit.id}>
                     <h3>{visitTitle}</h3>
-                    {clinicalPrintSections.symptoms && <div className="clinical-preview-section"><strong>Presenting Complaints</strong><p>{consultationData.complaint || 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.symptoms && (
+                      <div className="clinical-preview-section">
+                        <strong>Presenting Complaints</strong>
+                        {consultationSectionsFromData(consultationData).map((s) => (
+                          <p key={s.id}><b>[{s.service || 'Consultation'}]:</b> {s.complaint || 'Not recorded'}</p>
+                        ))}
+                      </div>
+                    )}
                     {clinicalPrintSections.vitals && <div className="clinical-preview-section"><strong>Vitals</strong><p>{consultationData.vitals || 'Not recorded'}</p></div>}
-                    {clinicalPrintSections.diagnosis && <div className="clinical-preview-section"><strong>Diagnosis</strong><p>{consultationData.diagnosis || 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.diagnosis && (
+                      <div className="clinical-preview-section">
+                        <strong>Diagnosis</strong>
+                        {consultationSectionsFromData(consultationData).map((s) => (
+                          <p key={s.id}><b>[{s.service || 'Consultation'}]:</b> {s.diagnosis || 'Not recorded'}</p>
+                        ))}
+                      </div>
+                    )}
                     {clinicalPrintSections.investigation && <div className="clinical-preview-section"><strong>Investigation</strong>{clinicalListItems(consultationData.investigation).length ? <ul className="clinical-preview-list">{clinicalListItems(consultationData.investigation).map((item, index) => <li key={`${visit.id}-investigation-${index}`}>{item}</li>)}</ul> : <p>Not recorded</p>}</div>}
-                    {clinicalPrintSections.history && <div className="clinical-preview-section"><strong>History &amp; Examination</strong><p>{consultationData.notes || 'Not recorded'}</p></div>}
-                    {clinicalPrintSections.doctorNotes && <div className="clinical-preview-section"><strong>Doctor Notes</strong><p>{consultationData.doctorNotes || 'Not recorded'}</p></div>}
+                    {clinicalPrintSections.history && (
+                      <div className="clinical-preview-section">
+                        <strong>History &amp; Examination</strong>
+                        {consultationSectionsFromData(consultationData).map((s) => (
+                          <p key={s.id}><b>[{s.service || 'Consultation'}]:</b> {s.notes || 'Not recorded'}</p>
+                        ))}
+                      </div>
+                    )}
+                    {clinicalPrintSections.doctorNotes && (
+                      <div className="clinical-preview-section">
+                        <strong>Doctor Notes</strong>
+                        {consultationSectionsFromData(consultationData).map((s) => (
+                          <p key={s.id}><b>[{s.service || 'Consultation'}]:</b> {s.doctorNotes || 'Not recorded'}</p>
+                        ))}
+                      </div>
+                    )}
                     {clinicalPrintSections.pregnancyHistory && <div className="clinical-preview-section"><strong>Pregnancy / Garbhsanskar History</strong><p>{pregnancyHistory.length ? pregnancyHistory.map((entry) => `${formatResponseDate(entry.date)} · ${entry.pregnancyStage || 'Stage not recorded'}\n${entry.gynecAdvice || entry.garbhsanskarAdvice || 'No advice recorded'}`).join('\n\n') : 'Not recorded'}</p></div>}
-                    {clinicalPrintSections.treatment && <div className="clinical-preview-section"><strong>Treatment Plan</strong><p>{[treatmentData.service, treatmentData.goal, treatmentData.duration, treatmentData.status].filter(Boolean).join(' · ') || 'Not recorded'}</p></div>}
-                    {clinicalPrintSections.medicines && <div className="clinical-preview-section"><strong>Medicines, Dose &amp; Timing</strong>{medicines.length ? <div className="clinical-preview-medicine-list" role="table" aria-label={`Medicines for ${visitTitle}`}>{medicines.map((item, index) => <div className="clinical-preview-medicine-row" role="row" key={`${visit.id}-${item.medicine}-${index}`}><b aria-label={`Medicine ${index + 1}`}>{index + 1}</b><span role="cell"><strong>{item.medicine}</strong><small>{item.dose || 'Dose not recorded'} · {item.timing || 'Timing not recorded'}</small></span></div>)}</div> : <p>No medicines recorded</p>}</div>}
+                    {clinicalPrintSections.treatment && (
+                      <div className="clinical-preview-section">
+                        <strong>Treatment Plan</strong>
+                        {treatmentSectionsFromData(treatmentData).map((s) => (
+                          <p key={s.id}><b>[{s.service}]:</b> {[s.goal, s.duration, s.status].filter(Boolean).join(' · ') || 'Not recorded'}</p>
+                        ))}
+                      </div>
+                    )}
+                    {clinicalPrintSections.medicines && (
+                      <div className="clinical-preview-section">
+                        <strong>Medicines, Dose &amp; Timing</strong>
+                        {treatmentSectionsFromData(treatmentData).map((s) => {
+                          const meds = clinicalMedicines(s);
+                          if (!meds.length) return null;
+                          return (
+                            <div key={s.id} style={{ marginBottom: '8px' }}>
+                              <small style={{ fontWeight: 700, color: 'var(--green)' }}>{s.service} Prescriptions:</small>
+                              <div className="clinical-preview-medicine-list" role="table" aria-label={`Medicines for ${s.service}`}>
+                                {meds.map((item, index) => (
+                                  <div className="clinical-preview-medicine-row" role="row" key={`${visit.id}-${s.id}-${item.medicine}-${index}`}>
+                                    <b aria-label={`Medicine ${index + 1}`}>{index + 1}</b>
+                                    <span role="cell"><strong>{item.medicine}</strong><small>{item.dose || 'Dose not recorded'} · {item.timing || 'Timing not recorded'}</small></span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     {clinicalPrintSections.followup && <div className="clinical-preview-section"><strong>Next Follow-up</strong><p>{followupData.date ? `${followupData.date} · ${followupData.time || 'Time pending'}${followupData.notes ? ` · ${followupData.notes}` : ''}` : 'Not scheduled'}</p></div>}
                     {clinicalPrintSections.payment && <div className="clinical-preview-section"><strong>Payment Details</strong><p>{paymentData.amount ? `₹ ${paymentData.amount} · ${paymentData.status || 'Status not recorded'}` : 'Not recorded'}</p></div>}
                   </div>;
@@ -2484,7 +2893,14 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
       {stageModal === 'forms' && <JourneyModal title="Required Form" client={selectedClient} onClose={() => setStageModal('')} onSave={saveRequiredForm} saveLabel={matchedFormResponses.length ? 'Mark Form Received' : 'Waiting for Submission'} saveDisabled={!matchedFormResponses.length}><label className="field-block"><span>Form</span><select className="lead-input" value={requiredForm} onChange={(event) => setRequiredForm(event.target.value)}>{formOptions.length ? formOptions.map((form) => <option key={form.id || form.slug || formTitle(form)} value={formTitle(form)}>{formTitle(form)}</option>) : <option value="">No forms created yet</option>}</select></label><div className="action-note"><strong>{matchedFormResponses.length ? `${matchedFormResponses.length} response(s) found` : 'Submission not found'}</strong>{matchedFormResponses.length ? ' Mobile number matched with submitted form responses below.' : ' Ask the patient to submit any created form using the same mobile number saved in the patient profile.'}</div><div className="matched-response-list full-field">{matchedFormResponses.length ? matchedFormResponses.map(({ response, form }) => <div className="matched-response-card" key={response.id}><div><strong>{response.formTitle || formTitle(form) || 'Submitted Form'}</strong><span>{formatResponseDate(response.submittedAt)}</span></div>{responsePreview(response, form).map(([label, value]) => <p key={`${response.id}-${label}`}><b>{label}:</b> {value}</p>)}</div>) : <div className="empty-state compact-empty"><strong>No matched response yet.</strong><p>Patient mobile: {selectedClientPhone || 'not saved'}</p></div>}</div></JourneyModal>}
 
       {stageModal === 'treatment' && (
-        <JourneyModal title={journey.treatment ? 'Edit Treatment Plan' : 'Add Treatment Plan'} client={selectedClient} onClose={() => setStageModal('')} onSave={saveTreatment} saveLabel={journey.treatment ? 'Update Treatment' : 'Save Treatment'}>
+        <JourneyModal
+          title={journey.treatment ? 'Edit Treatment Plan' : 'Add Treatment Plan'}
+          client={selectedClient}
+          onClose={() => setStageModal('')}
+          onSave={saveTreatment}
+          saveLabel={journey.treatment ? 'Update Treatment' : 'Save Treatment'}
+          shellClassName="treatment-modal"
+        >
           <div className="treatment-template-tools">
             <label className="field-block">
               <span>Use Template</span>
@@ -2514,10 +2930,120 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
           </div>
           {pastTreatmentApplied && <div className="action-note full-field"><strong>Past treatment loaded.</strong> Review the copied plan and medicines, then save this treatment.</div>}
           {treatmentSaveError && <div className="action-note danger-note full-field" role="alert"><strong>Treatment not saved.</strong> {treatmentSaveError}</div>}
-          <label className="field-block"><span>Service</span><input className="lead-input" list="treatment-service-options" value={treatmentForm.service} onChange={(event) => setTreatmentForm((value) => ({ ...value, service: event.target.value }))} placeholder="Select or type a service" autoComplete="off" /><datalist id="treatment-service-options">{[...new Set([...SERVICE_OPTIONS, ...pastTreatmentOptions.map((option) => option.service)].filter(Boolean))].map((option) => <option key={option} value={option} />)}</datalist></label>
-          <label className="field-block"><span>Goal (optional when medicines are added)</span><input className="lead-input" list="goal-presets" value={treatmentForm.goal} onChange={(event) => { setTreatmentForm((value) => ({ ...value, goal: event.target.value })); setTreatmentSaveError(''); }} placeholder="Treatment goal" /><datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist></label>
-          <label className="field-block"><span>Duration</span><select className="lead-input" value={treatmentForm.duration} onChange={(event) => setTreatmentForm((value) => ({ ...value, duration: event.target.value }))}>{[...new Set([...DURATION_OPTIONS, treatmentForm.duration].filter(Boolean))].map((option) => <option key={option}>{option}</option>)}</select></label>
-          <div className="treatment-medicine-builder"><div className="medicine-builder-head"><div><strong>Medicines / Products</strong><span>Search the medicine master or add a missing medicine without leaving this treatment.</span></div><button className="pill" type="button" onClick={() => syncTreatmentMedicineRows([...treatmentMedicineRows, { medicine: '', dose: '', timing: '' }])}>+ Add Medicine</button></div>{treatmentMedicineRows.map((row, index) => <div className="treatment-medicine-row" key={index}><MedicineSearchInput index={index} value={row.medicine} catalog={medicineCatalog} onChange={(value) => updateTreatmentMedicine(index, 'medicine', value)} onSelect={(medicine) => selectTreatmentMedicine(index, medicine)} onAdd={() => addTreatmentMedicineToCatalog(index)} /><label className="field-block"><span>Dose</span><input className="lead-input" value={row.dose} onChange={(event) => updateTreatmentMedicine(index, 'dose', event.target.value)} placeholder="Dose" /></label><label className="field-block"><span>Timing</span><input className="lead-input" value={row.timing} onChange={(event) => updateTreatmentMedicine(index, 'timing', event.target.value)} placeholder="After meals" /></label><button className="icon-btn" type="button" onClick={() => removeTreatmentMedicine(index)} aria-label={`Remove medicine ${index + 1}`}>x</button></div>)}</div>
+
+          <div className="section-adder-row full-field">
+            <button className="add-section-btn" type="button" onClick={addTreatmentSection}>
+              + Add Service Section
+            </button>
+          </div>
+
+          {treatmentSections.map((sec, secIndex) => (
+            <div className="service-section-box full-field" key={sec.id || secIndex}>
+              <div className="service-section-header">
+                <div className="service-section-title-group">
+                  <span className="service-badge">Section #{secIndex + 1}</span>
+                  <label className="service-input-label">
+                    <span>Service:</span>
+                    <input
+                      className="lead-input service-name-input"
+                      list="treatment-service-options"
+                      value={sec.service}
+                      onChange={(e) => updateTreatmentSectionField(secIndex, 'service', e.target.value)}
+                      placeholder="Select or type service..."
+                      autoComplete="off"
+                    />
+                  </label>
+                </div>
+                {treatmentSections.length > 1 && (
+                  <button
+                    className="danger-subtle-btn"
+                    type="button"
+                    onClick={() => removeTreatmentSection(secIndex)}
+                    title="Remove this section"
+                  >
+                    ✕ Remove Section
+                  </button>
+                )}
+              </div>
+
+              <div className="detail-grid">
+                <label className="field-block">
+                  <span>Goal (optional when medicines are added)</span>
+                  <input
+                    className="lead-input"
+                    list="goal-presets"
+                    value={sec.goal}
+                    onChange={(event) => { updateTreatmentSectionField(secIndex, 'goal', event.target.value); setTreatmentSaveError(''); }}
+                    placeholder="Treatment goal for this service"
+                  />
+                  <datalist id="goal-presets">{QUICK_TREATMENTS.map((preset) => <option key={preset.goal} value={preset.goal} />)}</datalist>
+                </label>
+                <label className="field-block">
+                  <span>Duration</span>
+                  <select
+                    className="lead-input"
+                    value={sec.duration}
+                    onChange={(event) => updateTreatmentSectionField(secIndex, 'duration', event.target.value)}
+                  >
+                    {[...new Set([...DURATION_OPTIONS, sec.duration].filter(Boolean))].map((option) => <option key={option}>{option}</option>)}
+                  </select>
+                </label>
+                <label className="field-block">
+                  <span>Status</span>
+                  <select
+                    className="lead-input"
+                    value={sec.status || 'Active'}
+                    onChange={(event) => updateTreatmentSectionField(secIndex, 'status', event.target.value)}
+                  >
+                    <option>Active</option>
+                    <option>Completed</option>
+                    <option>On Hold</option>
+                  </select>
+                </label>
+
+                <div className="treatment-medicine-builder full-field">
+                  <div className="medicine-builder-head">
+                    <div>
+                      <strong>Medicines / Products for {sec.service || 'Service'}</strong>
+                      <span>Search the medicine master or add a missing medicine without leaving this treatment.</span>
+                    </div>
+                    <button className="pill" type="button" onClick={() => addSectionMedicineRow(secIndex)}>+ Add Medicine</button>
+                  </div>
+                  {sec.medicines.map((row, medIndex) => (
+                    <div className="treatment-medicine-row" key={medIndex}>
+                      <MedicineSearchInput
+                        index={medIndex}
+                        value={row.medicine}
+                        catalog={medicineCatalog}
+                        onChange={(value) => updateSectionMedicine(secIndex, medIndex, 'medicine', value)}
+                        onSelect={(medicine) => selectSectionMedicine(secIndex, medIndex, medicine)}
+                        onAdd={() => addSectionMedicineToCatalog(secIndex, medIndex)}
+                      />
+                      <label className="field-block">
+                        <span>Dose</span>
+                        <input className="lead-input" value={row.dose} onChange={(event) => updateSectionMedicine(secIndex, medIndex, 'dose', event.target.value)} placeholder="Dose" />
+                      </label>
+                      <label className="field-block">
+                        <span>Timing</span>
+                        <input className="lead-input" value={row.timing} onChange={(event) => updateSectionMedicine(secIndex, medIndex, 'timing', event.target.value)} placeholder="After meals" />
+                      </label>
+                      <button className="icon-btn" type="button" onClick={() => removeSectionMedicineRow(secIndex, medIndex)} aria-label={`Remove medicine ${medIndex + 1}`}>x</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <div className="section-adder-row full-field">
+            <button className="add-section-btn" type="button" onClick={addTreatmentSection}>
+              + Add Another Service Section
+            </button>
+          </div>
+
+          <datalist id="treatment-service-options">
+            {[...new Set([...SERVICE_OPTIONS, ...pastTreatmentOptions.map((option) => option.service)].filter(Boolean))].map((option) => <option key={option} value={option} />)}
+          </datalist>
         </JourneyModal>
       )}
 
@@ -2559,26 +3085,190 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
         <div className="modal-backdrop" role="presentation" onClick={() => setConsultationOpen(false)}>
           <div className="modal-shell consultation-modal" role="dialog" aria-modal="true" aria-label="Doctor Consultation" onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
-              <div><h2>Doctor Consultation</h2><p>{selectedClient}</p></div>
+              <div>
+                <h2>Doctor Consultation</h2>
+                <p>For patient: {selectedClient}</p>
+              </div>
               <button className="icon-btn" type="button" onClick={() => setConsultationOpen(false)} aria-label="Close modal">x</button>
             </div>
             <div className="modal-body detail-grid">
-              <div className="quick-preset-row">
-                {QUICK_CONSULTATIONS.map((preset) => <button className="pill" type="button" key={preset.label} onClick={() => applyQuickConsultation(preset)}>{preset.label}</button>)}
+              <div className="section-adder-row full-field">
+                <button className="add-section-btn" type="button" onClick={addConsultationSection}>
+                  + Add Service Section
+                </button>
               </div>
-              <div className="consultation-template-tools">
-                <label className="field-block"><span>Use Template</span><select className="lead-input" value={selectedConsultationTemplate} onChange={(event) => applyConsultationTemplate(event.target.value)}><option value="">{consultationTemplates.length ? 'Select consultation template...' : 'No templates saved yet'}</option>{consultationTemplates.map((template, index) => <option key={`${template.name}-${index}`} value={index}>{template.name}</option>)}</select></label>
-                <label className="field-block"><span>Template Name</span><input className="lead-input" value={consultationTemplateName} onChange={(event) => setConsultationTemplateName(event.target.value)} placeholder="e.g. Diabetes Follow-up" /></label>
-                <button className="pill" type="button" disabled={!consultationTemplateName.trim()} onClick={saveConsultationTemplate}>Save Template</button>
+
+              {consultationSections.map((sec, secIndex) => (
+                <div className="service-section-box full-field" key={sec.id || secIndex}>
+                  <div className="service-section-header">
+                    <div className="service-section-title-group">
+                      <span className="service-badge">Section #{secIndex + 1}</span>
+                      <label className="service-input-label">
+                        <span>Service:</span>
+                        <input
+                          className="lead-input service-name-input"
+                          list="consultation-service-options"
+                          value={sec.service}
+                          onChange={(e) => updateConsultationSection(secIndex, 'service', e.target.value)}
+                          placeholder="e.g. Consultation, Skin, Hair..."
+                          autoComplete="off"
+                        />
+                      </label>
+                    </div>
+                    {consultationSections.length > 1 && (
+                      <button
+                        className="danger-subtle-btn"
+                        type="button"
+                        onClick={() => removeConsultationSection(secIndex)}
+                        title="Remove this service section"
+                      >
+                        ✕ Remove Section
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="quick-preset-row">
+                    {QUICK_CONSULTATIONS.map((preset) => (
+                      <button
+                        className="pill"
+                        type="button"
+                        key={preset.label}
+                        onClick={() => applyQuickConsultationToSection(secIndex, preset)}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="consultation-template-tools">
+                    <label className="field-block">
+                      <span>Use Template</span>
+                      <select
+                        className="lead-input"
+                        value={secIndex === 0 ? selectedConsultationTemplate : ''}
+                        onChange={(event) => {
+                          if (secIndex === 0) setSelectedConsultationTemplate(event.target.value);
+                          applyConsultationTemplateToSection(secIndex, event.target.value);
+                        }}
+                      >
+                        <option value="">{consultationTemplates.length ? 'Select consultation template...' : 'No templates saved yet'}</option>
+                        {consultationTemplates.map((template, index) => (
+                          <option key={`${template.name}-${index}`} value={index}>{template.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field-block">
+                      <span>Template Name</span>
+                      <input
+                        className="lead-input"
+                        value={consultationTemplateName}
+                        onChange={(event) => setConsultationTemplateName(event.target.value)}
+                        placeholder="e.g. Diabetes Follow-up"
+                      />
+                    </label>
+                    <button
+                      className="pill"
+                      type="button"
+                      disabled={!consultationTemplateName.trim()}
+                      onClick={saveConsultationTemplate}
+                    >
+                      Save Template
+                    </button>
+                  </div>
+
+                  <div className="detail-grid">
+                    <ClinicalAutocompleteTextarea
+                      label="Presenting Complaints"
+                      rows="4"
+                      value={sec.complaint}
+                      options={consultationSuggestions.complaint}
+                      onChange={(complaint) => updateConsultationSection(secIndex, 'complaint', complaint)}
+                    />
+                    <ClinicalAutocompleteTextarea
+                      label="History & Examination"
+                      rows="5"
+                      value={sec.notes}
+                      options={consultationSuggestions.notes}
+                      onChange={(notes) => updateConsultationSection(secIndex, 'notes', notes)}
+                    />
+                    <SearchablePresetInput
+                      label="Vitals"
+                      value={sec.vitals}
+                      options={VITAL_OPTIONS}
+                      onChange={(value) => updateConsultationSection(secIndex, 'vitals', value)}
+                      placeholder="Search or enter measured vitals"
+                    />
+                    <SearchablePresetInput
+                      label="Diagnosis"
+                      value={sec.diagnosis}
+                      options={DIAGNOSIS_OPTIONS}
+                      onChange={(value) => updateConsultationSection(secIndex, 'diagnosis', value)}
+                      placeholder="Type 1-2 keywords, e.g. diabetes"
+                    />
+                    <label className="field-block full-field">
+                      <span>Investigation</span>
+                      <textarea
+                        className="lead-input"
+                        rows="2"
+                        value={sec.investigation ?? ''}
+                        onChange={(event) => updateConsultationSection(secIndex, 'investigation', event.target.value)}
+                        placeholder="Optional investigation, lab test, imaging, report, or any note..."
+                      />
+                    </label>
+                    <div className="doctor-note-builder full-field">
+                      <SearchablePresetInput
+                        label="Doctor Notes"
+                        value={sectionDoctorNoteChoices[secIndex] || ''}
+                        options={[...NOTE_OPTIONS, ...customDoctorNotes]}
+                        onChange={(val) => setSectionDoctorNoteChoices((prev) => ({ ...prev, [secIndex]: val }))}
+                        onSelect={(note) => addDoctorNoteToSection(secIndex, note)}
+                        onCommit={(note) => addDoctorNoteToSection(secIndex, note)}
+                        placeholder="Search or type a new doctor note..."
+                        helperText="Multiple notes select કરો અથવા નવી note લખીને Add New/Enter દબાવો."
+                        action={
+                          <button
+                            className="pill symptom-add-button"
+                            type="button"
+                            onClick={() => addDoctorNoteToSection(secIndex)}
+                            disabled={!String(sectionDoctorNoteChoices[secIndex] || '').trim()}
+                          >
+                            + Add New
+                          </button>
+                        }
+                      />
+                      <div className="consultation-chips">
+                        {String(sec.doctorNotes ?? '').split('\n').map((item) => item.trim()).filter(Boolean).map((note) => (
+                          <button
+                            className="tag symptom-chip"
+                            type="button"
+                            key={note}
+                            onClick={() => removeDoctorNoteFromSection(secIndex, note)}
+                          >
+                            {note} x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="section-adder-row full-field">
+                <button className="add-section-btn" type="button" onClick={addConsultationSection}>
+                  + Add Another Service Section
+                </button>
               </div>
-              <ClinicalAutocompleteTextarea label="Presenting Complaints" rows="7" value={consultation.complaint} options={consultationSuggestions.complaint} onChange={(complaint) => setConsultation((current) => ({ ...current, complaint }))} />
-              <ClinicalAutocompleteTextarea label="History & Examination" rows="8" value={consultation.notes} options={consultationSuggestions.notes} onChange={(notes) => setConsultation((current) => ({ ...current, notes }))} />
-              <SearchablePresetInput label="Vitals" value={consultation.vitals} options={VITAL_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, vitals: value }))} placeholder="Search or enter measured vitals" />
-              <SearchablePresetInput label="Diagnosis" value={consultation.diagnosis} options={DIAGNOSIS_OPTIONS} onChange={(value) => setConsultation((current) => ({ ...current, diagnosis: value }))} placeholder="Type 1-2 keywords, e.g. diabetes" />
-              <label className="field-block full-field"><span>Investigation</span><textarea className="lead-input" rows="3" value={consultation.investigation ?? ''} onChange={(event) => setConsultation((current) => ({ ...current, investigation: event.target.value }))} placeholder="Optional investigation, lab test, imaging, report, or any note..." /></label>
-              <div className="doctor-note-builder full-field"><SearchablePresetInput label="Doctor Notes" value={doctorNoteChoice} options={[...NOTE_OPTIONS, ...customDoctorNotes]} onChange={setDoctorNoteChoice} onSelect={addDoctorNote} onCommit={addDoctorNote} placeholder="Search or type a new doctor note..." helperText="Multiple notes select કરો અથવા નવી note લખીને Add New/Enter દબાવો." action={<button className="pill symptom-add-button" type="button" onClick={() => addDoctorNote()} disabled={!doctorNoteChoice.trim()}>+ Add New</button>} /><div className="consultation-chips">{String(consultation.doctorNotes ?? '').split('\n').map((item) => item.trim()).filter(Boolean).map((note) => <button className="tag symptom-chip" type="button" key={note} onClick={() => removeDoctorNote(note)}>{note} x</button>)}</div></div>
+
+              <datalist id="consultation-service-options">
+                {[...new Set([...SERVICE_OPTIONS, ...pastTreatmentOptions.map((option) => option.service)].filter(Boolean))].map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
             </div>
-            <div className="modal-actions"><button className="pill" type="button" onClick={() => setConsultationOpen(false)}>Cancel</button><button className="pill primary-action" type="button" onClick={saveConsultation}>Complete Consultation</button></div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setConsultationOpen(false)}>Cancel</button>
+              <button className="pill primary-action" type="button" onClick={saveConsultation}>Complete Consultation</button>
+            </div>
           </div>
         </div>
       )}
@@ -2586,8 +3276,8 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
   );
 }
 
-function JourneyModal({ title, client, children, onClose, onSave, saveLabel, saveDisabled = false }) {
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>{title}</h2><p>For patient: {client}</p></div><button className="icon-btn" type="button" onClick={onClose} aria-label="Close modal">x</button></div><div className="modal-body detail-grid">{children}</div><div className="modal-actions"><button className="pill" type="button" onClick={onClose}>Cancel</button><button className="pill primary-action" type="button" onClick={onSave} disabled={saveDisabled}>{saveLabel}</button></div></div></div>;
+function JourneyModal({ title, client, children, onClose, onSave, saveLabel, saveDisabled = false, shellClassName = 'modal-small' }) {
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className={`modal-shell ${shellClassName}`} role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>{title}</h2><p>For patient: {client}</p></div><button className="icon-btn" type="button" onClick={onClose} aria-label="Close modal">x</button></div><div className="modal-body detail-grid">{children}</div><div className="modal-actions"><button className="pill" type="button" onClick={onClose}>Cancel</button><button className="pill primary-action" type="button" onClick={onSave} disabled={saveDisabled}>{saveLabel}</button></div></div></div>;
 }
 
 function DietPlanModal({

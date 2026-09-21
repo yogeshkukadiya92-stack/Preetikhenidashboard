@@ -4521,7 +4521,119 @@ textarea:focus-visible,
   gap: 10px;
 }
 
-.consultation-modal { width: min(760px, calc(100vw - 28px)); }
+.consultation-modal {
+  width: min(880px, calc(100vw - 28px));
+}
+
+.treatment-modal {
+  width: min(880px, calc(100vw - 28px));
+}
+
+.service-section-box {
+  background: #fbfdfc;
+  border: 1.5px solid #d1e7dd;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  box-shadow: 0 4px 16px rgba(14, 91, 82, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.service-section-box:focus-within {
+  border-color: #0e5b52;
+  box-shadow: 0 6px 20px rgba(14, 91, 82, 0.08);
+}
+
+.service-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2eee9;
+  margin-bottom: 14px;
+}
+
+.service-section-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.service-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #0e5b52;
+  color: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.service-input-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #173b31;
+}
+
+.service-name-input {
+  min-width: 220px;
+  font-weight: 600;
+  border-color: #bcd9cf;
+}
+
+.section-adder-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 6px 0 14px;
+}
+
+.add-section-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #e8f5f1;
+  color: #0e5b52;
+  border: 1.5px dashed #0e5b52;
+  font-weight: 700;
+  font-size: 0.88rem;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-section-btn:hover {
+  background: #0e5b52;
+  color: #ffffff;
+  border-style: solid;
+}
+
+.danger-subtle-btn {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.danger-subtle-btn:hover {
+  background: #fca5a5;
+  color: #7f1d1d;
+}
+
 .consultation-modal .clinical-textarea {
   min-height: 150px;
   padding: 12px 14px;
