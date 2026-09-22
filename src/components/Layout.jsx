@@ -89,7 +89,7 @@ export function Layout() {
   const navSections = useMemo(() => sectionOrder.map((label) => ({
     label,
     items: navItems.filter((item) => item.section === label && canAccessPath(session, item.path)),
-  })).filter((section) => section.items.length), [session?.email]);
+  })).filter((section) => section.items.length), [session?.email, session?.permissions?.join(','), session?.isAdmin]);
   const activeSection = navItems.find((item) => item.path === location.pathname)?.section ?? 'Overview';
   const [openSections, setOpenSections] = useState(() => new Set([activeSection]));
 
@@ -215,11 +215,19 @@ export function Layout() {
         <div className="clinic-card">
           <div>
             <strong>Mom's Pathshala</strong>
-            <select aria-label="Select branch" value={currentBranch} onChange={(event) => setCurrentBranch(event.target.value)}>
-              {branches.map((branch) => <option key={branch}>{branch}</option>)}
-            </select>
+            {session?.isAdmin ? (
+              <select aria-label="Select branch" value={currentBranch} onChange={(event) => setCurrentBranch(event.target.value)}>
+                {branches.map((branch) => <option key={branch}>{branch}</option>)}
+              </select>
+            ) : (
+              <div className="branch-locked-label" title={`Branch: ${currentBranch}`}>
+                📍 {currentBranch}
+              </div>
+            )}
           </div>
-          <button className="icon-btn" type="button" onClick={() => navigate('/branches')} aria-label="Manage branches"><ChevronRight /></button>
+          {session?.isAdmin && (
+            <button className="icon-btn" type="button" onClick={() => navigate('/branches')} aria-label="Manage branches"><ChevronRight /></button>
+          )}
         </div>
       </aside>
 

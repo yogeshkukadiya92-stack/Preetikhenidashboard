@@ -256,12 +256,36 @@ export async function submitFormResponse(form, answers, respondentEmail = '') {
 
   const current = readJson(RESPONSES_KEY, []);
   const next = [response, ...(Array.isArray(current) ? current : [])];
-  if (!writeJson(RESPONSES_KEY, next)) {
-    throw new Error('Browser storage is full. Remove large file responses or connect the Forms API.');
+  let localSaved = writeJson(RESPONSES_KEY, next);
+  if (!localSaved) {
+    const pruned = [response, ...(Array.isArray(current) ? current.slice(0, 15) : [])];
+    localSaved = writeJson(RESPONSES_KEY, pruned);
+  }
+  if (!localSaved) {
+    const strippedResponse = {
+      ...response,
+      answers: Object.fromEntries(
+        Object.entries(answers).map(([k, v]) => {
+          if (Array.isArray(v)) {
+            return [k, v.map((item) => (item?.dataUrl ? { name: item.name, size: item.size, type: item.type } : item))];
+          }
+          if (v?.dataUrl) {
+            return [k, { name: v.name, size: v.size, type: v.type }];
+          }
+          return [k, v];
+        })
+      ),
+    };
+    localSaved = writeJson(RESPONSES_KEY, [strippedResponse, ...(Array.isArray(current) ? current.slice(0, 10) : [])]);
   }
   const patientData = applyPatientDataMappings(form, response);
 
-  if (!apiBase) return { response, delivery: 'local', patientData };
+  if (!apiBase) {
+    if (!localSaved) {
+      throw new Error('Browser storage is full. Please clear old responses or connect the Forms API.');
+    }
+    return { response, delivery: 'local', patientData };
+  }
   try {
     await apiRequest(`/forms/${encodeURIComponent(form.slug)}/responses`, {
       method: 'POST',
@@ -269,6 +293,9 @@ export async function submitFormResponse(form, answers, respondentEmail = '') {
     });
     return { response, delivery: 'api', patientData };
   } catch (error) {
+    if (!localSaved) {
+      throw new Error('Could not submit response: ' + error.message);
+    }
     return { response, delivery: 'local', patientData, warning: error.message };
   }
 }

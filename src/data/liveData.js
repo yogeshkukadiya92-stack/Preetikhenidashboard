@@ -50,6 +50,7 @@ function branchKey(branch, key) {
 function readBranchArray(branch, key, legacyKey, fallback = []) {
   const branchRows = asArray(readStorage(branchKey(branch, key), []));
   if (branchRows.length) return branchRows;
+  if (branch !== 'Main Branch') return [];
   return asArray(readStorage(legacyKey, fallback));
 }
 

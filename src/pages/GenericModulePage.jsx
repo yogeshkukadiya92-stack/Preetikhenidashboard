@@ -93,8 +93,9 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRow, setSelectedRow] = useState(null);
   const [recentlyAddedRow, setRecentlyAddedRow] = useState(null);
+  const isMainBranch = currentBranch === 'Main Branch';
   const storageKey = branchKey(`${title}:rows:v3`);
-  const [tableRows, setTableRows] = useState(() => normalizeRows(loadSavedRows(storageKey, rows)));
+  const [tableRows, setTableRows] = useState(() => normalizeRows(loadSavedRows(storageKey, isMainBranch ? rows : [])));
   const [actionMessage, setActionMessage] = useState('Ready.');
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterText, setFilterText] = useState('');

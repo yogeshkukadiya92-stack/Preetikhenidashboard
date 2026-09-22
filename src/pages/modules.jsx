@@ -26,7 +26,7 @@ import {
   users,
 } from '../data/appConfig.js';
 import { loadAllLocalResponses, loadForms as loadSavedForms } from '../data/formStore.js';
-import { hashPassword, STAFF_PERMISSION_OPTIONS } from '../data/auth.js';
+import { hashPassword, STAFF_PERMISSION_OPTIONS, getAllUsers, saveAuthUser, deleteAuthUser } from '../data/auth.js';
 import {
   AYURVEDIC_GUIDELINES,
   CLINICAL_DIET_PRESETS,
@@ -601,13 +601,14 @@ function ImportExportModule({
 }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
   const isClientModule = title === 'Clients';
   const isPaymentsModule = title === 'Payments';
   const displayTitle = patientDisplayLabel(title);
   const displayHeader = (header) => (isClientModule || header === 'Client' ? patientDisplayLabel(header) : header);
   const tableGridTemplate = isClientModule
-    ? '104px 140px 132px 132px 132px 72px 160px 140px 112px 120px'
+    ? '104px 140px 125px 115px 115px 65px 95px 150px 130px 125px 125px 105px 115px'
     : undefined;
   const tableStyle = tableGridTemplate
     ? { '--table-columns': headers.length, '--table-template': tableGridTemplate }
@@ -616,7 +617,8 @@ function ImportExportModule({
   const storageKey = branchKey(`${filenameBase}:rows:v3`);
   const paymentsStorageKey = branchKey('ayurflow-payments:rows:v3');
   const [rows, setRows] = useState(() => {
-    const parsedRows = loadSavedArray(storageKey, loadSavedArray(legacyStorageKey, seedRows)).map((row) => parseRow(row));
+    const fallback = isMainBranch ? loadSavedArray(legacyStorageKey, seedRows) : [];
+    const parsedRows = loadSavedArray(storageKey, fallback).map((row) => parseRow(row));
     return isClientModule ? assignMissingClientIds(parsedRows, rowToValues) : parsedRows;
   });
   const [preview, setPreview] = useState([]);
@@ -682,7 +684,7 @@ function ImportExportModule({
     const values = rowToValues(record);
     const fileCharge = parseMoney(values['File Charge']);
     if (!fileCharge) return false;
-    const currentPayments = loadSavedArray(paymentsStorageKey, loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []));
+    const currentPayments = loadSavedArray(paymentsStorageKey, isMainBranch ? loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []) : []);
     const paidOn = normalizeDateInput(values['Visit Date']) || todayIsoDate();
     const payment = normalizePaymentRecord({
       client: values.Client,
@@ -1143,7 +1145,13 @@ function ImportExportModule({
                       readOnly={header === 'Invoice' || (isPaymentsModule && header === 'Pending Amount')}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
                       onChange={(event) => updateRecordField(setDraftRecord, header, event.target.value)}
-                      placeholder={`Enter ${displayHeader(header).toLowerCase()}`}
+                      placeholder={
+                        header === 'Reference'
+                          ? 'Referred by (e.g. Dr. Name / Friend)'
+                          : header === 'Reference Number'
+                            ? 'Reference mobile number'
+                            : `Enter ${displayHeader(header).toLowerCase()}`
+                      }
                     />
                   )}
                 </label>
@@ -1188,7 +1196,13 @@ function ImportExportModule({
                       readOnly={header === 'Invoice' || (isPaymentsModule && header === 'Pending Amount')}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
                       onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
-                      placeholder={`Enter ${displayHeader(header).toLowerCase()}`}
+                      placeholder={
+                        header === 'Reference'
+                          ? 'Referred by (e.g. Dr. Name / Friend)'
+                          : header === 'Reference Number'
+                            ? 'Reference mobile number'
+                            : `Enter ${displayHeader(header).toLowerCase()}`
+                      }
                     />
                   )}
                 </label>
@@ -1875,8 +1889,11 @@ function ClientProfile({ client, onBack }) {
               ['Visit Date', client.visitDate],
               ['Birthday', client.birthday],
               ['Age', client.age],
+              ['Gender', client.gender],
               ['Address', client.address],
               ['Service', client.service || client.program],
+              ['Reference', client.reference],
+              ['Reference Number', client.referenceNumber],
               ['File Charge', client.fileCharge ? `₹${Number(client.fileCharge).toLocaleString('en-IN')}` : '—'],
               ['Payment Mode', client.paymentMode],
             ].map(([label, value]) => (
@@ -2202,8 +2219,9 @@ function ClientMonthlySummary({ rows, rowToValues }) {
 
 export function ClientsPage() {
   const [selectedClient, setSelectedClient] = useState(null);
-  const { branchKey } = useBranch();
-  const savedClientRows = loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients));
+  const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
+  const savedClientRows = loadSavedArray(branchKey('ayurflow-clients:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients) : []);
   const savedTreatmentRows = loadSavedArray(TREATMENT_PLANS_KEY, []);
 
   if (selectedClient) {
@@ -2219,15 +2237,16 @@ export function ClientsPage() {
         { label: 'Treatment Plans', value: String(savedTreatmentRows.length) },
         { label: 'Services', value: getSavedServiceNames().length },
       ]}
-      headers={['Client ID', 'Client', 'Mobile', 'Visit Date', 'Birthday', 'Age', 'Gender', 'Address', 'Service', 'File Charge', 'Payment Mode']}
+      headers={['Client ID', 'Client', 'Mobile', 'Visit Date', 'Birthday', 'Age', 'Gender', 'Address', 'Service', 'Reference', 'Reference Number', 'File Charge', 'Payment Mode']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
       fieldOptions={{ Gender: ['Female', 'Male', 'Other'], Service: getSavedServiceNames(), 'Payment Mode': ['Cash', 'GPay'] }}
-      fieldTypes={{ Mobile: 'tel', Age: 'number', Birthday: 'date', 'Visit Date': 'date', 'File Charge': 'number' }}
+      fieldTypes={{ Mobile: 'tel', 'Reference Number': 'tel', Age: 'number', Birthday: 'date', 'Visit Date': 'date', 'File Charge': 'number' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
         { label: 'ID wise', column: 'Client ID' },
         { label: 'Mobile wise', column: 'Mobile' },
+        { label: 'Reference wise', column: 'Reference' },
         { label: 'Visit date wise', column: 'Visit Date' },
         { label: 'Age wise', column: 'Age' },
         { label: 'Service wise', column: 'Service' },
@@ -2244,6 +2263,8 @@ export function ClientsPage() {
         Gender: row.gender,
         Address: row.address,
         Service: row.service || row.program,
+        Reference: row.reference ?? '',
+        'Reference Number': row.referenceNumber ?? '',
         'File Charge': row.fileCharge,
         'Payment Mode': row.paymentMode,
       })}
@@ -2256,10 +2277,13 @@ export function ClientsPage() {
               'Visit Date': entry.length >= 8 ? entry[3] : '',
               Birthday: entry.length >= 8 ? entry[4] : entry.length >= 7 ? entry[3] : entry[2],
               Age: entry.length >= 8 ? entry[5] : entry.length >= 7 ? entry[4] : entry[3],
-              Address: entry.length >= 8 ? entry[6] : entry.length >= 7 ? entry[5] : entry[4],
-              Service: entry.length >= 8 ? entry[7] : entry.length >= 7 ? entry[6] : entry[5],
-              'File Charge': entry.length >= 9 ? entry[8] : '',
-              'Payment Mode': entry.length >= 10 ? entry[9] : '',
+              Gender: entry.length >= 13 ? entry[6] : '',
+              Address: entry.length >= 13 ? entry[7] : entry.length >= 8 ? entry[6] : entry.length >= 7 ? entry[5] : entry[4],
+              Service: entry.length >= 13 ? entry[8] : entry.length >= 8 ? entry[7] : entry.length >= 7 ? entry[6] : entry[5],
+              Reference: entry.length >= 13 ? entry[9] : '',
+              'Reference Number': entry.length >= 13 ? entry[10] : '',
+              'File Charge': entry.length >= 13 ? entry[11] : entry.length >= 9 ? entry[8] : '',
+              'Payment Mode': entry.length >= 13 ? entry[12] : entry.length >= 10 ? entry[9] : '',
             }
           : entry;
         const birthday = source.Birthday ?? source.birthday ?? '';
@@ -2275,16 +2299,23 @@ export function ClientsPage() {
           address: source.Address ?? source.address ?? '',
           service: source.Service ?? source.service ?? source.Program ?? source.program ?? '',
           program: source.Program ?? source.program ?? source.Service ?? source.service ?? '',
+          reference: source.Reference ?? source.reference ?? source.referredBy ?? source['Referred By'] ?? source.refName ?? '',
+          referenceNumber: source['Reference Number'] ?? source.referenceNumber ?? source['Reference Mobile'] ?? source.referenceMobile ?? source.refMobile ?? source.refNumber ?? '',
           fileCharge: formatMoneyValue(source['File Charge'] ?? source.fileCharge ?? source.FileCharge ?? source.file_charge ?? ''),
           paymentMode: source['Payment Mode'] ?? source.paymentMode ?? source.PaymentMode ?? source.payment_mode ?? '',
           birthday,
         };
       }}
-      createDefaultRecord={(currentRows) => ({ 'Client ID': nextClientId(currentRows, (row) => ({
-        'Client ID': row.clientId,
-        Client: row.name,
-        Mobile: row.mobile,
-      })), 'Visit Date': todayIsoDate() })}
+      createDefaultRecord={(currentRows) => ({
+        'Client ID': nextClientId(currentRows, (row) => ({
+          'Client ID': row.clientId,
+          Client: row.name,
+          Mobile: row.mobile,
+        })),
+        'Visit Date': todayIsoDate(),
+        Reference: '',
+        'Reference Number': '',
+      })}
       renderSummary={(rows, rowToValues) => <ClientMonthlySummary rows={rows} rowToValues={rowToValues} />}
       rowActions={(row, openEditRecord, deleteRecord, actionContext = {}) => (
         <ActionMenu
@@ -2302,9 +2333,10 @@ export function ClientsPage() {
 }
 
 export function PaymentsPage() {
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
   const [clientNames] = useState(() =>
-    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map(savedClientName).filter(Boolean)
+    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients) : []).map(savedClientName).filter(Boolean)
   );
   return (
     <ImportExportModule
@@ -2350,33 +2382,31 @@ export function PaymentsPage() {
 }
 
 export function UsersPage() {
-  const { branchKey } = useBranch();
-  const [people, setPeople] = useState(() => loadSavedArray(branchKey('users:rows:v3'), users));
-  const hasMountedPeople = useRef(false);
+  const { branches, currentBranch } = useBranch();
+  const [people, setPeople] = useState(() => getAllUsers());
   const [uploadName, setUploadName] = useState('No file selected');
   const [importPreview, setImportPreview] = useState([]);
-  const [statusMessage, setStatusMessage] = useState('Ready to import or export users.');
+  const [statusMessage, setStatusMessage] = useState('Ready to manage users or import team data.');
   const [dropActive, setDropActive] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [staffModalOpen, setStaffModalOpen] = useState(false);
   const [editingStaffEmail, setEditingStaffEmail] = useState('');
-  const [staffForm, setStaffForm] = useState({ name: '', role: 'Receptionist', email: '', password: '', permissions: ['/clients', '/journey', '/appointments'] });
+  const [staffForm, setStaffForm] = useState({
+    name: '',
+    role: 'Receptionist',
+    email: '',
+    password: '',
+    branch: currentBranch || 'Main Branch',
+    permissions: ['/clients', '/journey', '/appointments'],
+  });
   const [activeTab, setActiveTab] = useState('team');
 
-  useEffect(() => {
-    if (!hasMountedPeople.current) {
-      hasMountedPeople.current = true;
-      return;
-    }
-    try {
-      window.localStorage.setItem(branchKey('users:rows:v3'), JSON.stringify(people));
-    } catch {
-      setStatusMessage('Local browser storage is full or blocked.');
-    }
-  }, [branchKey, people]);
+  const refreshUsers = () => {
+    setPeople(getAllUsers());
+  };
 
   const exportCsv = () => {
-    downloadText('ayurflow-users.csv', rowsToCsv(['Name', 'Role', 'Email', 'Status'], people.map((user) => [user.name, user.role, user.email, user.status])), 'text/csv;charset=utf-8');
+    downloadText('ayurflow-users.csv', rowsToCsv(['Name', 'Branch', 'Role', 'Email', 'Status'], people.map((user) => [user.name, user.branch || 'Main Branch', user.role, user.email, user.status])), 'text/csv;charset=utf-8');
     setStatusMessage('Export started for CSV download.');
   };
 
@@ -2404,6 +2434,7 @@ export function UsersPage() {
     }
     const normalized = asImportRows(parsed).map((entry) => ({
       name: entry.name ?? entry.Name ?? '',
+      branch: entry.branch ?? entry.Branch ?? currentBranch ?? 'Main Branch',
       role: entry.role ?? entry.Role ?? '',
       email: entry.email ?? entry.Email ?? '',
       status: entry.status ?? entry.Status ?? 'Pending',
@@ -2418,7 +2449,17 @@ export function UsersPage() {
       setStatusMessage('No imported records found.');
       return;
     }
-    setPeople((current) => [...importPreview, ...current]);
+    importPreview.forEach((entry) => {
+      saveAuthUser({
+        name: entry.name,
+        email: entry.email,
+        role: entry.role || 'Staff',
+        branch: entry.branch || currentBranch || 'Main Branch',
+        status: entry.status || 'Active',
+        permissions: ['/clients', '/journey', '/appointments'],
+      });
+    });
+    refreshUsers();
     setImportPreview([]);
     setUploadName('No file selected');
     setStatusMessage(`${importPreview.length} users imported successfully.`);
@@ -2426,10 +2467,12 @@ export function UsersPage() {
   };
 
   const toggleUserStatus = (email) => {
-    setPeople((current) => current.map((user) => (
-      user.email === email ? { ...user, status: user.status === 'Active' ? 'Pending' : 'Active' } : user
-    )));
-    setStatusMessage('User status updated.');
+    const user = people.find((u) => String(u.email).trim().toLowerCase() === String(email).trim().toLowerCase());
+    if (user) {
+      saveAuthUser({ ...user, status: user.status === 'Active' ? 'Pending' : 'Active' });
+      refreshUsers();
+      setStatusMessage('User status updated.');
+    }
   };
 
   const toggleStaffPermission = (path) => {
@@ -2457,14 +2500,14 @@ export function UsersPage() {
       name: staffForm.name.trim(),
       role: staffForm.role,
       email,
+      branch: staffForm.branch || currentBranch || 'Main Branch',
       status: 'Active',
       permissions: staffForm.permissions,
       passwordHash,
     };
-    setPeople((current) => existingStaff
-      ? current.map((person) => String(person.email).trim().toLowerCase() === editingStaffEmail ? { ...person, ...savedStaff } : person)
-      : [...current, savedStaff]);
-    setStaffForm({ name: '', role: 'Receptionist', email: '', password: '', permissions: ['/clients', '/journey', '/appointments'] });
+    saveAuthUser(savedStaff);
+    refreshUsers();
+    setStaffForm({ name: '', role: 'Receptionist', email: '', password: '', branch: currentBranch || 'Main Branch', permissions: ['/clients', '/journey', '/appointments'] });
     setEditingStaffEmail('');
     setStaffModalOpen(false);
     setStatusMessage(existingStaff ? 'Staff permissions updated successfully.' : 'Staff login created successfully.');
@@ -2472,13 +2515,20 @@ export function UsersPage() {
 
   const openNewStaff = () => {
     setEditingStaffEmail('');
-    setStaffForm({ name: '', role: 'Receptionist', email: '', password: '', permissions: ['/clients', '/journey', '/appointments'] });
+    setStaffForm({ name: '', role: 'Receptionist', email: '', password: '', branch: currentBranch || 'Main Branch', permissions: ['/clients', '/journey', '/appointments'] });
     setStaffModalOpen(true);
   };
 
   const openEditStaff = (user) => {
     setEditingStaffEmail(String(user.email).trim().toLowerCase());
-    setStaffForm({ name: user.name ?? '', role: user.role ?? 'Staff', email: user.email ?? '', password: '', permissions: Array.isArray(user.permissions) ? user.permissions : [] });
+    setStaffForm({
+      name: user.name ?? '',
+      role: user.role ?? 'Staff',
+      email: user.email ?? '',
+      password: '',
+      branch: user.branch || currentBranch || 'Main Branch',
+      permissions: Array.isArray(user.permissions) ? user.permissions : [],
+    });
     setStaffModalOpen(true);
   };
 
@@ -2486,22 +2536,21 @@ export function UsersPage() {
     <section className="module-page">
       <div className="module-hero">
         <div>
-          <h1>Users</h1>
-          <p>Bulk upload staff members, export the team list, and import user data from CSV or JSON.</p>
-          <p className="subtle">Shared cloud workspace</p>
+          <h1>Users & Team Access</h1>
+          <p>Create staff accounts, assign branches, configure module permissions, and import users.</p>
         </div>
         <div className="module-stats">
           <div className="mini-stat">
-            <span>Total users</span>
+            <span>Total accounts</span>
             <strong>{people.length}</strong>
           </div>
           <div className="mini-stat">
-            <span>Import status</span>
-            <strong>{statusMessage}</strong>
+            <span>Current Branch</span>
+            <strong>{currentBranch}</strong>
           </div>
           <div className="mini-stat">
-            <span>Upload</span>
-            <strong>{uploadName}</strong>
+            <span>Status</span>
+            <strong>{statusMessage}</strong>
           </div>
         </div>
       </div>
@@ -2552,7 +2601,7 @@ export function UsersPage() {
         </Card>
       ) : (
         <Card
-          title="Current Team"
+          title="Team & Branch Accounts"
           subtitle={statusMessage}
           action={<div className="card-action-group">
             <button className="pill primary-action" type="button" onClick={openNewStaff}>+ Add Staff Login</button>
@@ -2562,9 +2611,10 @@ export function UsersPage() {
             ]} />
           </div>}
         >
-          <div className="table adaptive-table" style={{ '--table-columns': 5 }}>
+          <div className="table adaptive-table" style={{ '--table-columns': 6 }}>
             <div className="table-head">
               <div>Name</div>
+              <div>Branch</div>
               <div>Role</div>
               <div>Email</div>
               <div>Permissions</div>
@@ -2574,18 +2624,22 @@ export function UsersPage() {
             {people.length ? (
               people.map((user) => (
                 <div className="data-row" key={user.email}>
-                  <div>{user.name}</div>
+                  <div><strong>{user.name}</strong></div>
+                  <div><Tag tone={user.branch === 'Main Branch' ? 'tag-contacted' : 'tag-follow'}>{user.branch || 'Main Branch'}</Tag></div>
                   <div>{user.role}</div>
                   <div>{user.email}</div>
-                  <div>{Array.isArray(user.permissions) && user.permissions.length ? user.permissions.map((path) => STAFF_PERMISSION_OPTIONS.find((option) => option.path === path)?.label ?? path).join(', ') : 'No login access'}</div>
+                  <div>{Array.isArray(user.permissions) && user.permissions.length ? `${user.permissions.length} module(s)` : 'No login access'}</div>
                   <div><Tag tone={user.status === 'Active' ? 'tag-contacted' : 'tag-follow'}>{user.status}</Tag></div>
-                  <div><button className="row-link" type="button" onClick={() => openEditStaff(user)}>Edit</button><button className="row-link" type="button" onClick={() => toggleUserStatus(user.email)}>Toggle</button></div>
+                  <div>
+                    <button className="row-link" type="button" onClick={() => openEditStaff(user)}>Edit</button>
+                    <button className="row-link" type="button" onClick={() => toggleUserStatus(user.email)}>Toggle</button>
+                  </div>
                 </div>
               ))
             ) : (
               <div className="empty-state compact-empty table-empty">
                 <strong>No team members yet.</strong>
-                <p>Import a users file to create the roster.</p>
+                <p>Add a staff login or import a team file.</p>
               </div>
             )}
           </div>
@@ -2596,11 +2650,21 @@ export function UsersPage() {
         <div className="modal-backdrop" role="presentation" onClick={() => setStaffModalOpen(false)}>
           <div className="modal-shell" role="dialog" aria-modal="true" aria-label="Add staff login" onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
-              <div><h2>{editingStaffEmail ? 'Edit Staff Access' : 'Add Staff Login'}</h2><p>Create a separate login and choose exactly what this staff member can access.</p></div>
+              <div><h2>{editingStaffEmail ? 'Edit Staff Access' : 'Add Staff Login'}</h2><p>Create a separate login, assign branch, and choose exactly what this staff member can access.</p></div>
               <button className="icon-btn" type="button" onClick={() => setStaffModalOpen(false)} aria-label="Close modal">✕</button>
             </div>
             <div className="modal-body detail-grid">
               <label className="field-block"><span>Name</span><input className="lead-input" value={staffForm.name} onChange={(event) => setStaffForm((current) => ({ ...current, name: event.target.value }))} /></label>
+              <label className="field-block">
+                <span>Branch</span>
+                <select
+                  className="lead-input"
+                  value={staffForm.branch}
+                  onChange={(event) => setStaffForm((current) => ({ ...current, branch: event.target.value }))}
+                >
+                  {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </label>
               <label className="field-block"><span>Role</span><select className="lead-input" value={staffForm.role} onChange={(event) => setStaffForm((current) => ({ ...current, role: event.target.value }))}><option>Receptionist</option><option>Doctor</option><option>Therapist</option><option>Accountant</option><option>Manager</option><option>Staff</option></select></label>
               <label className="field-block"><span>Email</span><input className="lead-input" type="email" autoComplete="off" value={staffForm.email} onChange={(event) => setStaffForm((current) => ({ ...current, email: event.target.value }))} /></label>
               <label className="field-block"><span>{editingStaffEmail ? 'New Password (optional)' : 'Temporary Password'}</span><input className="lead-input" type="password" autoComplete="new-password" value={staffForm.password} onChange={(event) => setStaffForm((current) => ({ ...current, password: event.target.value }))} placeholder={editingStaffEmail ? 'Leave blank to keep current password' : 'Minimum 6 characters'} /></label>
@@ -2678,7 +2742,8 @@ export function UsersPage() {
 }
 
 function ModuleHubPage({ title, description, tabs, defaultTab }) {
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
   const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
   const queryAction = searchParams.get('action');
@@ -2693,9 +2758,14 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const [editIndex, setEditIndex] = useState(null);
   const treatmentTemplatesKey = branchKey('treatment-templates:v2');
   const legacyTreatmentTemplatesKey = 'ayurflow:treatment-templates:v1';
-  const [treatmentTemplates, setTreatmentTemplates] = useState(() => loadSavedArray(treatmentTemplatesKey, loadSavedArray(legacyTreatmentTemplatesKey, [])));
-  const [selectedTreatmentTemplate, setSelectedTreatmentTemplate] = useState('');
-  const [treatmentTemplateName, setTreatmentTemplateName] = useState('');
+  const [treatmentTemplates, setTreatmentTemplates] = useState(() => loadSavedArray(treatmentTemplatesKey, isMainBranch ? loadSavedArray(legacyTreatmentTemplatesKey, []) : []));
+  const [selectedTemplateIndex, setSelectedTemplateIndex] = useState('');
+  const [treatmentForm, setTreatmentForm] = useState(defaultTreatmentForm);
+  const [treatmentMedicineRows, setTreatmentMedicineRows] = useState(() => [{ medicine: '', dose: '', timing: '' }]);
+  const [treatmentErrors, setTreatmentErrors] = useState({});
+  const [selectedTreatmentPlan, setSelectedTreatmentPlan] = useState(null);
+  const [selectedDietPlan, setSelectedDietPlan] = useState(null);
+  const [templateName, setTemplateName] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState([]);
   const [uploadName, setUploadName] = useState('No file selected');
@@ -2703,14 +2773,19 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const [editRow, setEditRow] = useState([]);
   const fixedMedicineStorageKey = branchKey(`${title}:treatment-medicines:v2`);
   const legacyMedicineStorageKey = `ayurflow:${title}:treatment-medicines:v2`;
-  const [fixedMedicineByService, setFixedMedicineByService] = useState(() => loadSavedObject(fixedMedicineStorageKey, loadSavedObject(legacyMedicineStorageKey, {})));
+  const [fixedMedicineByService, setFixedMedicineByService] = useState(() => loadSavedObject(fixedMedicineStorageKey, isMainBranch ? loadSavedObject(legacyMedicineStorageKey, {}) : {}));
   const [rxDraft, setRxDraft] = useState([{ medicine: '', dose: '', timing: 'Morning', schedule: 'Daily' }]);
   const storageKey = branchKey(`${title}:tabs:v3`);
   const legacyStorageKey = `ayurflow:${title}:tabs:v3`;
   const [rowsByTab, setRowsByTab] = useState(() => {
-    const savedTabs = loadSavedObject(storageKey, loadSavedObject(legacyStorageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows]))));
+    const fallbackTabs = isMainBranch
+      ? loadSavedObject(legacyStorageKey, Object.fromEntries(tabs.map((tab) => [tab.id, tab.rows])))
+      : Object.fromEntries(tabs.map((tab) => [tab.id, []]));
+    const savedTabs = loadSavedObject(storageKey, fallbackTabs);
     if (title !== 'Operations') return savedTabs;
-    const sharedTreatments = loadSavedArray(TREATMENT_PLANS_KEY, []).map(treatmentPlanToOperationRow);
+    const sharedTreatments = isMainBranch
+      ? loadSavedArray(TREATMENT_PLANS_KEY, []).map(treatmentPlanToOperationRow)
+      : [];
     return {
       ...savedTabs,
       treatments: mergeUniqueRows(sharedTreatments, savedTabs.treatments ?? []),
@@ -2736,7 +2811,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     .filter(Boolean);
   const savedPatientRows = loadSavedArray(
     branchKey('ayurflow-clients:rows:v3'),
-    loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients),
+    isMainBranch ? loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients) : [],
   );
   const clientOptions = Array.from(new Set(savedPatientRows.map(savedClientName).filter(Boolean)));
   const patientSearchOptions = Array.from(new Map(savedPatientRows.map((row) => {
@@ -4056,10 +4131,11 @@ function LegacyFormsPage() {
 }
 
 export function AppointmentsPage() {
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
   const navigate = useNavigate();
   const [patientOptions] = useState(() => {
-    const savedPatients = loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients));
+    const savedPatients = loadSavedArray(branchKey('ayurflow-clients:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients) : []);
     const seen = new Set();
     return savedPatients.map((row) => {
       const name = String(savedClientName(row)).trim();
@@ -4198,22 +4274,23 @@ export function ServicesPage() {
 }
 
 export function TreatmentPlansPage() {
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
   const PLANS_KEY = branchKey('Treatment Plans:rows:v2');
   const TEMPLATES_KEY = branchKey('treatment-templates:v2');
   const DIET_PLANS_KEY = branchKey('diet-plans:v1');
   const DIET_TEMPLATES_KEY = branchKey('diet-templates:v1');
 
   const [clientNames] = useState(() =>
-    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients)).map(savedClientName).filter(Boolean)
+    loadSavedArray(branchKey('ayurflow-clients:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients) : []).map(savedClientName).filter(Boolean)
   );
   const [serviceOptions] = useState(() => {
-    const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
+    const saved = isMainBranch ? loadSavedArray('ayurflow:Services:rows:v2', []) : [];
     const savedNames = saved.map((row) => row[0]).filter(Boolean);
     return Array.from(new Set([...savedNames, ...services]));
   });
   const [plans, setPlans] = useState(() => loadSavedArray(PLANS_KEY, []));
-  const [templates, setTemplates] = useState(() => loadSavedArray(TEMPLATES_KEY, loadSavedArray('ayurflow:treatment-templates:v1', [])));
+  const [templates, setTemplates] = useState(() => loadSavedArray(TEMPLATES_KEY, isMainBranch ? loadSavedArray('ayurflow:treatment-templates:v1', []) : []));
   const [dietPlans, setDietPlans] = useState(() => loadSavedArray(DIET_PLANS_KEY, []));
   const [dietTemplates, setDietTemplates] = useState(() => loadSavedArray(DIET_TEMPLATES_KEY, []));
   const medicineCatalog = useMemo(() => {
@@ -5695,7 +5772,8 @@ export function SettingsPage() {
 }
 
 export function ReportsPage() {
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
   const [activeReport, setActiveReport] = useState('appointments');
   const [financeSubTab, setFinanceSubTab] = useState('payments');
   const [formFilter, setFormFilter] = useState('all');
@@ -5715,10 +5793,10 @@ export function ReportsPage() {
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
   // Read shared workspace data first and keep legacy fallbacks for existing installs.
-  const opsTabs = loadSavedState(branchKey('Operations:tabs:v3'), loadSavedState('ayurflow:Operations:tabs:v3', {}));
-  const finTabs = loadSavedState(branchKey('Finance:tabs:v3'), loadSavedState('ayurflow:Finance:tabs:v3', {}));
+  const opsTabs = loadSavedState(branchKey('Operations:tabs:v3'), isMainBranch ? loadSavedState('ayurflow:Operations:tabs:v3', {}) : {});
+  const finTabs = loadSavedState(branchKey('Finance:tabs:v3'), isMainBranch ? loadSavedState('ayurflow:Finance:tabs:v3', {}) : {});
 
-  const appointmentRows = normalizeAppointmentRows(loadSavedArray(branchKey('Appointments:rows:v3'), loadSavedArray('ayurflow:Appointments:rows:v2', []))).map((row) => Array.isArray(row)
+  const appointmentRows = normalizeAppointmentRows(loadSavedArray(branchKey('Appointments:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:Appointments:rows:v2', []) : [])).map((row) => Array.isArray(row)
     ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', row[5] ?? 'Offline', row[6] ?? 'Pending']
     : [row.client ?? row.Client ?? row.name ?? '', row.mobile ?? row.Mobile ?? '', row.date ?? row.Date ?? '', row.time ?? row.Time ?? '', row.type ?? row.Type ?? '', row.mode ?? row.Mode ?? 'Offline', row.status ?? row.Status ?? 'Pending']);
 
@@ -5729,7 +5807,7 @@ export function ReportsPage() {
     ? [row[0] ?? '', row[1] ?? '', row[5] ?? '', row[6] ?? '', row[7] ?? '']
     : savedTreatmentReportRow(row);
   const treatmentRows = mergeUniqueRows(
-    loadSavedArray(branchKey('Treatment Plans:rows:v2'), loadSavedArray('ayurflow:Treatment Plans:rows:v2', [])).map(savedTreatmentReportRow),
+    loadSavedArray(branchKey('Treatment Plans:rows:v2'), isMainBranch ? loadSavedArray('ayurflow:Treatment Plans:rows:v2', []) : []).map(savedTreatmentReportRow),
     (Array.isArray(opsTabs.treatments) ? opsTabs.treatments : []).map(operationTreatmentReportRow),
   );
 
@@ -5748,7 +5826,7 @@ export function ReportsPage() {
   const formRows = mergeUniqueRows(
     appFormResponseRows(),
     mergeUniqueRows(
-      loadSavedArray(branchKey('Forms:rows:v3'), loadSavedArray('ayurflow:Forms:rows:v2', [])),
+      loadSavedArray(branchKey('Forms:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:Forms:rows:v2', []) : []),
       Array.isArray(opsTabs.forms) ? opsTabs.forms : [],
     ),
   ).map((row) => Array.isArray(row)
@@ -5816,7 +5894,7 @@ export function ReportsPage() {
     ? [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '']
     : [row.item ?? row.Item ?? row.name ?? '', row.category ?? row.Category ?? '', row.quantity ?? row.Quantity ?? '', row.expiry ?? row.Expiry ?? '', row.status ?? row.Status ?? ''];
   const inventoryRows = mergeUniqueRows(
-    loadSavedArray(branchKey('Inventory:rows:v3'), loadSavedArray('ayurflow:Inventory:rows:v2', [])).map(inventoryReportRow),
+    loadSavedArray(branchKey('Inventory:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:Inventory:rows:v2', []) : []).map(inventoryReportRow),
     (Array.isArray(opsTabs.inventory) ? opsTabs.inventory : []).map(inventoryReportRow),
   );
 
@@ -5824,7 +5902,7 @@ export function ReportsPage() {
     const row = normalizePaymentRecord(entry);
     return [row.client, row.invoice, row.amount, row.paidAmount, row.pendingAmount, row.status, row.paymentMode, row.paidOn];
   };
-  const paymentObjRows = loadSavedState(branchKey('ayurflow-payments:rows:v3'), loadSavedState('ayurflow:ayurflow-payments:rows:v2', []))
+  const paymentObjRows = loadSavedState(branchKey('ayurflow-payments:rows:v3'), isMainBranch ? loadSavedState('ayurflow:ayurflow-payments:rows:v2', []) : [])
     .map(toPaymentReportRow);
   const paymentRows = [...(finTabs.payments ?? []).map(toPaymentReportRow), ...paymentObjRows];
 
@@ -5833,7 +5911,7 @@ export function ReportsPage() {
     : [row.item ?? row.Item ?? '', row.type ?? row.Type ?? '', row.amount ?? row.Amount ?? '', row.mode ?? row.Mode ?? '', row.status ?? row.Status ?? ''];
   const accountRows = mergeUniqueRows(
     (Array.isArray(finTabs.accounts) ? finTabs.accounts : []).map(accountReportRow),
-    loadSavedArray(branchKey('Accounts:rows:v3'), loadSavedArray('ayurflow:Accounts:rows:v2', [])).map(accountReportRow),
+    loadSavedArray(branchKey('Accounts:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:Accounts:rows:v2', []) : []).map(accountReportRow),
   );
 
   // Revenue helpers
@@ -6284,6 +6362,21 @@ export function BranchesPage() {
   const { branches, currentBranch, setCurrentBranch, addBranch, renameBranch, deleteBranch } = useBranch();
   const [branchName, setBranchName] = useState('');
   const [message, setMessage] = useState('Add a branch to keep its records separate.');
+  const [usersList, setUsersList] = useState(getAllUsers);
+  const [branchLoginModalOpen, setBranchLoginModalOpen] = useState(false);
+  const [selectedBranchForLogin, setSelectedBranchForLogin] = useState('');
+  const [branchLoginForm, setBranchLoginForm] = useState({
+    email: '',
+    password: '',
+    role: 'Branch Manager',
+    permissions: STAFF_PERMISSION_OPTIONS.map((p) => p.path),
+    status: 'Active',
+  });
+  const [modalMessage, setModalMessage] = useState('');
+
+  const refreshUsers = () => {
+    setUsersList(getAllUsers());
+  };
 
   const createBranch = () => {
     if (!addBranch(branchName)) return setMessage('Enter a unique branch name.');
@@ -6291,34 +6384,182 @@ export function BranchesPage() {
     setBranchName('');
   };
 
+  const openBranchLoginModal = (branch) => {
+    setSelectedBranchForLogin(branch);
+    setModalMessage('');
+    const existing = usersList.find((u) => u.branch === branch && (u.isBranchAccount || u.role === 'Branch Manager'))
+      || usersList.find((u) => u.branch === branch);
+    if (existing) {
+      setBranchLoginForm({
+        email: existing.email || '',
+        password: '',
+        role: existing.role || 'Branch Manager',
+        permissions: Array.isArray(existing.permissions) && existing.permissions.length ? existing.permissions : STAFF_PERMISSION_OPTIONS.map((p) => p.path),
+        status: existing.status || 'Active',
+      });
+    } else {
+      const defaultEmail = `${branch.toLowerCase().replace(/[^a-z0-9]+/g, '')}@clinic.com`;
+      setBranchLoginForm({
+        email: defaultEmail,
+        password: '',
+        role: 'Branch Manager',
+        permissions: STAFF_PERMISSION_OPTIONS.map((p) => p.path),
+        status: 'Active',
+      });
+    }
+    setBranchLoginModalOpen(true);
+  };
+
+  const toggleBranchPermission = (path) => {
+    setBranchLoginForm((current) => ({
+      ...current,
+      permissions: current.permissions.includes(path)
+        ? current.permissions.filter((p) => p !== path)
+        : [...current.permissions, path],
+    }));
+  };
+
+  const selectAllPermissions = () => {
+    setBranchLoginForm((current) => ({
+      ...current,
+      permissions: STAFF_PERMISSION_OPTIONS.map((p) => p.path),
+    }));
+  };
+
+  const clearAllPermissions = () => {
+    setBranchLoginForm((current) => ({
+      ...current,
+      permissions: [],
+    }));
+  };
+
+  const saveBranchLogin = async () => {
+    const email = branchLoginForm.email.trim().toLowerCase();
+    const existing = usersList.find((u) => u.branch === selectedBranchForLogin && (u.isBranchAccount || u.role === 'Branch Manager'))
+      || usersList.find((u) => u.branch === selectedBranchForLogin);
+
+    if (!email) {
+      setModalMessage('Enter a valid login email.');
+      return;
+    }
+    if (!existing && branchLoginForm.password.length < 6) {
+      setModalMessage('Enter a password of at least 6 characters.');
+      return;
+    }
+    if (branchLoginForm.password && branchLoginForm.password.length < 6) {
+      setModalMessage('Password must be at least 6 characters.');
+      return;
+    }
+    if (!branchLoginForm.permissions.length) {
+      setModalMessage('Select at least one permission for this branch.');
+      return;
+    }
+
+    const emailConflict = usersList.find((u) => String(u.email).trim().toLowerCase() === email && u.branch !== selectedBranchForLogin);
+    if (emailConflict) {
+      setModalMessage(`Email is already used by staff/branch "${emailConflict.branch}".`);
+      return;
+    }
+
+    const passwordHash = branchLoginForm.password ? await hashPassword(branchLoginForm.password) : existing?.passwordHash;
+    const account = {
+      name: `${selectedBranchForLogin} Account`,
+      email,
+      role: branchLoginForm.role,
+      branch: selectedBranchForLogin,
+      isBranchAccount: true,
+      status: branchLoginForm.status,
+      permissions: branchLoginForm.permissions,
+      passwordHash,
+    };
+
+    saveAuthUser(account);
+    refreshUsers();
+    setMessage(`Login credentials and ${branchLoginForm.permissions.length} permissions saved for ${selectedBranchForLogin}.`);
+    setBranchLoginModalOpen(false);
+  };
+
+  const removeBranchLogin = () => {
+    const existing = usersList.find((u) => u.branch === selectedBranchForLogin && (u.isBranchAccount || u.role === 'Branch Manager'))
+      || usersList.find((u) => u.branch === selectedBranchForLogin);
+    if (existing) {
+      if (window.confirm(`Remove dedicated login for ${selectedBranchForLogin}?`)) {
+        deleteAuthUser(existing.email);
+        refreshUsers();
+        setMessage(`Login removed for ${selectedBranchForLogin}.`);
+        setBranchLoginModalOpen(false);
+      }
+    }
+  };
+
   return (
     <section className="module-page">
       <div className="module-hero">
         <div>
-          <h1>Branches</h1>
-          <p>Each branch has its own patients, appointments, payments, and reports.</p>
+          <h1>Branches & Data Isolation</h1>
+          <p>Configure clinic branches, assign separate login credentials, and manage module permissions per branch.</p>
         </div>
         <div className="module-stats">
           <div className="mini-stat"><span>Branches</span><strong>{branches.length}</strong></div>
-          <div className="mini-stat"><span>Workspace</span><strong>{currentBranch}</strong></div>
-          <div className="mini-stat"><span>Scope</span><strong>Separate</strong></div>
+          <div className="mini-stat"><span>Active Workspace</span><strong>{currentBranch}</strong></div>
+          <div className="mini-stat"><span>Data Isolation</span><strong>100% Isolated</strong></div>
         </div>
       </div>
 
       <Card title="Add Branch" subtitle={message}>
         <div className="sheet-actions">
-          <input className="lead-input" value={branchName} onChange={(event) => setBranchName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') createBranch(); }} placeholder="Enter branch name" />
+          <input
+            className="lead-input"
+            value={branchName}
+            onChange={(event) => setBranchName(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter') createBranch(); }}
+            placeholder="Enter branch name (e.g. Surat Branch, Varachha)"
+          />
           <button className="pill primary-action" type="button" onClick={createBranch}>+ Add Branch</button>
         </div>
       </Card>
 
-      <Card title="Your Branches" subtitle="Select a branch to work in.">
-        <div className="table adaptive-table" style={{ '--table-columns': 3 }}>
-          <div className="table-head"><div>Branch</div><div>Status</div><div>Actions</div></div>
-          {branches.map((branch) => <div className="data-row" key={branch}>
-            <div><strong>{branch}</strong></div><div>{branch === currentBranch ? 'Active' : 'Available'}</div>
-            <div className="card-action-group"><button className="pill" type="button" onClick={() => setCurrentBranch(branch)}>Open</button><button className="pill" type="button" onClick={() => { const next = window.prompt('New branch name', branch); if (next && !renameBranch(branch, next)) setMessage('Branch name must be unique.'); }}>Rename</button><button className="pill danger-action" type="button" disabled={branches.length === 1} onClick={() => { if (window.confirm(`Delete ${branch}?`)) deleteBranch(branch); }}>Delete</button></div>
-          </div>)}
+      <Card title="Your Branches & Access Control" subtitle="Each branch has its own isolated records, login credentials, and permission settings.">
+        <div className="table adaptive-table" style={{ '--table-columns': 4 }}>
+          <div className="table-head">
+            <div>Branch</div>
+            <div>Status</div>
+            <div>Login & Permissions</div>
+            <div>Actions</div>
+          </div>
+          {branches.map((branch) => {
+            const account = usersList.find((u) => u.branch === branch && (u.isBranchAccount || u.role === 'Branch Manager'))
+              || usersList.find((u) => u.branch === branch);
+            return (
+              <div className="data-row" key={branch}>
+                <div>
+                  <strong>{branch}</strong>
+                  {branch === currentBranch && <span className="branch-current-tag">Current</span>}
+                </div>
+                <div>{branch === currentBranch ? <Tag tone="tag-contacted">Active</Tag> : <Tag tone="tag-follow">Available</Tag>}</div>
+                <div>
+                  {account ? (
+                    <div className="branch-account-summary">
+                      <span className="branch-account-email">📧 {account.email}</span>
+                      <small className="branch-account-count">
+                        {Array.isArray(account.permissions) ? `${account.permissions.length} module(s) permitted` : 'Full access'}
+                      </small>
+                    </div>
+                  ) : (
+                    <span className="branch-no-login">No branch login (Admin only)</span>
+                  )}
+                </div>
+                <div className="card-action-group">
+                  <button className="pill" type="button" onClick={() => setCurrentBranch(branch)}>Open</button>
+                  <button className="pill primary-action" type="button" onClick={() => openBranchLoginModal(branch)}>
+                    🔑 Login & Permissions
+                  </button>
+                  <button className="pill" type="button" onClick={() => { const next = window.prompt('New branch name', branch); if (next && !renameBranch(branch, next)) setMessage('Branch name must be unique.'); }}>Rename</button>
+                  <button className="pill danger-action" type="button" disabled={branches.length === 1} onClick={() => { if (window.confirm(`Delete ${branch}?`)) deleteBranch(branch); }}>Delete</button>
+                </div>
+              </div>
+            );
+          })}
         </div>
         <div className="sheet-actions">
           <button className="pill primary-action" type="button" onClick={() => navigate('/clients')}>Open Patients <ChevronRight /></button>
@@ -6327,22 +6568,112 @@ export function BranchesPage() {
         </div>
       </Card>
 
+      {branchLoginModalOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setBranchLoginModalOpen(false)}>
+          <div className="modal-shell branch-access-modal" role="dialog" aria-modal="true" aria-label="Branch Login and Permissions" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>Branch Login & Permissions: {selectedBranchForLogin}</h2>
+                <p>Set separate login credentials and choose exactly which modules this branch can access. Data will remain completely isolated from Admin and other branches.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setBranchLoginModalOpen(false)} aria-label="Close modal">✕</button>
+            </div>
+            <div className="modal-body detail-grid">
+              {modalMessage && (
+                <div className="action-note danger-note full-field" role="alert">
+                  <strong>Notice:</strong> {modalMessage}
+                </div>
+              )}
+              <label className="field-block">
+                <span>Branch Name</span>
+                <input className="lead-input" value={selectedBranchForLogin} readOnly disabled />
+              </label>
+              <label className="field-block">
+                <span>Role / Designation</span>
+                <select
+                  className="lead-input"
+                  value={branchLoginForm.role}
+                  onChange={(event) => setBranchLoginForm((current) => ({ ...current, role: event.target.value }))}
+                >
+                  <option>Branch Manager</option>
+                  <option>Branch Operator</option>
+                  <option>Doctor</option>
+                  <option>Receptionist</option>
+                  <option>Staff</option>
+                </select>
+              </label>
+              <label className="field-block">
+                <span>Branch Login Email *</span>
+                <input
+                  className="lead-input"
+                  type="email"
+                  autoComplete="off"
+                  value={branchLoginForm.email}
+                  onChange={(event) => setBranchLoginForm((current) => ({ ...current, email: event.target.value }))}
+                  placeholder="e.g. surat@clinic.com"
+                />
+              </label>
+              <label className="field-block">
+                <span>Password</span>
+                <input
+                  className="lead-input"
+                  type="password"
+                  autoComplete="new-password"
+                  value={branchLoginForm.password}
+                  onChange={(event) => setBranchLoginForm((current) => ({ ...current, password: event.target.value }))}
+                  placeholder="Leave empty to keep current password, or min 6 chars"
+                />
+              </label>
+
+              <fieldset className="full-field permission-fieldset">
+                <div className="permission-header-row">
+                  <legend>Module Permissions ({branchLoginForm.permissions.length} selected)</legend>
+                  <div className="permission-quick-btns">
+                    <button className="pill" type="button" onClick={selectAllPermissions}>Select All</button>
+                    <button className="pill" type="button" onClick={clearAllPermissions}>Clear All</button>
+                  </div>
+                </div>
+                <div className="permission-grid">
+                  {STAFF_PERMISSION_OPTIONS.map((permission) => (
+                    <label className="toggle-row" key={permission.path}>
+                      <input
+                        type="checkbox"
+                        checked={branchLoginForm.permissions.includes(permission.path)}
+                        onChange={() => toggleBranchPermission(permission.path)}
+                      />
+                      <span>{permission.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+            <div className="modal-actions">
+              <button className="pill" type="button" onClick={() => setBranchLoginModalOpen(false)}>Cancel</button>
+              {usersList.some((u) => u.branch === selectedBranchForLogin && (u.isBranchAccount || u.role === 'Branch Manager')) && (
+                <button className="pill danger" type="button" onClick={removeBranchLogin}>Remove Login</button>
+              )}
+              <button className="pill primary-action" type="button" onClick={saveBranchLogin}>Save Branch Access</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Card title="Live Sync Checklist" subtitle="Use this screen to confirm the app is running in live-only shared workspace mode.">
         <div className="table adaptive-table" style={{ '--table-columns': 2 }}>
           <div className="table-head">
             <div>Area</div>
             <div>Status</div>
-            <div />
+            <div>Branch Isolation</div>
           </div>
           {[
-            ['Authentication', 'Single admin account'],
-            ['Database', 'PostgreSQL live sync'],
-            ['Workspace', 'Shared across devices'],
-          ].map(([area, status]) => (
+            ['Authentication', 'Admin & Branch accounts supported', 'Branch-scoped'],
+            ['Database', 'PostgreSQL live sync', 'Scoped per branch'],
+            ['Workspace', 'Shared across devices', 'Isolated per branch'],
+          ].map(([area, status, isolation]) => (
             <div className="data-row" key={area}>
               <div>{area}</div>
               <div><StatusPill tone="st-ok">{status}</StatusPill></div>
-              <div />
+              <div><Tag tone="tag-contacted">{isolation}</Tag></div>
             </div>
           ))}
         </div>

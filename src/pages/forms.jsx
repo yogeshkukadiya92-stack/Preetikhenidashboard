@@ -72,6 +72,8 @@ const FORM_TEMPLATES = [
       ['date', 'Birth date', { width: 'half' }],
       ['address', 'Address', { placeholder: 'Full address' }],
       ['select', 'Visit type', { options: ['Consultation', 'Follow-up', 'Weight Loss', 'Skin Care', 'Hair Treatment', 'Panchakarma'], required: true, width: 'half' }],
+      ['text', 'Reference', { placeholder: 'Referred by (Doctor / Friend / Family)', width: 'half' }],
+      ['phone', 'Reference number', { placeholder: 'Reference contact number', width: 'half' }],
       ['textarea', 'Main concern', { placeholder: 'What brings you here today?' }],
       ['checkbox', 'Consent', { required: true, placeholder: 'I confirm the details are correct.' }],
     ],
@@ -88,7 +90,7 @@ const FORM_TEMPLATES = [
       ['textarea', 'Current medicines', { placeholder: 'Medicine name, dose, timing' }],
       ['scale', 'Energy level', { min: 1, max: 10, width: 'half' }],
       ['scale', 'Sleep quality', { min: 1, max: 10, width: 'half' }],
-      ['file', 'Upload reports', { acceptedFiles: '.pdf,image/*', maxFileMb: 5 }],
+      ['file', 'Upload reports', { acceptedFiles: '.pdf,image/*', maxFileMb: 25, allowMultiple: true, maxFiles: 5 }],
     ],
   },
   {
@@ -152,7 +154,9 @@ function makeField(type = 'text') {
     minLength: '',
     maxLength: '',
     acceptedFiles: '',
-    maxFileMb: 2,
+    maxFileMb: 25,
+    allowMultiple: true,
+    maxFiles: 5,
     width: layoutType ? 'full' : 'full',
     condition: { enabled: false, fieldId: '', operator: 'equals', value: '' },
     dataTarget: '',
@@ -281,10 +285,307 @@ function validateField(field, value) {
 }
 
 function displayAnswer(value) {
-  if (Array.isArray(value)) return value.join(', ');
+  if (Array.isArray(value)) {
+    if (value.length > 0 && typeof value[0] === 'object' && (value[0]?.name || value[0]?.dataUrl)) {
+      return value.map((f, i) => f.name || `Photo ${i + 1}`).join('; ');
+    }
+    return value.join(', ');
+  }
   if (value && typeof value === 'object') return value.name ?? JSON.stringify(value);
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   return String(value ?? '');
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function compressImageFile(file, maxDimension = 1800, quality = 0.85) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve(null);
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => resolve(reader.result);
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(reader.result);
+          ctx.drawImage(img, 0, 0, width, height);
+          const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          resolve(canvas.toDataURL(outputType, quality));
+        } catch {
+          resolve(reader.result);
+        }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function processUploadedFile(file, maxMb) {
+  const maxBytes = maxMb * 1024 * 1024;
+  if (file.size > maxBytes) {
+    throw new Error(`"${file.name}" is larger than ${maxMb} MB.`);
+  }
+  let dataUrl = null;
+  if (file.type && file.type.startsWith('image/')) {
+    dataUrl = await compressImageFile(file, 1800, 0.85);
+  }
+  if (!dataUrl) {
+    dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+  return {
+    name: file.name,
+    size: file.size,
+    type: file.type || 'application/octet-stream',
+    dataUrl,
+  };
+}
+
+function FileUploadField({ field, value, error, onChange, inputId }) {
+  const [processing, setProcessing] = useState(false);
+  const [localError, setLocalError] = useState('');
+  const initialInputRef = useRef(null);
+  const addMoreInputRef = useRef(null);
+
+  const isMultiple = field.allowMultiple !== false;
+  const maxFiles = isMultiple ? Math.max(1, Number(field.maxFiles || 5)) : 1;
+  const maxMb = Math.max(1, Number(field.maxFileMb || 25));
+
+  const files = useMemo(() => {
+    if (Array.isArray(value)) return value.filter((f) => f && typeof f === 'object');
+    if (value && typeof value === 'object' && (value.name || value.dataUrl)) return [value];
+    return [];
+  }, [value]);
+
+  const handleFiles = async (fileList, append = false) => {
+    setLocalError('');
+    const rawFiles = Array.from(fileList || []);
+    if (!rawFiles.length) return;
+
+    if (!isMultiple) {
+      setProcessing(true);
+      try {
+        const item = await processUploadedFile(rawFiles[0], maxMb);
+        onChange(item);
+      } catch (err) {
+        setLocalError(err.message || `File must be smaller than ${maxMb} MB.`);
+      } finally {
+        setProcessing(false);
+      }
+      return;
+    }
+
+    const currentFiles = append ? [...files] : [];
+    const availableSlots = maxFiles - currentFiles.length;
+
+    if (availableSlots <= 0) {
+      setLocalError(`You can upload a maximum of ${maxFiles} photos.`);
+      return;
+    }
+
+    const selectedToProcess = rawFiles.slice(0, availableSlots);
+    let errorMsg = '';
+    if (rawFiles.length > availableSlots) {
+      errorMsg = `Maximum ${maxFiles} photos allowed. Only ${availableSlots} photo(s) were added.`;
+    }
+
+    setProcessing(true);
+    try {
+      const results = [];
+      for (const file of selectedToProcess) {
+        try {
+          const item = await processUploadedFile(file, maxMb);
+          results.push(item);
+        } catch (itemErr) {
+          errorMsg = itemErr.message || `One of the files is larger than ${maxMb} MB.`;
+        }
+      }
+      if (results.length) {
+        onChange([...currentFiles, ...results]);
+      }
+      if (errorMsg) setLocalError(errorMsg);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const removeFile = (indexToRemove) => {
+    setLocalError('');
+    const updated = files.filter((_, index) => index !== indexToRemove);
+    onChange(isMultiple ? updated : null);
+  };
+
+  return (
+    <div className="file-upload-wrapper">
+      <input
+        ref={initialInputRef}
+        id={inputId}
+        type="file"
+        multiple={isMultiple}
+        accept={field.acceptedFiles || 'image/*,.pdf'}
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          handleFiles(e.target.files, false);
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={addMoreInputRef}
+        type="file"
+        multiple={isMultiple}
+        accept={field.acceptedFiles || 'image/*,.pdf'}
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          handleFiles(e.target.files, true);
+          e.target.value = '';
+        }}
+      />
+
+      {files.length === 0 ? (
+        <div
+          className={`file-drop-zone ${error || localError ? 'input-error' : ''}`}
+          onClick={() => !processing && initialInputRef.current?.click()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); initialInputRef.current?.click(); } }}
+        >
+          <div className="file-drop-icon">📷</div>
+          <div className="file-drop-text">
+            <strong>{processing ? 'Processing photos...' : isMultiple ? 'Tap to choose photos (up to 5)' : 'Tap to choose photo/file'}</strong>
+            <span>{isMultiple ? `Select up to ${maxFiles} photos together • Max ${maxMb} MB each` : `Max size ${maxMb} MB`}</span>
+          </div>
+          <button type="button" className="pill primary-action" disabled={processing} onClick={(e) => { e.stopPropagation(); initialInputRef.current?.click(); }}>
+            {processing ? 'Uploading...' : 'Choose Photos'}
+          </button>
+        </div>
+      ) : (
+        <div className="uploaded-files-container">
+          <div className="uploaded-photos-grid">
+            {files.map((file, index) => {
+              const isImage = file.dataUrl && (file.type?.startsWith('image/') || file.dataUrl.startsWith('data:image/'));
+              return (
+                <div className="uploaded-photo-card" key={`${file.name}-${index}`}>
+                  <button
+                    type="button"
+                    className="uploaded-photo-remove"
+                    title="Remove photo"
+                    aria-label={`Remove ${file.name || 'photo'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(index);
+                    }}
+                  >
+                    ✕
+                  </button>
+                  {isImage ? (
+                    <img src={file.dataUrl} alt={file.name || `Photo ${index + 1}`} className="uploaded-photo-thumb" />
+                  ) : (
+                    <div className="uploaded-doc-placeholder">📄 PDF / Document</div>
+                  )}
+                  <div className="uploaded-photo-meta">
+                    <span className="uploaded-photo-title" title={file.name}>{file.name || `Photo ${index + 1}`}</span>
+                    {file.size ? <span className="uploaded-photo-size">{formatFileSize(file.size)}</span> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="upload-actions-bar">
+            <span className="upload-count-label">
+              <strong>{files.length} of {maxFiles}</strong> photos selected
+            </span>
+            <div className="upload-actions-btns">
+              {isMultiple && files.length < maxFiles && (
+                <button
+                  type="button"
+                  className="pill add-more-photos-btn"
+                  disabled={processing}
+                  onClick={() => addMoreInputRef.current?.click()}
+                >
+                  {processing ? 'Processing...' : `+ Add more photos (${maxFiles - files.length} left)`}
+                </button>
+              )}
+              <button
+                type="button"
+                className="pill subtle-pill"
+                disabled={processing}
+                onClick={() => onChange(isMultiple ? [] : null)}
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {processing && <p className="field-help uploading-text">⏳ Processing and optimizing photos, please wait...</p>}
+      {localError && <p className="field-error" role="alert">{localError}</p>}
+    </div>
+  );
+}
+
+function renderAnswerContent(answer, field) {
+  if (field?.type === 'file') {
+    const fileList = Array.isArray(answer)
+      ? answer.filter(Boolean)
+      : answer && typeof answer === 'object'
+        ? [answer]
+        : [];
+    if (!fileList.length) return <strong className="subtle">No file uploaded</strong>;
+    return (
+      <div className="response-file-gallery">
+        {fileList.map((file, idx) => {
+          const isImg = file.dataUrl && (file.type?.startsWith('image/') || file.dataUrl.startsWith('data:image/'));
+          return (
+            <div className="response-file-card" key={idx}>
+              {isImg ? (
+                <a href={file.dataUrl} target="_blank" rel="noreferrer" className="response-file-link" title="Click to view full image">
+                  <img src={file.dataUrl} alt={file.name || `Photo ${idx + 1}`} className="response-thumb-img" />
+                </a>
+              ) : (
+                <div className="response-doc-thumb">📄</div>
+              )}
+              <div className="response-file-meta">
+                <span className="response-file-name" title={file.name}>{file.name || `File ${idx + 1}`}</span>
+                {file.size ? <small className="response-file-size">{formatFileSize(file.size)}</small> : null}
+                {file.dataUrl && (
+                  <a href={file.dataUrl} download={file.name || `photo-${idx + 1}.jpg`} className="response-download-link">
+                    ⬇ Download
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return <strong>{displayAnswer(answer) || 'No answer'}</strong>;
 }
 
 function FormField({ field, value, error, onChange, accentColor }) {
@@ -388,34 +689,7 @@ function FormField({ field, value, error, onChange, accentColor }) {
       </div>
     );
   } else if (field.type === 'file') {
-    control = (
-      <div>
-        <input
-          id={inputId}
-          className={`lead-input file-input ${error ? 'input-error' : ''}`}
-          type="file"
-          accept={field.acceptedFiles || undefined}
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            const maxBytes = Number(field.maxFileMb || 2) * 1024 * 1024;
-            if (file.size > maxBytes) {
-              onChange({ error: `File must be smaller than ${field.maxFileMb || 2} MB.` });
-              return;
-            }
-            const dataUrl = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result);
-              reader.onerror = reject;
-              reader.readAsDataURL(file);
-            });
-            onChange({ name: file.name, size: file.size, type: file.type, dataUrl });
-          }}
-        />
-        {value?.name && <p className="field-help">Selected: {value.name}</p>}
-        {value?.error && <p className="field-error">{value.error}</p>}
-      </div>
-    );
+    control = <FileUploadField field={field} value={value} error={error} onChange={onChange} inputId={inputId} />;
   } else {
     const typeMap = { phone: 'tel', datetime: 'datetime-local' };
     control = (
@@ -678,10 +952,54 @@ function FieldInspector({ field, allFields, onChange, onAddOption, onUpdateOptio
         </div>
       )}
       {field.type === 'file' && (
-        <div className="inspector-inline-grid">
-          <label className="field-block"><span>Accepted file types</span><input className="lead-input" value={field.acceptedFiles ?? ''} onChange={(event) => onChange('acceptedFiles', event.target.value)} placeholder=".pdf,image/*" /></label>
-          <label className="field-block"><span>Max size (MB)</span><input className="lead-input" type="number" min="1" max="5" value={field.maxFileMb ?? 2} onChange={(event) => onChange('maxFileMb', event.target.value)} /></label>
-        </div>
+        <>
+          <div className="inspector-inline-grid">
+            <label className="field-block">
+              <span>Accepted file types</span>
+              <input
+                className="lead-input"
+                value={field.acceptedFiles ?? ''}
+                onChange={(event) => onChange('acceptedFiles', event.target.value)}
+                placeholder=".pdf,image/*"
+              />
+            </label>
+            <label className="field-block">
+              <span>Max size per file (MB)</span>
+              <input
+                className="lead-input"
+                type="number"
+                min="1"
+                max="100"
+                value={field.maxFileMb ?? 25}
+                onChange={(event) => onChange('maxFileMb', event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="inspector-inline-grid" style={{ marginTop: '8px' }}>
+            <label className="toggle-row" style={{ alignSelf: 'center' }}>
+              <input
+                type="checkbox"
+                checked={field.allowMultiple !== false}
+                onChange={(event) => onChange('allowMultiple', event.target.checked)}
+              />
+              <span>Allow multiple files (upload photos together)</span>
+            </label>
+            {field.allowMultiple !== false && (
+              <label className="field-block">
+                <span>Max photos / files</span>
+                <input
+                  className="lead-input"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={field.maxFiles ?? 5}
+                  onChange={(event) => onChange('maxFiles', event.target.value)}
+                  placeholder="5"
+                />
+              </label>
+            )}
+          </div>
+        </>
       )}
       {!layoutOnly && conditionSources.length > 0 && (
         <div className="condition-editor">
@@ -1132,7 +1450,7 @@ export function FormsPage() {
           <Card title="Response Details" subtitle={new Date(selectedResponse.submittedAt).toLocaleString('en-IN')} action={<button className="pill" type="button" onClick={() => setSelectedResponse(null)}>Close</button>}>
             <div className="response-detail-grid">
               {responseFields.map((field) => (
-                <div className="response-answer" key={field.id}><span>{field.label || fieldTypeLabel(field.type)}</span><strong>{displayAnswer(selectedResponse.answers?.[field.id]) || 'No answer'}</strong></div>
+                <div className="response-answer" key={field.id}><span>{field.label || fieldTypeLabel(field.type)}</span>{renderAnswerContent(selectedResponse.answers?.[field.id], field)}</div>
               ))}
             </div>
           </Card>
@@ -1215,7 +1533,7 @@ export function FormsPage() {
                       <div className="inline-response-detail-head"><div><span className="control-label">Submitted response</span><strong>{new Date(selectedResponse.submittedAt).toLocaleString('en-IN')}</strong></div><button className="pill" type="button" onClick={() => setSelectedResponse(null)}>Close details</button></div>
                       <div className="response-detail-grid">
                         {responseForm.fields.filter((field) => INPUT_TYPES.has(field.type)).map((field) => (
-                          <div className="response-answer" key={field.id}><span>{field.label || fieldTypeLabel(field.type)}</span><strong>{displayAnswer(selectedResponse.answers?.[field.id]) || 'No answer'}</strong></div>
+                          <div className="response-answer" key={field.id}><span>{field.label || fieldTypeLabel(field.type)}</span>{renderAnswerContent(selectedResponse.answers?.[field.id], field)}</div>
                         ))}
                       </div>
                     </>
