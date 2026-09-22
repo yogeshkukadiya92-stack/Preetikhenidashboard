@@ -598,6 +598,7 @@ function ImportExportModule({
   fieldTypes = {},
   createDefaultRecord = null,
   renderSummary = null,
+  actionsPosition = undefined,
 }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -605,6 +606,7 @@ function ImportExportModule({
   const isMainBranch = currentBranch === 'Main Branch';
   const isClientModule = title === 'Clients';
   const isPaymentsModule = title === 'Payments';
+  const resolvedActionsPosition = actionsPosition ?? (isClientModule ? 'front' : 'end');
   const displayTitle = patientDisplayLabel(title);
   const displayHeader = (header) => (isClientModule || header === 'Client' ? patientDisplayLabel(header) : header);
   const tableGridTemplate = isClientModule
@@ -996,6 +998,7 @@ function ImportExportModule({
   const defaultRowAction = (row, openSignal = 0) => (
     <ActionMenu
       compact
+      align={resolvedActionsPosition === 'front' ? 'left' : 'right'}
       label={`Actions for ${rowToCsvValues(row)[0] || 'record'}`}
       openSignal={openSignal}
       items={[
@@ -1070,13 +1073,14 @@ function ImportExportModule({
 
       <div className="grid single-module-grid">
         <Card title={`Current ${displayTitle}`} subtitle={message} action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openAddRecord}>+ Add {displayTitle}</button>{selectedCount > 0 && <button className="pill danger-action" type="button" onClick={deleteSelectedRecords}>Delete selected ({selectedCount})</button>}<button className="pill" type="button" onClick={() => bannerFileInputRef.current?.click()}>Import</button><button className="pill" type="button" onClick={exportCsv}>Export</button><ActionMenu label="Actions" items={moduleActions} /></div>}>
-          <div className="table adaptive-table selectable-table" style={tableStyle}>
+          <div className={`table adaptive-table selectable-table ${resolvedActionsPosition === 'front' ? 'actions-front' : ''}`} style={tableStyle}>
             <div className="table-head">
               <div className="select-cell">
                 <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisibleRows} aria-label={`Select all visible ${displayTitle.toLowerCase()}`} />
               </div>
+              {resolvedActionsPosition === 'front' && <div className="action-head-cell">Actions</div>}
               {headers.map((header) => <div key={header}>{displayHeader(header)}</div>)}
-              <div />
+              {resolvedActionsPosition !== 'front' && <div />}
             </div>
             {filteredRows.length ? (
               filteredRows.map((row, index) => {
@@ -1098,8 +1102,15 @@ function ImportExportModule({
                   <div className="select-cell" data-label="">
                     <input type="checkbox" checked={selectedRowIndexes.has(rowIndex)} onChange={() => toggleRowSelection(rowIndex)} aria-label={`Select ${rowToCsvValues(row)[0] || 'record'}`} />
                   </div>
+                  {resolvedActionsPosition === 'front' && (
+                    <div className="action-cell" data-label="Actions">
+                      {rowActions ? rowActions(row, openEditRecord, deleteRecord, { openSignal }) : defaultRowAction(row, openSignal)}
+                    </div>
+                  )}
                   {headers.map((header) => <div data-label={displayHeader(header)} key={header}>{rowToValues(row)[header]}</div>)}
-                  <div>{rowActions ? rowActions(row, openEditRecord, deleteRecord, { openSignal }) : defaultRowAction(row, openSignal)}</div>
+                  {resolvedActionsPosition !== 'front' && (
+                    <div>{rowActions ? rowActions(row, openEditRecord, deleteRecord, { openSignal }) : defaultRowAction(row, openSignal)}</div>
+                  )}
                 </div>
                 );
               })
@@ -2317,9 +2328,11 @@ export function ClientsPage() {
         'Reference Number': '',
       })}
       renderSummary={(rows, rowToValues) => <ClientMonthlySummary rows={rows} rowToValues={rowToValues} />}
+      actionsPosition="front"
       rowActions={(row, openEditRecord, deleteRecord, actionContext = {}) => (
         <ActionMenu
           label="Actions"
+          align="left"
           openSignal={actionContext.openSignal}
           items={[
             { label: 'View Profile', description: 'Open patient details', onClick: () => setSelectedClient(row) },
