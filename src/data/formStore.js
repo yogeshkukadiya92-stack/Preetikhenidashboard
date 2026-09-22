@@ -306,6 +306,20 @@ export function deleteLocalResponse(responseId) {
   return writeJson(RESPONSES_KEY, current.filter((response) => response.id !== responseId));
 }
 
+export async function deleteResponseRecord(formIdentifier, responseId) {
+  deleteLocalResponse(responseId);
+  if (!apiBase || !responseId) return { delivery: 'local' };
+  try {
+    await apiRequest(`/forms/${encodeURIComponent(formIdentifier || 'default')}/responses/${encodeURIComponent(responseId)}`, {
+      method: 'DELETE',
+    });
+    return { delivery: 'api' };
+  } catch (error) {
+    return { delivery: 'local', warning: error.message };
+  }
+}
+
+
 export function getPublicFormUrl(form) {
   const configuredBase = String(import.meta.env.VITE_APP_URL ?? '').trim().replace(/\/$/, '');
   const base = configuredBase || window.location.origin;

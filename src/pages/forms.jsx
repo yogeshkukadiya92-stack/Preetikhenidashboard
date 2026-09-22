@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { ActionMenu, Card, Tag } from '../components/ui.jsx';
 import {
   deleteLocalResponse,
+  deleteResponseRecord,
   deleteSharedForm,
   getPublicFormUrl,
   hasFormsApi,
@@ -588,6 +589,20 @@ function renderAnswerContent(answer, field) {
   return <strong>{displayAnswer(answer) || 'No answer'}</strong>;
 }
 
+function formatSubmissionDate(dateValue) {
+  if (!dateValue) return '';
+  const date = new Date(dateValue);
+  if (isNaN(date.getTime())) return String(dateValue);
+  return date.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
 function FormField({ field, value, error, onChange, accentColor }) {
   const inputId = `public-${field.id}`;
   const common = {
@@ -1043,6 +1058,7 @@ export function FormsPage() {
   const [responses, setResponses] = useState([]);
   const [responsesLoading, setResponsesLoading] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState(null);
+  const [modalResponse, setModalResponse] = useState(null);
   const [message, setMessage] = useState(hasFormsApi() ? 'Forms API connected.' : 'Local mode. Configure Forms API for cross-device submissions.');
   const dragFieldId = useRef(null);
   const inlineResponsesRef = useRef(null);
@@ -1290,12 +1306,13 @@ export function FormsPage() {
     setMessage('Responses CSV export started.');
   };
 
-  const removeResponse = (response) => {
-    if (!window.confirm('Delete this local response?')) return;
-    deleteLocalResponse(response.id);
+  const removeResponse = async (response) => {
+    if (!window.confirm('Delete this response? This cannot be undone.')) return;
+    await deleteResponseRecord(responseForm?.slug || response.formSlug || response.formId, response.id);
     setResponses((current) => current.filter((item) => item.id !== response.id));
-    setSelectedResponse(null);
-    setMessage('Local response deleted.');
+    if (selectedResponse?.id === response.id) setSelectedResponse(null);
+    if (modalResponse?.id === response.id) setModalResponse(null);
+    setMessage('Response deleted.');
   };
 
   if (view === 'preview' && draftForm) {
@@ -1435,10 +1452,10 @@ export function FormsPage() {
               <div className="table-head"><div>Submitted</div><div>Email</div><div>Response</div><div /></div>
               {responses.map((response) => (
                 <div className="data-row" key={response.id}>
-                  <div>{new Date(response.submittedAt).toLocaleString('en-IN')}</div>
+                  <div>{formatSubmissionDate(response.submittedAt)}</div>
                   <div>{response.respondentEmail || 'Not collected'}</div>
                   <div>{responseFields.slice(0, 2).map((field) => displayAnswer(response.answers?.[field.id])).filter(Boolean).join(' - ') || 'Open response'}</div>
-                  <div><ActionMenu compact label={`Actions for response ${response.id}`} items={[{ label: 'View response', onClick: () => setSelectedResponse(response) }, { label: 'Delete local response', danger: true, onClick: () => removeResponse(response) }]} /></div>
+                  <div><ActionMenu compact label={`Actions for response ${response.id}`} items={[{ label: 'View response', onClick: () => { setSelectedResponse(response); setModalResponse(response); } }, { label: 'Delete response', danger: true, onClick: () => removeResponse(response) }]} /></div>
                 </div>
               ))}
             </div>
@@ -1520,10 +1537,48 @@ export function FormsPage() {
                     const submitter = displayAnswer(response.answers?.[nameField?.id]) || response.respondentEmail || `Submission ${index + 1}`;
                     const phone = displayAnswer(response.answers?.[phoneField?.id]);
                     return (
-                      <button className={`inline-response-item ${selectedResponse?.id === response.id ? 'active' : ''}`} type="button" key={response.id} onClick={() => setSelectedResponse(response)}>
-                        <span><strong>{submitter}</strong><small>{phone || response.respondentEmail || 'Contact not collected'}</small></span>
-                        <time>{new Date(response.submittedAt).toLocaleString('en-IN')}</time>
-                      </button>
+                      <div className={`inline-response-item ${selectedResponse?.id === response.id ? 'active' : ''}`} key={response.id}>
+                        <button
+                          className="inline-response-main"
+                          type="button"
+                          onClick={() => {
+                            setSelectedResponse(response);
+                            setModalResponse(response);
+                          }}
+                          aria-label={`View submission for ${submitter}`}
+                        >
+                          <span className="inline-response-info">
+                            <strong>{submitter}</strong>
+                            <small>{phone || response.respondentEmail || 'Contact not collected'}</small>
+                          </span>
+                          <span className="inline-response-meta">
+                            <time>{formatSubmissionDate(response.submittedAt)}</time>
+                          </span>
+                        </button>
+                        <div className="inline-response-actions">
+                          <ActionMenu
+                            compact
+                            align="right"
+                            label={`Actions for ${submitter}`}
+                            items={[
+                              {
+                                label: 'View response',
+                                description: 'See all submitted answers',
+                                onClick: () => {
+                                  setSelectedResponse(response);
+                                  setModalResponse(response);
+                                },
+                              },
+                              {
+                                label: 'Delete response',
+                                description: 'Remove this submission',
+                                danger: true,
+                                onClick: () => removeResponse(response),
+                              },
+                            ]}
+                          />
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -1544,6 +1599,42 @@ export function FormsPage() {
               <div className="empty-state compact-empty"><strong>No responses yet.</strong><p>This form has not been submitted by anyone yet.</p></div>
             )}
           </Card>
+        </div>
+      )}
+
+      {modalResponse && responseForm && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setModalResponse(null)}>
+          <div className="modal-shell" role="dialog" aria-modal="true" aria-label="Response Details" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h2>{displayAnswer(modalResponse.answers?.[responseForm.fields.find((field) => /name|patient|client/i.test(field.label ?? ''))?.id]) || modalResponse.respondentEmail || 'Submission Details'}</h2>
+                <p>{responseForm.title} &bull; {formatSubmissionDate(modalResponse.submittedAt)}</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={() => setModalResponse(null)} aria-label="Close modal">x</button>
+            </div>
+            <div className="modal-body detail-grid">
+              {responseForm.fields.filter((field) => INPUT_TYPES.has(field.type)).map((field) => (
+                <div className="response-answer" key={field.id}>
+                  <span>{field.label || fieldTypeLabel(field.type)}</span>
+                  {renderAnswerContent(modalResponse.answers?.[field.id], field)}
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button
+                className="pill danger-action"
+                type="button"
+                onClick={() => {
+                  const target = modalResponse;
+                  setModalResponse(null);
+                  removeResponse(target);
+                }}
+              >
+                Delete Response
+              </button>
+              <button className="pill primary-action" type="button" onClick={() => setModalResponse(null)}>Close</button>
+            </div>
+          </div>
         </div>
       )}
     </section>

@@ -289,6 +289,17 @@ app.get('/api/forms/:identifier/responses', asyncHandler(async (request, respons
   response.json({ responses: result.rows.map((row) => row.response) });
 }));
 
+app.delete('/api/forms/:identifier/responses/:responseId', asyncHandler(async (request, response) => {
+  const db = getPool();
+  if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
+  const responseId = String(request.params.responseId ?? '').trim();
+  if (responseId) {
+    await db.query('delete from form_responses where id = $1', [responseId]);
+  }
+  response.status(204).end();
+}));
+
+
 app.put('/api/attendance/forms/:slug', asyncHandler(async (request, response) => {
   const db = getPool();
   if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
