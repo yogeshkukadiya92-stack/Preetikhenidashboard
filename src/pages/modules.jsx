@@ -633,6 +633,7 @@ function ImportExportModule({
   const [editIndex, setEditIndex] = useState(-1);
   const [editRecord, setEditRecord] = useState(() => Object.fromEntries(headers.map((header) => [header, ''])));
   const [draftMatchedIndex, setDraftMatchedIndex] = useState(-1);
+  const [draftSaveError, setDraftSaveError] = useState('');
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [selectedRowIndexes, setSelectedRowIndexes] = useState(() => new Set());
   const [rowActionRequest, setRowActionRequest] = useState({ index: -1, token: 0 });
@@ -659,6 +660,7 @@ function ImportExportModule({
     const defaults = typeof createDefaultRecord === 'function' ? createDefaultRecord(rows) : {};
     setDraftRecord(Object.fromEntries(headers.map((header) => [header, defaults[header] ?? (header === 'Client' ? (searchParams.get('client') ?? '') : header === 'Mobile' ? (searchParams.get('mobile') ?? '') : '')])));
     setDraftMatchedIndex(-1);
+    setDraftSaveError('');
     setAddOpen(true);
     setMessage(`Add ${displayTitle.toLowerCase()} record opened.`);
   };
@@ -803,12 +805,14 @@ function ImportExportModule({
   const allVisibleSelected = visibleRowIndexes.length > 0 && visibleRowIndexes.every((index) => selectedRowIndexes.has(index));
 
   const updateRecordField = (setter, header, value) => {
+    if (setter === setDraftRecord) setDraftSaveError('');
     if (isClientModule && header === 'Client ID' && setter === setDraftRecord) {
       const clientId = normalizeClientId(value);
       const matchIndex = rows.findIndex((row) => clientIdFromRow(row, rowToValues) === clientId);
       if (clientId && matchIndex !== -1) {
         setDraftMatchedIndex(matchIndex);
         setDraftRecord({ ...rowToValues(rows[matchIndex]), 'Client ID': clientId });
+        setDraftSaveError('');
         setMessage(`Existing patient ${clientId} loaded. Edit details and save changes.`);
         return;
       }
@@ -834,7 +838,9 @@ function ImportExportModule({
   const saveDraftRecord = () => {
     const normalized = normalize(draftRecord);
     if (!Object.values(normalized).some(Boolean)) {
-      setMessage('Please fill at least one field before saving.');
+      const error = 'Please fill at least one field before saving.';
+      setDraftSaveError(error);
+      setMessage(error);
       return;
     }
     const recordToSave = isClientModule && !clientIdFromRow(normalized, rowToValues)
@@ -844,7 +850,9 @@ function ImportExportModule({
     const clientId = clientIdFromRow(recordToSave, rowToValues);
     if (isClientModule && clientId && draftMatchedIndex !== -1) {
       if (clientPhone && rows.some((row, index) => index !== draftMatchedIndex && recordPhone(row, rowToValues) === clientPhone)) {
-        setMessage('This mobile number already exists. Patient was not updated.');
+        const error = 'This mobile number already exists. Patient was not updated.';
+        setDraftSaveError(error);
+        setMessage(error);
         return;
       }
       setRows((current) => current.map((row, index) => (index === draftMatchedIndex ? recordToSave : row)));
@@ -854,26 +862,59 @@ function ImportExportModule({
       return;
     }
     if (isClientModule && clientIdExists(clientId)) {
-      setMessage('This Patient ID already exists. Enter the ID to load and edit that patient.');
+      const error = 'This Patient ID already exists. Enter the ID to load and edit that patient.';
+      setDraftSaveError(error);
+      setMessage(error);
       return;
     }
     if (clientPhoneExists(clientPhone)) {
-      setMessage('This mobile number already exists. Patient was not added again.');
+      const error = 'This mobile number already exists. Patient was not added again.';
+      setDraftSaveError(error);
+      setMessage(error);
       return;
     }
-    const invoice = savePatientFileChargePayment(recordToSave);
-    // Persist the complete next list immediately. Relying only on the rows
-    // effect leaves a window where cloud hydration can restore the old list
-    // before the newly added record has been written.
-    const nextRows = [recordToSave, ...rows];
-    window.localStorage.setItem(storageKey, JSON.stringify(nextRows));
-    setRows(nextRows);
-    setSelectedRowIndexes(new Set());
-    setAddOpen(false);
-    setDraftRecord(Object.fromEntries(headers.map((header) => [header, ''])));
-    setMessage(invoice
-      ? `${rowToCsvValues(recordToSave)[0] || title} added. File charge invoice ${invoice} created.`
-      : `${rowToCsvValues(recordToSave)[0] || title} added.`);
+    try {
+      const nextRows = [recordToSave, ...rows];
+      // Prepare payment data before writing either record so one failed write cannot leave a partial save.
+      let nextPayments = null;
+      let invoice = '';
+      if (isClientModule) {
+        const values = rowToValues(recordToSave);
+        const fileCharge = parseMoney(values['File Charge']);
+        if (fileCharge) {
+          const currentPayments = loadSavedArray(paymentsStorageKey, loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []));
+          invoice = nextInvoiceNumber(currentPayments);
+          const paidOn = normalizeDateInput(values['Visit Date']) || todayIsoDate();
+          const payment = normalizePaymentRecord({
+            client: values.Client,
+            invoice,
+            amount: String(fileCharge),
+            paidAmount: String(fileCharge),
+            pendingAmount: '0',
+            status: 'Paid',
+            paidOn,
+            paymentMode: values['Payment Mode'] || 'Cash',
+          });
+          nextPayments = [payment, ...currentPayments];
+        }
+      }
+      window.localStorage.setItem(storageKey, JSON.stringify(nextRows));
+      if (nextPayments) window.localStorage.setItem(paymentsStorageKey, JSON.stringify(nextPayments));
+      setRows(nextRows);
+      setSelectedRowIndexes(new Set());
+      setAddOpen(false);
+      setDraftSaveError('');
+      setDraftRecord(Object.fromEntries(headers.map((header) => [header, ''])));
+      setMessage(invoice
+        ? `${rowToCsvValues(recordToSave)[0] || title} added. File charge invoice ${invoice} created.`
+        : `${rowToCsvValues(recordToSave)[0] || title} added.`);
+    } catch (error) {
+      const message = error?.name === 'QuotaExceededError'
+        ? 'Patient and payment could not be saved because browser storage is full. Export or remove old records, then try again.'
+        : `Patient could not be saved: ${error?.message || 'browser storage is unavailable'}. Your entries are still here.`;
+      setDraftSaveError(message);
+      setMessage(message);
+    }
   };
 
   const openEditRecord = (row) => {
@@ -1168,6 +1209,7 @@ function ImportExportModule({
                 </label>
               ))}
             </div>
+            {draftSaveError && <p className="field-error form-submit-error patient-save-error" role="alert" aria-live="assertive">{draftSaveError}</p>}
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setAddOpen(false)}>Cancel</button>
               <button className="pill" type="button" onClick={saveDraftRecord}>Save <ChevronRight /></button>
