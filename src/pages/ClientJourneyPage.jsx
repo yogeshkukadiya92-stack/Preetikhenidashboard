@@ -1134,17 +1134,18 @@ export function ClientJourneyPage() {
     setSelectedVisitId(record.activeVisitId || record.visits.at(-1)?.id || '');
   }, [selectedClient]);
   const selectedClientPhone = normalizePhoneNumber(clientMobile(selectedClientRecord));
+  const phoneSharedByPatients = selectedClientPhone && clients.filter((row) => normalizePhoneNumber(clientMobile(row)) === selectedClientPhone).length > 1;
   const selectedWeightUpdates = patientFormUpdates
     .filter((update) => update?.type === 'weight' && (
-      (selectedClientPhone && normalizePhoneNumber(update.mobile) === selectedClientPhone)
-      || (clientId(selectedClientRecord) && String(update.patientId) === String(clientId(selectedClientRecord)))
+      (clientId(selectedClientRecord) && String(update.patientId) === String(clientId(selectedClientRecord)))
+      || (!update.patientId && !phoneSharedByPatients && selectedClientPhone && normalizePhoneNumber(update.mobile) === selectedClientPhone)
     ))
     .sort((a, b) => String(b.recordedAt ?? '').localeCompare(String(a.recordedAt ?? '')));
   const requiredFormRecord = localForms.find((form) => formTitle(form).toLowerCase() === requiredForm.toLowerCase());
   const matchedFormResponses = localResponses
     .map((response) => {
       const form = formByKey.get(response.formId) ?? formByKey.get(response.formSlug);
-      const phoneMatches = selectedClientPhone && responsePhone(response, form) === selectedClientPhone;
+      const phoneMatches = !phoneSharedByPatients && selectedClientPhone && responsePhone(response, form) === selectedClientPhone;
       const nameMatches = selectedClient && responseName(response, form) === normalizePersonName(selectedClient);
       return { response, form, phoneMatches, nameMatches };
     })
@@ -1155,7 +1156,7 @@ export function ClientJourneyPage() {
       ? response.formId === requiredFormRecord.id || response.formSlug === requiredFormRecord.slug
       : String(response.formTitle ?? '').toLowerCase() === requiredForm.toLowerCase();
     if (!sameForm) return false;
-    const phoneMatches = selectedClientPhone && responsePhone(response, requiredFormRecord) === selectedClientPhone;
+    const phoneMatches = !phoneSharedByPatients && selectedClientPhone && responsePhone(response, requiredFormRecord) === selectedClientPhone;
     const nameMatches = selectedClient && responseName(response, requiredFormRecord) === normalizePersonName(selectedClient);
     return phoneMatches || nameMatches;
   });
@@ -3683,4 +3684,3 @@ function DietPlanModal({
     </div>
   );
 }
-

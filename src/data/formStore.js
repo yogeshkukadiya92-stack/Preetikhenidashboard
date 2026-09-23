@@ -65,10 +65,18 @@ function applyPatientDataMappings(form, response) {
   if (!mobile && !submittedName) return { status: 'skipped', reason: 'Patient mobile or name is missing.' };
 
   const patients = readJson(PATIENTS_KEY, readJson(LEGACY_PATIENTS_KEY, []));
-  const patient = Array.isArray(patients) ? patients.find((row) => (
-    (mobile && normalizePhone(patientMobile(row)) === mobile)
-    || (!mobile && normalizeName(patientName(row)) === normalizeName(submittedName))
-  )) : null;
+  const patientRows = Array.isArray(patients) ? patients : [];
+  const mobileMatches = mobile ? patientRows.filter((row) => normalizePhone(patientMobile(row)) === mobile) : [];
+  const normalizedSubmittedName = normalizeName(submittedName);
+  const nameMatches = normalizedSubmittedName
+    ? patientRows.filter((row) => normalizeName(patientName(row)) === normalizedSubmittedName)
+    : [];
+  const patient = mobileMatches.length === 1
+    ? mobileMatches[0]
+    : mobileMatches.length > 1
+      ? mobileMatches.find((row) => normalizeName(patientName(row)) === normalizedSubmittedName)
+      : !mobile && nameMatches.length === 1 ? nameMatches[0] : null;
+  if (!patient && mobileMatches.length > 1) return { status: 'unmatched', mobile, patientName: submittedName, reason: 'Multiple patients share this mobile number. Enter the patient name.' };
   if (!patient) return { status: 'unmatched', mobile, patientName: submittedName };
 
   const mappedFields = fields.flatMap((field) => {

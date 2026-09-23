@@ -444,15 +444,6 @@ function compareAppointmentsNewestFirst(left, right) {
   return timestamp(right) - timestamp(left);
 }
 
-function normalizePhoneNumber(value) {
-  return String(value ?? '').replace(/\D/g, '').slice(-10);
-}
-
-function recordPhone(row, rowToValues) {
-  const values = rowToValues(row);
-  return normalizePhoneNumber(values.Mobile ?? values.Phone ?? values['Mobile Number'] ?? values['Phone Number']);
-}
-
 function savedClientName(row) {
   if (Array.isArray(row)) return row.length >= 7 ? row[1] ?? '' : row[0] ?? '';
   return row?.name ?? row?.Client ?? row?.client ?? '';
@@ -634,6 +625,7 @@ function ImportExportModule({
   const [editRecord, setEditRecord] = useState(() => Object.fromEntries(headers.map((header) => [header, ''])));
   const [draftMatchedIndex, setDraftMatchedIndex] = useState(-1);
   const [draftSaveError, setDraftSaveError] = useState('');
+  const [editSaveError, setEditSaveError] = useState('');
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [selectedRowIndexes, setSelectedRowIndexes] = useState(() => new Set());
   const [rowActionRequest, setRowActionRequest] = useState({ index: -1, token: 0 });
@@ -683,37 +675,12 @@ function ImportExportModule({
     setMessage('CSV export started.');
   };
 
-  const savePatientFileChargePayment = (record) => {
-    if (!isClientModule) return false;
-    const values = rowToValues(record);
-    const fileCharge = parseMoney(values['File Charge']);
-    if (!fileCharge) return false;
-    const currentPayments = loadSavedArray(paymentsStorageKey, isMainBranch ? loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []) : []);
-    const paidOn = normalizeDateInput(values['Visit Date']) || todayIsoDate();
-    const payment = normalizePaymentRecord({
-      client: values.Client,
-      invoice: nextInvoiceNumber(currentPayments),
-      amount: String(fileCharge),
-      paidAmount: String(fileCharge),
-      pendingAmount: '0',
-      status: 'Paid',
-      paidOn,
-      paymentMode: values['Payment Mode'] || 'Cash',
-    });
-    window.localStorage.setItem(paymentsStorageKey, JSON.stringify([payment, ...currentPayments]));
-    return payment.invoice;
-  };
-
   const downloadTemplate = () => {
     downloadText(`${filenameBase}-template.csv`, rowsToCsv(headers, [headers.map(() => '')]), 'text/csv;charset=utf-8');
     setMessage('CSV template downloaded.');
   };
 
   const normalize = (entry) => parseRow(entry);
-  const clientPhoneExists = (phone, list = rows) => {
-    if (!isClientModule || !phone) return false;
-    return list.some((row) => recordPhone(row, rowToValues) === phone);
-  };
   const clientIdExists = (clientId, list = rows) => {
     if (!isClientModule || !clientId) return false;
     return list.some((row) => clientIdFromRow(row, rowToValues) === clientId);
@@ -739,7 +706,6 @@ function ImportExportModule({
       .map((row) => (Array.isArray(row) ? normalize(Object.fromEntries(headers.map((header, index) => [header, row[index] ?? '']))) : normalize(row)))
       .filter((row) => Object.values(row).some(Boolean));
     const normalized = isClientModule ? assignMissingClientIds([...rows, ...normalizedRows], rowToValues).slice(rows.length) : normalizedRows;
-    const seenPhones = new Set(rows.map((row) => recordPhone(row, rowToValues)).filter(Boolean));
     const seenClientIds = new Set(rows.map((row) => clientIdFromRow(row, rowToValues)).filter(Boolean));
     let skippedDuplicates = 0;
     const uniqueRows = isClientModule ? normalized.filter((row) => {
@@ -749,18 +715,11 @@ function ImportExportModule({
         return false;
       }
       if (clientId) seenClientIds.add(clientId);
-      const phone = recordPhone(row, rowToValues);
-      if (!phone) return true;
-      if (seenPhones.has(phone)) {
-        skippedDuplicates += 1;
-        return false;
-      }
-      seenPhones.add(phone);
       return true;
     }) : normalized;
     setPreview(uniqueRows);
     setMessage(isClientModule && skippedDuplicates
-      ? `${uniqueRows.length} records ready. ${skippedDuplicates} duplicate mobile number(s) skipped.`
+      ? `${uniqueRows.length} records ready. ${skippedDuplicates} duplicate Patient ID(s) skipped.`
       : `${uniqueRows.length} records ready to import.`);
     setModalOpen(true);
   };
@@ -771,16 +730,16 @@ function ImportExportModule({
       return;
     }
     if (isClientModule) {
-      const seenPhones = new Set(rows.map((row) => recordPhone(row, rowToValues)).filter(Boolean));
+      const seenClientIds = new Set(rows.map((row) => clientIdFromRow(row, rowToValues)).filter(Boolean));
       const duplicate = preview.find((row) => {
-        const phone = recordPhone(row, rowToValues);
-        if (!phone) return false;
-        if (seenPhones.has(phone)) return true;
-        seenPhones.add(phone);
+        const clientId = clientIdFromRow(row, rowToValues);
+        if (!clientId) return false;
+        if (seenClientIds.has(clientId)) return true;
+        seenClientIds.add(clientId);
         return false;
       });
       if (duplicate) {
-        setMessage('This mobile number already exists. Duplicate patient was not imported.');
+        setMessage('This Patient ID already exists. Duplicate patient was not imported.');
         return;
       }
     }
@@ -846,15 +805,8 @@ function ImportExportModule({
     const recordToSave = isClientModule && !clientIdFromRow(normalized, rowToValues)
       ? { ...normalized, clientId: nextClientId(rows, rowToValues) }
       : normalized;
-    const clientPhone = recordPhone(recordToSave, rowToValues);
     const clientId = clientIdFromRow(recordToSave, rowToValues);
     if (isClientModule && clientId && draftMatchedIndex !== -1) {
-      if (clientPhone && rows.some((row, index) => index !== draftMatchedIndex && recordPhone(row, rowToValues) === clientPhone)) {
-        const error = 'This mobile number already exists. Patient was not updated.';
-        setDraftSaveError(error);
-        setMessage(error);
-        return;
-      }
       setRows((current) => current.map((row, index) => (index === draftMatchedIndex ? recordToSave : row)));
       setAddOpen(false);
       setDraftMatchedIndex(-1);
@@ -863,12 +815,6 @@ function ImportExportModule({
     }
     if (isClientModule && clientIdExists(clientId)) {
       const error = 'This Patient ID already exists. Enter the ID to load and edit that patient.';
-      setDraftSaveError(error);
-      setMessage(error);
-      return;
-    }
-    if (clientPhoneExists(clientPhone)) {
-      const error = 'This mobile number already exists. Patient was not added again.';
       setDraftSaveError(error);
       setMessage(error);
       return;
@@ -926,6 +872,7 @@ function ImportExportModule({
     setSelectedRecord(null);
     setEditIndex(index);
     setEditRecord({ ...rowToValues(row) });
+    setEditSaveError('');
     setEditOpen(true);
     setMessage(`${rowToCsvValues(row)[0] || title} edit opened.`);
   };
@@ -933,22 +880,33 @@ function ImportExportModule({
   const saveEditRecord = () => {
     const normalized = normalize(editRecord);
     if (!Object.values(normalized).some(Boolean)) {
-      setMessage('Please fill at least one field before saving.');
+      const error = 'Please fill at least one field before saving.';
+      setEditSaveError(error);
+      setMessage(error);
       return;
     }
-    const clientPhone = recordPhone(normalized, rowToValues);
     const clientId = clientIdFromRow(normalized, rowToValues);
     if (isClientModule && clientId && rows.some((row, index) => index !== editIndex && clientIdFromRow(row, rowToValues) === clientId)) {
-      setMessage('This Patient ID already exists. Patient was not updated.');
+      const error = 'This Patient ID already exists. Patient was not updated.';
+      setEditSaveError(error);
+      setMessage(error);
       return;
     }
-    if (isClientModule && clientPhone && rows.some((row, index) => index !== editIndex && recordPhone(row, rowToValues) === clientPhone)) {
-      setMessage('This mobile number already exists. Patient was not updated.');
+    try {
+      const nextRows = rows.map((row, index) => (index === editIndex ? normalized : row));
+      window.localStorage.setItem(storageKey, JSON.stringify(nextRows));
+      setRows(nextRows);
+    } catch (error) {
+      const message = error?.name === 'QuotaExceededError'
+        ? 'Patient could not be updated because browser storage is full.'
+        : `Patient could not be updated: ${error?.message || 'browser storage is unavailable'}. Your changes are still here.`;
+      setEditSaveError(message);
+      setMessage(message);
       return;
     }
-    setRows((current) => current.map((row, index) => (index === editIndex ? normalized : row)));
     setSelectedRowIndexes(new Set());
     setEditOpen(false);
+    setEditSaveError('');
     setEditIndex(-1);
     setMessage(`${rowToCsvValues(normalized)[0] || title} updated.`);
   };
@@ -1236,7 +1194,7 @@ function ImportExportModule({
                     <select
                       className="lead-input"
                       value={editRecord[header] ?? ''}
-                      onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
+                      onChange={(event) => { setEditSaveError(''); updateRecordField(setEditRecord, header, event.target.value); }}
                     >
                       <option value="">{fieldOptions[header].length ? `Select ${displayHeader(header).toLowerCase()}` : `Add ${displayHeader(header).toLowerCase()} first`}</option>
                       {fieldOptions[header].map((option, optionIndex) => <option value={option} key={`${option}-${optionIndex}`}>{option}</option>)}
@@ -1248,7 +1206,7 @@ function ImportExportModule({
                       value={editRecord[header] ?? ''}
                       readOnly={header === 'Invoice' || (isPaymentsModule && header === 'Pending Amount')}
                       max={title === 'Clients' && header === 'Birthday' ? new Date().toISOString().slice(0, 10) : undefined}
-                      onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
+                      onChange={(event) => { setEditSaveError(''); updateRecordField(setEditRecord, header, event.target.value); }}
                       placeholder={
                         header === 'Reference'
                           ? 'Referred by (e.g. Dr. Name / Friend)'
@@ -1261,6 +1219,7 @@ function ImportExportModule({
                 </label>
               ))}
             </div>
+            {editSaveError && <p className="field-error form-submit-error patient-save-error" role="alert" aria-live="assertive">{editSaveError}</p>}
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setEditOpen(false)}>Cancel</button>
               <button className="pill" type="button" onClick={saveEditRecord}>Save Changes <ChevronRight /></button>
