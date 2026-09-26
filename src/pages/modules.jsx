@@ -2774,7 +2774,6 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const legacyTreatmentTemplatesKey = 'ayurflow:treatment-templates:v1';
   const [treatmentTemplates, setTreatmentTemplates] = useState(() => loadSavedArray(treatmentTemplatesKey, isMainBranch ? loadSavedArray(legacyTreatmentTemplatesKey, []) : []));
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState('');
-  const [treatmentForm, setTreatmentForm] = useState(defaultTreatmentForm);
   const [treatmentMedicineRows, setTreatmentMedicineRows] = useState(() => [{ medicine: '', dose: '', timing: '' }]);
   const [treatmentErrors, setTreatmentErrors] = useState({});
   const [selectedTreatmentPlan, setSelectedTreatmentPlan] = useState(null);
