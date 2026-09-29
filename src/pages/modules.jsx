@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { jsPDF } from 'jspdf';
 import { ChevronRight } from '../components/icons.jsx';
 import { ActionMenu, Card, StatusPill, Tag } from '../components/ui.jsx';
 import { useBranch } from '../context/BranchContext.jsx';
@@ -4398,6 +4399,7 @@ export function TreatmentPlansPage() {
   const [selectedDietPreset, setSelectedDietPreset] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const [dietPdfMessage, setDietPdfMessage] = useState('');
+  const [dietWhatsAppUrl, setDietWhatsAppUrl] = useState('');
   const hasMountedTreatmentPlans = useRef(false);
   const hasMountedPlanTemplates = useRef(false);
   const hasMountedDietPlans = useRef(false);
@@ -4688,8 +4690,7 @@ export function TreatmentPlansPage() {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
 
-  const createDietPlanPdfBlob = async (plan) => {
-    const { jsPDF } = await import('jspdf');
+  const createDietPlanPdfBlob = (plan) => {
     const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -4820,10 +4821,18 @@ export function TreatmentPlansPage() {
   };
 
   const shareDietPlan = async (plan) => {
+    setDietWhatsAppUrl('');
     setDietPdfMessage(`Preparing PDF to share for ${plan.client || 'patient'}...`);
+    let blob;
+    const filename = `${fileSafeName(plan.client)}-diet-plan.pdf`;
     try {
-      const blob = await createDietPlanPdfBlob(plan);
-      const filename = `${fileSafeName(plan.client)}-diet-plan.pdf`;
+      // Generate synchronously so sharing retains the user's click activation.
+      blob = createDietPlanPdfBlob(plan);
+    } catch {
+      setDietPdfMessage('PDF could not be created. Please try Print / save PDF.');
+      return;
+    }
+    try {
       const file = new File([blob], filename, { type: 'application/pdf' });
       const shareData = { files: [file], title: `Diet Plan - ${plan.client}`, text: `Diet plan for ${plan.client}` };
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
@@ -4831,17 +4840,19 @@ export function TreatmentPlansPage() {
         setDietPdfMessage(`PDF share opened for ${plan.client || 'patient'}. Select WhatsApp to send it.`);
         return;
       }
-      downloadBlob(filename, blob);
-      const text = encodeURIComponent(`Diet Plan PDF for ${plan.client} has been prepared. Please attach the downloaded file: ${filename}`);
-      window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer');
-      setDietPdfMessage('PDF downloaded and WhatsApp opened. Attach the downloaded PDF to send it.');
     } catch (error) {
       if (error?.name === 'AbortError') {
         setDietPdfMessage('PDF sharing cancelled.');
         return;
       }
-      setDietPdfMessage('PDF could not be shared. Please download it and attach it in WhatsApp.');
     }
+    // Also download automatically when native file sharing fails.
+    downloadBlob(filename, blob);
+    const text = encodeURIComponent(`Diet plan for ${plan.client || 'patient'}`);
+    const url = `https://wa.me/?text=${text}`;
+    setDietWhatsAppUrl(url);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setDietPdfMessage(`PDF downloaded: ${filename}. Attach it in WhatsApp to send. If WhatsApp did not open, use Open WhatsApp below.`);
   };
 
   const PLAN_COLS = ['Patient Name', 'Service', 'Goal', 'Duration', 'Medicine', 'Dose', 'Timing', 'Status'];
@@ -4896,6 +4907,7 @@ export function TreatmentPlansPage() {
       {activeTab === 'diet' && (
         <Card title="Diet Plans" subtitle="Create time-wise meal plans for nutrition, fat loss, and muscle gain patients." action={<div className="card-action-group"><button className="pill primary-action" type="button" onClick={openNewDietPlan}>+ Add Diet Plan</button><ActionMenu label="Actions" items={[{ label: 'Add diet plan', description: 'Build a meal schedule', onClick: openNewDietPlan }]} /></div>}>
           {dietPdfMessage && <div className="action-note diet-pdf-message" role="status">{dietPdfMessage}</div>}
+          {dietWhatsAppUrl && <a className="pill" href={dietWhatsAppUrl} target="_blank" rel="noopener noreferrer">Open WhatsApp</a>}
           <div className="table adaptive-table" style={{ '--table-columns': DIET_COLS.length }}>
             <div className="table-head">
               {DIET_COLS.map((h) => <div key={h}>{h}</div>)}
@@ -4915,7 +4927,7 @@ export function TreatmentPlansPage() {
                     { label: 'Edit diet plan', onClick: () => openEditDietPlan(plan, index) },
                     { label: 'Download PDF', description: 'Create and download the diet plan PDF', onClick: () => downloadDietPlanPdf(plan) },
                     { label: 'Print / save PDF', onClick: () => openDietPdf(plan) },
-                    { label: 'Share PDF on WhatsApp', description: 'Prepare the PDF and open device sharing', onClick: () => shareDietPlan(plan) },
+                    { label: 'Share PDF on WhatsApp', description: 'Share the PDF or download it and open WhatsApp', onClick: () => shareDietPlan(plan) },
                   ]} />
                 </div>
               </div>
