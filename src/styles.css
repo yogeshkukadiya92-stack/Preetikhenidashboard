@@ -3598,6 +3598,13 @@ textarea:focus-visible,
   margin-bottom: 12px;
 }
 
+.journey-appointment-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .journey-client-list {
   display: grid;
   gap: 10px;

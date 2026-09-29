@@ -636,7 +636,25 @@ function addDays(days) {
 }
 
 function normalizeAppointments(rows = []) {
-  return rows.map((row) => row.length >= 7 ? [row[0], row[1], row[2], row[3], row[4], row[6] || row[5] || 'Pending'] : row.slice(0, 6));
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => {
+    if (Array.isArray(row)) return row.length >= 7
+      ? [row[0], row[1], row[2], row[3], row[4], row[6] || 'Pending']
+      : row.slice(0, 6);
+    if (!row || typeof row !== 'object') return [];
+    return [
+      row.client ?? row.Client ?? row.name ?? '',
+      row.mobile ?? row.Mobile ?? row.phone ?? '',
+      row.date ?? row.Date ?? row['Visit Date'] ?? '',
+      row.time ?? row.Time ?? '',
+      row.type ?? row.Type ?? row.service ?? row.Service ?? '',
+      row.status ?? row.Status ?? 'Pending',
+    ];
+  }).filter((row) => row.some((value) => String(value ?? '').trim()));
+}
+
+function appointmentVisitId(row) {
+  return `appointment-${row.slice(0, 5).map((value) => encodeURIComponent(String(value ?? '').trim().toLowerCase())).join('-')}`;
 }
 
 function visitDateFromJourney(visit) {
@@ -872,12 +890,14 @@ export function ClientJourneyPage() {
   const clinicalPrintTemplatesKey = branchKey('clinical-print-templates:v1');
   const patientFormUpdatesKey = branchKey('patient-form-updates:v1');
   const [clients, setClients] = useState(() => loadValue(clientsKey, []));
+  const [appointments, setAppointments] = useState(() => normalizeAppointments(loadValue(appointmentsKey, [])));
   const [journeys, setJourneys] = useState(() => loadValue(journeysKey, {}));
   const [selectedClient, setSelectedClient] = useState(() => searchParams.get('client') ?? '');
   const [selectedVisitId, setSelectedVisitId] = useState('');
   const [patientViewTab, setPatientViewTab] = useState('workflow');
   const [showMobileList, setShowMobileList] = useState(false);
   const [search, setSearch] = useState('');
+  const [todayAppointmentsOnly, setTodayAppointmentsOnly] = useState(false);
   const [dietTemplates, setDietTemplates] = useState(() => loadValue(dietTemplatesKey, []));
   const [dietTemplateName, setDietTemplateName] = useState('');
   const [selectedDietPreset, setSelectedDietPreset] = useState('');
@@ -932,7 +952,6 @@ export function ClientJourneyPage() {
   const [clinicalPrintTemplates, setClinicalPrintTemplates] = useState(() => loadValue(clinicalPrintTemplatesKey, []));
   const [clinicalPrintTemplateName, setClinicalPrintTemplateName] = useState('');
   const [selectedClinicalPrintTemplate, setSelectedClinicalPrintTemplate] = useState('');
-  const appointments = loadValue(appointmentsKey, []);
   const payments = loadValue(paymentsKey, []);
   const [localForms, setLocalForms] = useState(() => loadForms());
   const [localResponses, setLocalResponses] = useState(() => loadAllLocalResponses());
@@ -959,6 +978,18 @@ export function ClientJourneyPage() {
     window.addEventListener('storage', refresh);
     return () => { window.removeEventListener('focus', refresh); window.removeEventListener('storage', refresh); };
   }, [clientsKey]);
+
+  useEffect(() => {
+    const refresh = () => setAppointments(normalizeAppointments(loadValue(appointmentsKey, [])));
+    window.addEventListener('focus', refresh);
+    window.addEventListener('storage', refresh);
+    window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
+    };
+  }, [appointmentsKey]);
 
   useEffect(() => {
     const refresh = () => setPatientFormUpdates(loadValue(patientFormUpdatesKey, []));
@@ -1015,7 +1046,7 @@ export function ClientJourneyPage() {
 
   const clientRecords = useMemo(() => {
     const seen = new Set();
-    return clients.filter((row) => {
+    const registeredClients = clients.filter((row) => {
       const name = clientName(row);
       if (!name) return false;
       const key = `${clientId(row) || name}`.toLowerCase();
@@ -1023,11 +1054,20 @@ export function ClientJourneyPage() {
       seen.add(key);
       return true;
     });
-  }, [clients]);
+    const byName = new Set(registeredClients.map((row) => normalizePersonName(clientName(row))));
+    const appointmentClients = normalizeAppointments(appointments).flatMap((row) => {
+      const name = String(row[0] ?? '').trim();
+      const key = normalizePersonName(name);
+      if (!key || byName.has(key)) return [];
+      byName.add(key);
+      return [{ name, mobile: row[1] ?? '' }];
+    });
+    return [...registeredClients, ...appointmentClients];
+  }, [appointments, clients]);
   const selectedClientRecord = useMemo(() => clients.find((row) => (
     clientName(row).toLowerCase() === selectedClient.toLowerCase()
     || clientId(row).toLowerCase() === selectedClient.toLowerCase()
-  )), [clients, selectedClient]);
+  )) ?? clientRecords.find((row) => clientName(row).toLowerCase() === selectedClient.toLowerCase()), [clientRecords, clients, selectedClient]);
   const clientVisitMeta = useMemo(() => {
     const byName = new Map();
     const remember = (name, date, time = '') => {
@@ -1062,8 +1102,26 @@ export function ClientJourneyPage() {
     });
     return byName;
   }, [appointments, clientRecords, journeys, todayKey]);
+  const todayAppointmentPatients = useMemo(() => {
+    const names = new Set();
+    const remember = (name, date, status) => {
+      if (String(date ?? '').slice(0, 10) !== todayKey || String(status ?? '').trim().toLowerCase() === 'cancelled') return;
+      const key = normalizePersonName(name);
+      if (key) names.add(key);
+    };
+    appointments.forEach((row) => remember(row[0], row[2], row[5]));
+    Object.entries(journeys).forEach(([name, record]) => {
+      normalizeJourneyRecord(record).visits.forEach((visit) => {
+        const data = visit.appointmentData;
+        if (data) remember(name, data.date ?? visit.visitDate, data.status);
+      });
+    });
+    return names;
+  }, [appointments, journeys, todayKey]);
+  const todayAppointmentCount = clientRecords.filter((row) => todayAppointmentPatients.has(normalizePersonName(clientName(row)))).length;
   const visibleClients = useMemo(() => clientRecords
     .filter((row) => {
+      if (todayAppointmentsOnly && !todayAppointmentPatients.has(normalizePersonName(clientName(row)))) return false;
       const haystack = [clientId(row), clientName(row), clientMobile(row)].join(' ').toLowerCase();
       return haystack.includes(search.toLowerCase());
     })
@@ -1078,12 +1136,52 @@ export function ClientJourneyPage() {
       // Today's and past work is latest-first; future work is earliest-first.
       const timeDifference = leftMeta?.group === 2 ? leftValue - rightValue : rightValue - leftValue;
       return timeDifference || clientName(left).localeCompare(clientName(right));
-    }), [clientRecords, clientVisitMeta, search]);
+    }), [clientRecords, clientVisitMeta, search, todayAppointmentsOnly, todayAppointmentPatients]);
   const patientJourneyRecord = normalizeJourneyRecord(journeys[selectedClient]);
-  const journeyVisits = patientJourneyRecord.visits;
+  const savedJourneyVisits = patientJourneyRecord.visits;
+  const selectedPatientKey = normalizePersonName(selectedClient);
+  const savedAppointmentKeys = new Set(savedJourneyVisits
+    .filter((visit) => visit.appointmentData)
+    .map((visit) => appointmentVisitId([
+      selectedClient,
+      visit.appointmentData.mobile ?? '',
+      visit.appointmentData.date ?? visit.visitDate,
+      visit.appointmentData.time ?? '',
+      visit.appointmentData.type ?? '',
+    ])));
+  const appointmentVisits = [...new Map(normalizeAppointments(appointments)
+    .filter((row) => normalizePersonName(row[0]) === selectedPatientKey)
+    .map((row) => [appointmentVisitId(row), row])).values()]
+    .map((row) => ({
+      id: appointmentVisitId(row),
+      visitDate: String(row[2] ?? '').slice(0, 10),
+      appointment: true,
+      appointmentData: { mobile: row[1] ?? '', date: row[2] ?? '', time: row[3] ?? '', type: row[4] ?? '', status: row[5] ?? 'Pending' },
+      appointmentAt: row[2] && row[3] ? `${row[2]}T${row[3]}` : '',
+    }))
+    .filter((visit) => !savedAppointmentKeys.has(appointmentVisitId([
+      selectedClient,
+      visit.appointmentData.mobile,
+      visit.appointmentData.date,
+      visit.appointmentData.time,
+      visit.appointmentData.type,
+    ])))
+    .sort((left, right) => `${left.visitDate} ${left.appointmentData.time}`.localeCompare(`${right.visitDate} ${right.appointmentData.time}`));
+  const journeyVisits = [...savedJourneyVisits, ...appointmentVisits]
+    .sort((left, right) => `${left.visitDate} ${left.appointmentData?.time ?? ''}`.localeCompare(`${right.visitDate} ${right.appointmentData?.time ?? ''}`));
+  const savedActiveVisit = savedJourneyVisits.find((visit) => visit.id === patientJourneyRecord.activeVisitId);
+  const latestAppointmentVisit = appointmentVisits.at(-1);
+  const appointmentIsNewestVisit = latestAppointmentVisit && (
+    !savedActiveVisit
+    || `${latestAppointmentVisit.visitDate} ${latestAppointmentVisit.appointmentData.time}`
+      >= `${savedActiveVisit.visitDate} ${savedActiveVisit.appointmentData?.time ?? ''}`
+  );
+  const defaultActiveVisitId = appointmentIsNewestVisit
+    ? latestAppointmentVisit.id
+    : patientJourneyRecord.activeVisitId || journeyVisits.at(-1)?.id || '';
   const activeVisitId = journeyVisits.some((visit) => visit.id === selectedVisitId)
     ? selectedVisitId
-    : patientJourneyRecord.activeVisitId || journeyVisits.at(-1)?.id || '';
+    : defaultActiveVisitId;
   const journey = journeyVisits.find((visit) => visit.id === activeVisitId) ?? {};
   const activeVisitIndex = journeyVisits.findIndex((visit) => visit.id === activeVisitId);
   const previousConsultationVisit = (activeVisitIndex >= 0 ? journeyVisits.slice(0, activeVisitIndex) : journeyVisits)
@@ -1130,9 +1228,8 @@ export function ClientJourneyPage() {
     return { complaint: optionsFor('complaint'), notes: optionsFor('notes') };
   }, [journeys, consultationTemplates]);
   useEffect(() => {
-    const record = normalizeJourneyRecord(journeys[selectedClient]);
-    setSelectedVisitId(record.activeVisitId || record.visits.at(-1)?.id || '');
-  }, [selectedClient]);
+    setSelectedVisitId(defaultActiveVisitId);
+  }, [defaultActiveVisitId, selectedClient]);
   const selectedClientPhone = normalizePhoneNumber(clientMobile(selectedClientRecord));
   const phoneSharedByPatients = selectedClientPhone && clients.filter((row) => normalizePhoneNumber(clientMobile(row)) === selectedClientPhone).length > 1;
   const selectedWeightUpdates = patientFormUpdates
@@ -1991,6 +2088,7 @@ export function ClientJourneyPage() {
     const current = normalizeAppointments(loadValue(appointmentsKey, []));
     const row = [selectedClient, appointmentForm.mobile, appointmentForm.date, appointmentForm.time, appointmentForm.type, appointmentForm.status];
     window.localStorage.setItem(appointmentsKey, JSON.stringify([row, ...current]));
+    setAppointments(normalizeAppointments([row, ...current]));
     if (stageModal === 'returning-visit') {
       const visitId = `visit-${appointmentForm.date}-${Date.now()}`;
       const now = new Date().toISOString();
@@ -2301,6 +2399,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
     ));
     const row = [selectedClient, clientMobile(selectedClientRecord), followupForm.date, followupForm.time, 'Follow-up', followupForm.status];
     window.localStorage.setItem(appointmentsKey, JSON.stringify([row, ...withoutPreviousFollowup]));
+    setAppointments(normalizeAppointments([row, ...withoutPreviousFollowup]));
     updateJourney({ followup: true, followupData: followupForm, followupAt: new Date().toISOString() });
     setStageModal('');
   };
@@ -2317,7 +2416,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
     <section className="module-page journey-page">
       <div className="module-hero compact-hero">
         <div><h1>Patient Journey</h1><p>Run the complete reception-to-payment workflow from one workspace.</p><p className="subtle">Shared cloud workspace</p></div>
-        <div className="module-stats"><div className="mini-stat"><span>Registered Patients</span><strong>{clientRecords.length}</strong></div><div className="mini-stat"><span>Active Journeys</span><strong>{Object.keys(journeys).length}</strong></div><div className="mini-stat"><span>Selected Stage</span><strong>{selectedClient ? nextAction() : 'Select patient'}</strong></div></div>
+        <div className="module-stats"><div className="mini-stat"><span>Patients in Journey</span><strong>{clientRecords.length}</strong></div><div className="mini-stat"><span>Active Journeys</span><strong>{Object.keys(journeys).length}</strong></div><div className="mini-stat"><span>Selected Stage</span><strong>{selectedClient ? nextAction() : 'Select patient'}</strong></div></div>
       </div>
 
       <div className="journey-layout">
@@ -2335,6 +2434,14 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search patient by ID, name, or mobile..."
               />
+            </div>
+            <div className="filter-pills journey-appointment-filters" role="group" aria-label="Patient appointment filters">
+              <button className={`filter-pill ${!todayAppointmentsOnly ? 'active' : ''}`} type="button" aria-pressed={!todayAppointmentsOnly} onClick={() => { setTodayAppointmentsOnly(false); setSearch(''); }}>
+                All Patients
+              </button>
+              <button className={`filter-pill ${todayAppointmentsOnly ? 'active' : ''}`} type="button" aria-pressed={todayAppointmentsOnly} onClick={() => { setTodayAppointmentsOnly(true); setSearch(''); }}>
+                Today's Appointments ({todayAppointmentCount})
+              </button>
             </div>
             <div className="returning-patient-action">
               <div>
@@ -2397,8 +2504,8 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                 );
               }) : (
                 <div className="empty-state compact-empty">
-                  <strong>No patients found.</strong>
-                  <p>Register the patient before booking an appointment.</p>
+                  <strong>{todayAppointmentsOnly ? "No matching appointments today." : 'No patients found.'}</strong>
+                  <p>{todayAppointmentsOnly ? 'Choose All Patients to view the full patient list.' : 'Register the patient before booking an appointment.'}</p>
                 </div>
               )}
             </div>
