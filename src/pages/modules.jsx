@@ -27,6 +27,7 @@ import {
 } from '../data/appConfig.js';
 import { loadAllLocalResponses, loadForms as loadSavedForms } from '../data/formStore.js';
 import { hashPassword, STAFF_PERMISSION_OPTIONS, getAllUsers, saveAuthUser, deleteAuthUser } from '../data/auth.js';
+import { loadServiceCatalog, serviceNames } from '../data/serviceCatalog.js';
 import {
   AYURVEDIC_GUIDELINES,
   CLINICAL_DIET_PRESETS,
@@ -331,10 +332,22 @@ function getSavedOperationRows(tabId) {
   return Array.isArray(rowsByTab[tabId]) ? rowsByTab[tabId] : [];
 }
 
-function getSavedServiceNames() {
-  const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
-  const savedNames = saved.map((row) => (Array.isArray(row) ? row[0] : row.Service ?? row.service)).filter(Boolean);
-  return Array.from(new Set([...savedNames, ...services]));
+function getSavedServiceRows(branchKey, currentBranch, fallbackRows = []) {
+  const isMainBranch = currentBranch === 'Main Branch';
+  const operationTabs = loadSavedObject(
+    branchKey('Operations:tabs:v3'),
+    isMainBranch ? loadSavedObject('ayurflow:Operations:tabs:v3', {}) : {},
+  );
+  return loadServiceCatalog({
+    key: branchKey('Services:rows:v3'),
+    isMainBranch,
+    defaults: services,
+    fallbackRows: fallbackRows.length ? fallbackRows : operationTabs.services ?? [],
+  });
+}
+
+function getSavedServiceNames(branchKey, currentBranch, fallbackRows = []) {
+  return serviceNames(getSavedServiceRows(branchKey, currentBranch, fallbackRows));
 }
 
 function formatSubmittedDate(value) {
@@ -1686,7 +1699,7 @@ export function CRMPage() {
 }
 
 function ClientProfile({ client, onBack }) {
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
   const clientName = client.name ?? '';
   const clientId = normalizeClientId(client.clientId);
   const appointmentsStorageKey = branchKey('Appointments:rows:v3');
@@ -1709,15 +1722,11 @@ function ClientProfile({ client, onBack }) {
         : row
     )).filter((row) => row.Medicine);
   }, [branchKey]);
-  const [treatServiceOptions] = useState(() => {
-    const saved = loadSavedArray('ayurflow:Services:rows:v2', []);
-    const savedNames = saved.map((row) => row[0]).filter(Boolean);
-    return Array.from(new Set([...savedNames, ...services]));
-  });
-  const [treatForm, setTreatForm] = useState({ service: treatServiceOptions[0] ?? services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
+  const treatServiceOptions = getSavedServiceNames(branchKey, currentBranch);
+  const [treatForm, setTreatForm] = useState({ service: treatServiceOptions[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
   const [treatMedicineRows, setTreatMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
   const [nextAppointment, setNextAppointment] = useState(() => ({ enabled: false, mobile: client.mobile ?? '', ...currentAppointmentSlot(), status: 'Confirmed' }));
-  const [apptForm, setApptForm] = useState(() => ({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' }));
+  const [apptForm, setApptForm] = useState(() => ({ mobile: '', ...currentAppointmentSlot(), type: treatServiceOptions[0] ?? '', status: 'Confirmed' }));
   const [payForm, setPayForm] = useState(() => {
     const savedPayments = loadSavedArray(paymentsStorageKey, loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []));
     return { invoice: nextInvoiceNumber(savedPayments), amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paymentMode: 'Cash', paidOn: new Date().toISOString().slice(0, 10) };
@@ -1839,7 +1848,7 @@ function ClientProfile({ client, onBack }) {
     }
     setRefreshKey((k) => k + 1);
     setTreatModal(false);
-    setTreatForm({ service: services[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
+    setTreatForm({ service: treatServiceOptions[0] ?? '', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
     setTreatMedicineRows([{ medicine: '', dose: '', timing: '' }]);
     setNextAppointment({ enabled: false, mobile: client.mobile ?? '', ...currentAppointmentSlot(), status: 'Confirmed' });
     setTreatError('');
@@ -1850,7 +1859,7 @@ function ClientProfile({ client, onBack }) {
     window.localStorage.setItem(appointmentsStorageKey, JSON.stringify([[clientName, apptForm.mobile, apptForm.date, apptForm.time, apptForm.type, apptForm.status], ...normalizeAppointmentRows(current)]));
     setRefreshKey((k) => k + 1);
     setApptModal(false);
-    setApptForm({ mobile: '', ...currentAppointmentSlot(), type: services[0] ?? '', status: 'Confirmed' });
+    setApptForm({ mobile: '', ...currentAppointmentSlot(), type: treatServiceOptions[0] ?? '', status: 'Confirmed' });
   };
 
   const savePayment = () => {
@@ -2113,7 +2122,7 @@ function ClientProfile({ client, onBack }) {
               <label className="field-block">
                 <span>Type</span>
                 <select className="lead-input" value={apptForm.type} onChange={(e) => setApptForm((f) => ({ ...f, type: e.target.value }))}>
-                  {services.map((s) => <option key={s}>{s}</option>)}
+                  {treatServiceOptions.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </label>
               <label className="field-block">
@@ -2247,12 +2256,12 @@ export function ClientsPage() {
       stats={[
         { label: 'Active Patients', value: String(savedClientRows.length) },
         { label: 'Treatment Plans', value: String(savedTreatmentRows.length) },
-        { label: 'Services', value: getSavedServiceNames().length },
+        { label: 'Services', value: getSavedServiceNames(branchKey, currentBranch).length },
       ]}
       headers={['Client ID', 'Client', 'Mobile', 'Visit Date', 'Birthday', 'Age', 'Gender', 'Address', 'Service', 'Reference', 'Reference Number', 'File Charge', 'Payment Mode']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
-      fieldOptions={{ Gender: ['Female', 'Male', 'Other'], Service: getSavedServiceNames(), 'Payment Mode': ['Cash', 'GPay'] }}
+      fieldOptions={{ Gender: ['Female', 'Male', 'Other'], Service: getSavedServiceNames(branchKey, currentBranch), 'Payment Mode': ['Cash', 'GPay'] }}
       fieldTypes={{ Mobile: 'tel', 'Reference Number': 'tel', Age: 'number', Birthday: 'date', 'Visit Date': 'date', 'File Charge': 'number' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
@@ -2789,6 +2798,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const [fixedMedicineByService, setFixedMedicineByService] = useState(() => loadSavedObject(fixedMedicineStorageKey, isMainBranch ? loadSavedObject(legacyMedicineStorageKey, {}) : {}));
   const [rxDraft, setRxDraft] = useState([{ medicine: '', dose: '', timing: 'Morning', schedule: 'Daily' }]);
   const storageKey = branchKey(`${title}:tabs:v3`);
+  const serviceCatalogStorageKey = branchKey('Services:rows:v3');
   const legacyStorageKey = `ayurflow:${title}:tabs:v3`;
   const [rowsByTab, setRowsByTab] = useState(() => {
     const fallbackTabs = isMainBranch
@@ -2801,6 +2811,12 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       : [];
     return {
       ...savedTabs,
+      services: loadServiceCatalog({
+        key: serviceCatalogStorageKey,
+        isMainBranch,
+        defaults: services,
+        fallbackRows: savedTabs.services ?? [],
+      }),
       treatments: mergeUniqueRows(sharedTreatments, savedTabs.treatments ?? []),
     };
   });
@@ -2819,9 +2835,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       ? { Medicine: row[0] ?? '', Category: row[1] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '' }
       : row
   ));
-  const serviceOptions = (Array.isArray(rowsByTab.services) ? rowsByTab.services : [])
-    .map((row) => row[0])
-    .filter(Boolean);
+  const serviceOptions = serviceNames(rowsByTab.services);
   const savedPatientRows = loadSavedArray(
     branchKey('ayurflow-clients:rows:v3'),
     isMainBranch ? loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients) : [],
@@ -2865,13 +2879,14 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(rowsByTab));
       if (title === 'Operations') {
+        window.localStorage.setItem(serviceCatalogStorageKey, JSON.stringify(rowsByTab.services ?? []));
         const sharedTreatments = (rowsByTab.treatments ?? []).map(operationRowToTreatmentPlan);
         window.localStorage.setItem(TREATMENT_PLANS_KEY, JSON.stringify(sharedTreatments));
       }
     } catch {
       setMessage('Local browser storage is full or blocked.');
     }
-  }, [rowsByTab, storageKey, title]);
+  }, [rowsByTab, serviceCatalogStorageKey, storageKey, title]);
 
   useEffect(() => {
     if (title !== 'Operations') return undefined;
@@ -2890,6 +2905,28 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     window.addEventListener('storage', syncSharedTreatments);
     return () => window.removeEventListener('storage', syncSharedTreatments);
   }, [title]);
+
+  useEffect(() => {
+    if (title !== 'Operations') return undefined;
+    const refreshServices = () => setRowsByTab((current) => ({
+      ...current,
+      services: loadServiceCatalog({
+        key: serviceCatalogStorageKey,
+        isMainBranch,
+        defaults: services,
+        fallbackRows: current.services ?? [],
+      }),
+    }));
+    const handleStorage = (event) => {
+      if (event.key === serviceCatalogStorageKey) refreshServices();
+    };
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('moms-pathshala:cloud-hydrated', refreshServices);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('moms-pathshala:cloud-hydrated', refreshServices);
+    };
+  }, [isMainBranch, serviceCatalogStorageKey, title]);
 
   useEffect(() => {
     try {
@@ -2979,7 +3016,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     const rows = templateMedicineRows(template);
     setRxDraft(rows);
     targetSetter((current) => active.columns.map((column, index) => {
-      if (column === 'Service') return template.service ?? current[index] ?? '';
+      if (column === 'Service') return serviceOptions.includes(template.service) ? template.service : serviceOptions[0] ?? '';
       if (column === 'Medicine') return template.medicine ?? current[index] ?? '';
       if (column === 'Dose') return rows.map((row) => row.dose).filter(Boolean).join(', ') || template.dose || current[index] || '';
       if (column === 'Timing') return rows.map((row) => row.timing).filter(Boolean).join(', ') || template.timing || current[index] || '';
@@ -3228,6 +3265,18 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     setEditIndex(null);
   };
 
+  const deleteService = (row) => {
+    const serviceName = String(row[0] ?? '').trim();
+    if (!serviceName || !window.confirm(`Delete ${serviceName} from the service catalog? Existing appointments and treatment records will remain unchanged.`)) return;
+    setRowsByTab((current) => ({
+      ...current,
+      services: (current.services ?? []).filter((candidate) => (
+        String(normalizeOperationRow('services', active.columns, candidate)[0] ?? '').trim().toLowerCase() !== serviceName.toLowerCase()
+      )),
+    }));
+    setMessage(`${serviceName} deleted from the service catalog.`);
+  };
+
   const openEdit = (row) => {
     const sourceIndex = activeRows.findIndex((candidate) => candidate === row);
     if (sourceIndex === -1) {
@@ -3358,7 +3407,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
             </>
           )}
           <div className="filter-pills">
-            {Object.keys(fixedMedicineByService).length ? Object.keys(fixedMedicineByService).map((service) => (
+            {Object.keys(fixedMedicineByService).filter((service) => serviceOptions.includes(service)).length ? Object.keys(fixedMedicineByService).filter((service) => serviceOptions.includes(service)).map((service) => (
               <button key={service} type="button" className="sheet-tab filter-pill" onClick={() => applyPreset(service)}>
                 {service}
               </button>
@@ -3382,7 +3431,10 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
             filteredRows.map((row, index) => (
               <div className="data-row" key={`${active.id}-${index}`}>
                 {row.map((cell, cellIndex) => <div data-label={displayColumn(active.columns[cellIndex])} key={`${active.columns[cellIndex]}-${index}`}>{cell}</div>)}
-                <div><button className="row-link" type="button" onClick={() => openEdit(row)}>Open</button></div>
+                <div className="module-row-actions">
+                  <button className="row-link" type="button" onClick={() => openEdit(row)}>{active.id === 'services' ? 'Edit' : 'Open'}</button>
+                  {active.id === 'services' && <button className="row-link danger" type="button" onClick={() => deleteService(row)}>Delete</button>}
+                </div>
               </div>
             ))
           ) : (
@@ -4145,6 +4197,7 @@ function LegacyFormsPage() {
 
 export function AppointmentsPage() {
   const { branchKey, currentBranch } = useBranch();
+  const appointmentServiceOptions = getSavedServiceNames(branchKey, currentBranch);
   const isMainBranch = currentBranch === 'Main Branch';
   const navigate = useNavigate();
   const [patientOptions] = useState(() => {
@@ -4178,7 +4231,7 @@ export function AppointmentsPage() {
       ]}
       columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Mode', 'Status']}
       rows={[]}
-      fieldOptions={{ Type: services, Mode: ['Offline', 'Online'] }}
+      fieldOptions={{ Type: appointmentServiceOptions, Mode: ['Offline', 'Online'] }}
       searchableFieldOptions={{ Client: patientOptions }}
       fieldTypes={{ Mobile: 'tel', Date: 'date', Time: 'time' }}
       normalizeRows={normalizeAppointmentRows}
@@ -4255,17 +4308,24 @@ export function AppointmentsPage() {
 }
 
 export function ServicesPage() {
+  const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
+  const fallbackTabs = loadSavedObject(
+    branchKey('Operations:tabs:v3'),
+    isMainBranch ? loadSavedObject('ayurflow:Operations:tabs:v3', {}) : {},
+  );
+  const serviceRows = getSavedServiceRows(branchKey, currentBranch, fallbackTabs.services ?? []);
   return (
     <GenericModulePage
       title="Services"
       description="Maintain the service catalog used by appointment booking, treatment plans, and future scheduling."
       stats={[
-        { label: 'Saved Services', value: '0' },
-        { label: 'Service Options', value: services.length },
+        { label: 'Saved Services', value: serviceRows.length },
+        { label: 'Service Options', value: serviceRows.length },
         { label: 'Status', value: 'Editable' },
       ]}
       columns={['Service', 'Category', 'Duration', 'Status']}
-      rows={[]}
+      rows={serviceRows}
       rowActions={(row, setSelectedRow, setActionMessage, setTableRows) => (
         <ActionMenu compact label={`Actions for ${row[0] || 'service'}`} items={[
           { label: 'View service', onClick: () => { setSelectedRow(row[0]); setActionMessage(`${row[0]} selected in Services.`); } },
@@ -4297,11 +4357,7 @@ export function TreatmentPlansPage() {
   const [clientNames] = useState(() =>
     loadSavedArray(branchKey('ayurflow-clients:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients) : []).map(savedClientName).filter(Boolean)
   );
-  const [serviceOptions] = useState(() => {
-    const saved = isMainBranch ? loadSavedArray('ayurflow:Services:rows:v2', []) : [];
-    const savedNames = saved.map((row) => row[0]).filter(Boolean);
-    return Array.from(new Set([...savedNames, ...services]));
-  });
+  const serviceOptions = getSavedServiceNames(branchKey, currentBranch);
   const [plans, setPlans] = useState(() => loadSavedArray(PLANS_KEY, []));
   const [templates, setTemplates] = useState(() => loadSavedArray(TEMPLATES_KEY, isMainBranch ? loadSavedArray('ayurflow:treatment-templates:v1', []) : []));
   const [dietPlans, setDietPlans] = useState(() => loadSavedArray(DIET_PLANS_KEY, []));

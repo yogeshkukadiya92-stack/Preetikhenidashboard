@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '../components/ui.jsx';
 import { useBranch } from '../context/BranchContext.jsx';
 import { loadAllLocalResponses, loadForms } from '../data/formStore.js';
+import { services as defaultServiceNames } from '../data/appConfig.js';
+import { loadServiceCatalog, serviceNames } from '../data/serviceCatalog.js';
 
 function loadValue(key, fallback) {
   try {
@@ -289,7 +291,6 @@ const STAGES = [
 const DIAGNOSIS_OPTIONS = ['General consultation', 'Obesity', 'Prediabetes', 'Type 2 diabetes', 'Hypertension', 'Dyslipidemia', 'Hypothyroidism', 'PCOS', 'Digestive disorder', 'Joint disorder', 'Skin disorder', 'Hair disorder', 'Stress-related condition'];
 const NOTE_OPTIONS = ['Diet and lifestyle counselling given', 'Continue current medicines', 'Lab tests advised', 'Hydration and sleep guidance given', 'Review after 7 days', 'Review after 15 days', 'Review after 30 days'];
 const VITAL_OPTIONS = ['BP 120/80, Pulse 72', 'BP 130/80, Pulse 76', 'BP 140/90, Pulse 80', 'Vitals stable'];
-const SERVICE_OPTIONS = ['Consultation', 'Follow-up', 'Weight Loss', 'Skin Care', 'Hair Treatment', 'Panchakarma', 'Garbhasanskar', 'Diet Counseling', 'Therapy Session'];
 const DURATION_OPTIONS = ['7 days', '15 days', '30 days', '45 days', '60 days', '90 days', '120 days'];
 const PAYMENT_AMOUNTS = ['500', '1000', '1500', '3000', '5000', '10000'];
 const QUICK_TREATMENTS = [
@@ -877,7 +878,7 @@ function MedicineSearchInput({ index, value, catalog, onChange, onSelect, onAdd 
 export function ClientJourneyPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
   const clientsKey = branchKey('ayurflow-clients:rows:v3');
   const appointmentsKey = branchKey('Appointments:rows:v3');
   const paymentsKey = branchKey('ayurflow-payments:rows:v3');
@@ -889,6 +890,15 @@ export function ClientJourneyPage() {
   const consultationTemplatesKey = branchKey('consultation-templates:v1');
   const clinicalPrintTemplatesKey = branchKey('clinical-print-templates:v1');
   const patientFormUpdatesKey = branchKey('patient-form-updates:v1');
+  const operationTabs = loadValue(branchKey('Operations:tabs:v3'), currentBranch === 'Main Branch' ? loadValue('ayurflow:Operations:tabs:v3', {}) : {});
+  const serviceOptions = serviceNames(loadServiceCatalog({
+    key: branchKey('Services:rows:v3'),
+    isMainBranch: currentBranch === 'Main Branch',
+    defaults: defaultServiceNames,
+    fallbackRows: operationTabs.services ?? [],
+  }));
+  const defaultService = serviceOptions.includes('Consultation') ? 'Consultation' : serviceOptions[0] ?? '';
+  const followUpService = serviceOptions.includes('Follow-up') ? 'Follow-up' : defaultService;
   const [clients, setClients] = useState(() => loadValue(clientsKey, []));
   const [appointments, setAppointments] = useState(() => normalizeAppointments(loadValue(appointmentsKey, [])));
   const [journeys, setJourneys] = useState(() => loadValue(journeysKey, {}));
@@ -906,7 +916,7 @@ export function ClientJourneyPage() {
   const [consultationOpen, setConsultationOpen] = useState(false);
   const [consultation, setConsultation] = useState({ complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
   const [consultationSections, setConsultationSections] = useState(() => [
-    { id: 'c-1', service: 'Consultation', complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' }
+    { id: 'c-1', service: defaultService, complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' }
   ]);
   const [sectionDoctorNoteChoices, setSectionDoctorNoteChoices] = useState({});
   const [consultationTemplates, setConsultationTemplates] = useState(() => loadValue(consultationTemplatesKey, []));
@@ -932,13 +942,13 @@ export function ClientJourneyPage() {
     nextFollowup: '',
   }));
   const [stageModal, setStageModal] = useState('');
-  const [appointmentForm, setAppointmentForm] = useState(() => ({ mobile: '', ...currentSlot(), type: 'Consultation', status: 'Pending' }));
+  const [appointmentForm, setAppointmentForm] = useState(() => ({ mobile: '', ...currentSlot(), type: defaultService, status: 'Pending' }));
   const [requiredForm, setRequiredForm] = useState('Patient Intake Form');
-  const [treatmentForm, setTreatmentForm] = useState({ service: 'Consultation', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
-  const [dietPlanForm, setDietPlanForm] = useState(() => newDietPlan());
+  const [treatmentForm, setTreatmentForm] = useState({ service: defaultService, goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
+  const [dietPlanForm, setDietPlanForm] = useState(() => ({ ...newDietPlan(), service: serviceOptions.find((service) => /nutrition|diet|fat|weight|muscle/i.test(service)) ?? defaultService }));
   const [treatmentMedicineRows, setTreatmentMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
   const [treatmentSections, setTreatmentSections] = useState(() => [
-    { id: 't-1', service: 'Consultation', goal: '', duration: '30 days', status: 'Active', medicines: [{ medicine: '', dose: '', timing: '' }] }
+    { id: 't-1', service: defaultService, goal: '', duration: '30 days', status: 'Active', medicines: [{ medicine: '', dose: '', timing: '' }] }
   ]);
   const [treatmentSaveError, setTreatmentSaveError] = useState('');
   const [medicineCatalogRevision, setMedicineCatalogRevision] = useState(0);
@@ -1506,7 +1516,7 @@ export function ClientJourneyPage() {
   const addConsultationSection = () => {
     const newIndex = consultationSections.length + 1;
     const existingServices = consultationSections.map((s) => s.service);
-    const nextService = SERVICE_OPTIONS.find((s) => !existingServices.includes(s)) || 'Consultation';
+    const nextService = serviceOptions.find((s) => !existingServices.includes(s)) || defaultService;
     const newSection = {
       id: `consultation-sec-${Date.now()}-${newIndex}`,
       service: nextService,
@@ -1648,7 +1658,7 @@ export function ClientJourneyPage() {
   const applyQuickConsultationToSection = (sectionIndex, preset) => {
     setConsultationSections((prev) => prev.map((sec, i) => (i === sectionIndex ? {
       ...sec,
-      service: preset.label || sec.service,
+      service: serviceOptions.includes(preset.label) ? preset.label : defaultService,
       complaint: preset.complaint,
       diagnosis: preset.diagnosis,
       investigation: '',
@@ -1675,17 +1685,17 @@ export function ClientJourneyPage() {
 
   const setAppointmentPreset = (preset) => {
     const slot = currentSlot();
-    if (preset === 'now') setAppointmentForm((value) => ({ ...value, ...slot, status: 'Checked-in', type: 'Consultation' }));
+    if (preset === 'now') setAppointmentForm((value) => ({ ...value, ...slot, status: 'Checked-in', type: defaultService }));
     if (preset === 'today') setAppointmentForm((value) => ({ ...value, date: slot.date, status: 'Confirmed' }));
     if (preset === 'tomorrow') setAppointmentForm((value) => ({ ...value, date: addDays(1), status: 'Confirmed' }));
-    if (preset === 'week') setAppointmentForm((value) => ({ ...value, date: addDays(7), type: 'Follow-up', status: 'Confirmed' }));
-    if (preset === 'month') setAppointmentForm((value) => ({ ...value, date: addDays(30), type: 'Follow-up', status: 'Confirmed' }));
+    if (preset === 'week') setAppointmentForm((value) => ({ ...value, date: addDays(7), type: followUpService, status: 'Confirmed' }));
+    if (preset === 'month') setAppointmentForm((value) => ({ ...value, date: addDays(30), type: followUpService, status: 'Confirmed' }));
   };
 
   const addTreatmentSection = () => {
     const newIndex = treatmentSections.length + 1;
     const existingServices = treatmentSections.map((s) => s.service);
-    const nextService = SERVICE_OPTIONS.find((s) => !existingServices.includes(s)) || 'Therapy Session';
+    const nextService = serviceOptions.find((s) => !existingServices.includes(s)) || defaultService;
     const newSection = {
       id: `treatment-sec-${Date.now()}-${newIndex}`,
       service: nextService,
@@ -1759,8 +1769,9 @@ export function ClientJourneyPage() {
   };
 
   const applyQuickTreatment = (preset) => {
-    setTreatmentForm((value) => ({ ...value, ...preset }));
-    updateTreatmentSectionField(0, 'service', preset.service || treatmentForm.service);
+    const service = serviceOptions.includes(preset.service) ? preset.service : defaultService;
+    setTreatmentForm((value) => ({ ...value, ...preset, service }));
+    updateTreatmentSectionField(0, 'service', service);
     updateTreatmentSectionField(0, 'goal', preset.goal || treatmentForm.goal);
     updateTreatmentSectionField(0, 'duration', preset.duration || treatmentForm.duration);
   };
@@ -1779,7 +1790,7 @@ export function ClientJourneyPage() {
     const sections = treatmentSectionsFromData(data);
     setTreatmentSections(sections);
     setTreatmentForm(sections[0] || {
-      service: data.service ?? 'Consultation',
+      service: serviceOptions.includes(data.service) ? data.service : defaultService,
       goal: data.goal ?? '',
       duration: data.duration ?? '30 days',
       medicine: data.medicine ?? '',
@@ -1877,14 +1888,14 @@ export function ClientJourneyPage() {
       return;
     }
     if (stage === 'appointment') {
-      setAppointmentForm(journey.appointmentData ?? { mobile: clientMobile(selectedClientRecord), ...currentSlot(), type: 'Consultation', status: 'Pending' });
+      setAppointmentForm(journey.appointmentData ?? { mobile: clientMobile(selectedClientRecord), ...currentSlot(), type: defaultService, status: 'Pending' });
     }
     if (stage === 'treatment') {
       const savedTreatment = journey.treatmentData;
       if (savedTreatment) {
         const sections = treatmentSectionsFromData(savedTreatment);
         setTreatmentSections(sections);
-        setTreatmentForm(sections[0] || { service: 'Consultation', goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
+        setTreatmentForm(sections[0] || { service: defaultService, goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
         setTreatmentMedicineRows(sections[0]?.medicines || [{ medicine: '', dose: '', timing: '' }]);
       } else {
         const cSections = consultationSectionsFromData(journey.consultationData);
@@ -1922,10 +1933,11 @@ export function ClientJourneyPage() {
       const savedDietPlan = journey.dietPlanData || previousDietVisit?.dietPlanData;
       setDietPlanForm(savedDietPlan ? {
         ...newDietPlan(selectedClient),
+        service: serviceOptions.find((service) => /nutrition|diet|fat|weight|muscle/i.test(service)) ?? defaultService,
         ...savedDietPlan,
         client: selectedClient,
         meals: Array.isArray(savedDietPlan.meals) && savedDietPlan.meals.length ? savedDietPlan.meals : DEFAULT_DIET_MEALS.map((meal) => ({ ...meal })),
-      } : newDietPlan(selectedClient));
+      } : { ...newDietPlan(selectedClient), service: serviceOptions.find((service) => /nutrition|diet|fat|weight|muscle/i.test(service)) ?? defaultService });
     }
     if (stage === 'followup') {
       setFollowupForm(journey.followupData ?? { date: addDays(7), time: currentSlot().time, notes: '', status: 'Confirmed' });
@@ -2277,7 +2289,7 @@ export function ClientJourneyPage() {
       calories: preset.calories,
       water: preset.water,
       duration: preset.duration || current.duration,
-      service: preset.service || current.service,
+      service: serviceOptions.includes(preset.service) ? preset.service : (serviceOptions.includes(current.service) ? current.service : defaultService),
       weekLabel: preset.weekLabel || current.weekLabel,
       instructions: preset.instructions || current.instructions,
       meals: preset.meals.map((m) => ({ ...m })),
@@ -2312,7 +2324,7 @@ export function ClientJourneyPage() {
     if (!template) return;
     setDietPlanForm((current) => ({
       ...current,
-      service: template.service || current.service,
+      service: serviceOptions.includes(template.service) ? template.service : (serviceOptions.includes(current.service) ? current.service : defaultService),
       goal: template.goal || current.goal,
       duration: template.duration || current.duration,
       weekLabel: template.weekLabel || current.weekLabel,
@@ -2994,9 +3006,9 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
         </div>
       )}
 
-      {stageModal === 'appointment' && <JourneyModal title="Add Appointment" client={selectedClient} onClose={() => setStageModal('')} onSave={saveAppointment} saveLabel="Save Appointment"><div className="quick-preset-row"><button className="pill" type="button" onClick={() => setAppointmentPreset('now')}>Walk-in now</button><button className="pill" type="button" onClick={() => setAppointmentPreset('today')}>Today</button><button className="pill" type="button" onClick={() => setAppointmentPreset('tomorrow')}>Tomorrow</button><button className="pill" type="button" onClick={() => setAppointmentPreset('week')}>After 7 days</button><button className="pill" type="button" onClick={() => setAppointmentPreset('month')}>After 30 days</button></div><label className="field-block"><span>Mobile</span><input className="lead-input" type="tel" value={appointmentForm.mobile} onChange={(event) => setAppointmentForm((value) => ({ ...value, mobile: event.target.value }))} /></label><label className="field-block"><span>Date</span><input className="lead-input" type="date" value={appointmentForm.date} onChange={(event) => setAppointmentForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Time</span><input className="lead-input" type="time" value={appointmentForm.time} onChange={(event) => setAppointmentForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block"><span>Type</span><select className="lead-input" value={appointmentForm.type} onChange={(event) => setAppointmentForm((value) => ({ ...value, type: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Status</span><select className="lead-input" value={appointmentForm.status} onChange={(event) => setAppointmentForm((value) => ({ ...value, status: event.target.value }))}><option>Pending</option><option>Confirmed</option><option>Checked-in</option><option>Cancelled</option></select></label></JourneyModal>}
+      {stageModal === 'appointment' && <JourneyModal title="Add Appointment" client={selectedClient} onClose={() => setStageModal('')} onSave={saveAppointment} saveLabel="Save Appointment"><div className="quick-preset-row"><button className="pill" type="button" onClick={() => setAppointmentPreset('now')}>Walk-in now</button><button className="pill" type="button" onClick={() => setAppointmentPreset('today')}>Today</button><button className="pill" type="button" onClick={() => setAppointmentPreset('tomorrow')}>Tomorrow</button><button className="pill" type="button" onClick={() => setAppointmentPreset('week')}>After 7 days</button><button className="pill" type="button" onClick={() => setAppointmentPreset('month')}>After 30 days</button></div><label className="field-block"><span>Mobile</span><input className="lead-input" type="tel" value={appointmentForm.mobile} onChange={(event) => setAppointmentForm((value) => ({ ...value, mobile: event.target.value }))} /></label><label className="field-block"><span>Date</span><input className="lead-input" type="date" value={appointmentForm.date} onChange={(event) => setAppointmentForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Time</span><input className="lead-input" type="time" value={appointmentForm.time} onChange={(event) => setAppointmentForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block"><span>Type</span><select className="lead-input" value={appointmentForm.type} onChange={(event) => setAppointmentForm((value) => ({ ...value, type: event.target.value }))}>{serviceOptions.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Status</span><select className="lead-input" value={appointmentForm.status} onChange={(event) => setAppointmentForm((value) => ({ ...value, status: event.target.value }))}><option>Pending</option><option>Confirmed</option><option>Checked-in</option><option>Cancelled</option></select></label></JourneyModal>}
 
-      {stageModal === 'returning-visit' && <JourneyModal title="New Visit for Existing Patient" client={selectedClient} onClose={() => setStageModal('')} onSave={saveAppointment} saveLabel="Add Visit & Check In"><div className="returning-patient-summary full-field"><span><strong>{clientId(selectedClientRecord) || 'Saved patient'}</strong> Patient ID</span><span><strong>{clientMobile(selectedClientRecord) || 'Not saved'}</strong> Mobile</span><span><strong>Auto-filled</strong> Saved profile linked</span></div><div className="action-note full-field"><strong>Existing patient selected.</strong> This creates a new visit while keeping all previous journey, treatment, form, and payment records linked.</div><label className="field-block"><span>Mobile</span><input className="lead-input" type="tel" value={appointmentForm.mobile} onChange={(event) => setAppointmentForm((value) => ({ ...value, mobile: event.target.value }))} /></label><label className="field-block"><span>Visit Date</span><input className="lead-input" type="date" value={appointmentForm.date} onChange={(event) => setAppointmentForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Visit Time</span><input className="lead-input" type="time" value={appointmentForm.time} onChange={(event) => setAppointmentForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block"><span>Service</span><select className="lead-input" value={appointmentForm.type} onChange={(event) => setAppointmentForm((value) => ({ ...value, type: event.target.value }))}>{SERVICE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Status</span><select className="lead-input" value={appointmentForm.status} onChange={(event) => setAppointmentForm((value) => ({ ...value, status: event.target.value }))}><option>Checked-in</option><option>Confirmed</option><option>Pending</option></select></label></JourneyModal>}
+      {stageModal === 'returning-visit' && <JourneyModal title="New Visit for Existing Patient" client={selectedClient} onClose={() => setStageModal('')} onSave={saveAppointment} saveLabel="Add Visit & Check In"><div className="returning-patient-summary full-field"><span><strong>{clientId(selectedClientRecord) || 'Saved patient'}</strong> Patient ID</span><span><strong>{clientMobile(selectedClientRecord) || 'Not saved'}</strong> Mobile</span><span><strong>Auto-filled</strong> Saved profile linked</span></div><div className="action-note full-field"><strong>Existing patient selected.</strong> This creates a new visit while keeping all previous journey, treatment, form, and payment records linked.</div><label className="field-block"><span>Mobile</span><input className="lead-input" type="tel" value={appointmentForm.mobile} onChange={(event) => setAppointmentForm((value) => ({ ...value, mobile: event.target.value }))} /></label><label className="field-block"><span>Visit Date</span><input className="lead-input" type="date" value={appointmentForm.date} onChange={(event) => setAppointmentForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Visit Time</span><input className="lead-input" type="time" value={appointmentForm.time} onChange={(event) => setAppointmentForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block"><span>Service</span><select className="lead-input" value={appointmentForm.type} onChange={(event) => setAppointmentForm((value) => ({ ...value, type: event.target.value }))}>{serviceOptions.map((option) => <option key={option}>{option}</option>)}</select></label><label className="field-block"><span>Status</span><select className="lead-input" value={appointmentForm.status} onChange={(event) => setAppointmentForm((value) => ({ ...value, status: event.target.value }))}><option>Checked-in</option><option>Confirmed</option><option>Pending</option></select></label></JourneyModal>}
 
       {stageModal === 'forms' && <JourneyModal title="Required Form" client={selectedClient} onClose={() => setStageModal('')} onSave={saveRequiredForm} saveLabel={matchedFormResponses.length ? 'Mark Form Received' : 'Waiting for Submission'} saveDisabled={!matchedFormResponses.length}><label className="field-block"><span>Form</span><select className="lead-input" value={requiredForm} onChange={(event) => setRequiredForm(event.target.value)}>{formOptions.length ? formOptions.map((form) => <option key={form.id || form.slug || formTitle(form)} value={formTitle(form)}>{formTitle(form)}</option>) : <option value="">No forms created yet</option>}</select></label><div className="action-note"><strong>{matchedFormResponses.length ? `${matchedFormResponses.length} response(s) found` : 'Submission not found'}</strong>{matchedFormResponses.length ? ' Mobile number matched with submitted form responses below.' : ' Ask the patient to submit any created form using the same mobile number saved in the patient profile.'}</div><div className="matched-response-list full-field">{matchedFormResponses.length ? matchedFormResponses.map(({ response, form }) => <div className="matched-response-card" key={response.id}><div><strong>{response.formTitle || formTitle(form) || 'Submitted Form'}</strong><span>{formatResponseDate(response.submittedAt)}</span></div>{responsePreview(response, form).map(([label, value]) => <p key={`${response.id}-${label}`}><b>{label}:</b> {value}</p>)}</div>) : <div className="empty-state compact-empty"><strong>No matched response yet.</strong><p>Patient mobile: {selectedClientPhone || 'not saved'}</p></div>}</div></JourneyModal>}
 
@@ -3150,7 +3162,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
           </div>
 
           <datalist id="treatment-service-options">
-            {[...new Set([...SERVICE_OPTIONS, ...pastTreatmentOptions.map((option) => option.service)].filter(Boolean))].map((option) => <option key={option} value={option} />)}
+            {[...new Set([...serviceOptions, ...pastTreatmentOptions.map((option) => option.service)].filter(Boolean))].map((option) => <option key={option} value={option} />)}
           </datalist>
         </JourneyModal>
       )}
@@ -3368,7 +3380,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
               </div>
 
               <datalist id="consultation-service-options">
-                {[...new Set([...SERVICE_OPTIONS, ...pastTreatmentOptions.map((option) => option.service)].filter(Boolean))].map((option) => (
+                {[...new Set([...serviceOptions, ...pastTreatmentOptions.map((option) => option.service)].filter(Boolean))].map((option) => (
                   <option key={option} value={option} />
                 ))}
               </datalist>
@@ -3517,7 +3529,7 @@ function DietPlanModal({
                   value={dietPlanForm.service}
                   onChange={(e) => setDietPlanForm((p) => ({ ...p, service: e.target.value }))}
                 >
-                  {SERVICE_OPTIONS.map((opt) => <option key={opt}>{opt}</option>)}
+                  {serviceOptions.map((opt) => <option key={opt}>{opt}</option>)}
                 </select>
               </label>
 
