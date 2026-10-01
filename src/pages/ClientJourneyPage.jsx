@@ -914,6 +914,7 @@ export function ClientJourneyPage() {
   const [dietToastMessage, setDietToastMessage] = useState('');
   const [todayKey, setTodayKey] = useState(() => localDateKey());
   const [consultationOpen, setConsultationOpen] = useState(false);
+  const [consultationSaveError, setConsultationSaveError] = useState('');
   const [consultation, setConsultation] = useState({ complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
   const [consultationSections, setConsultationSections] = useState(() => [
     { id: 'c-1', service: defaultService, complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' }
@@ -1169,7 +1170,7 @@ export function ClientJourneyPage() {
       appointmentData: { mobile: row[1] ?? '', date: row[2] ?? '', time: row[3] ?? '', type: row[4] ?? '', status: row[5] ?? 'Pending' },
       appointmentAt: row[2] && row[3] ? `${row[2]}T${row[3]}` : '',
     }))
-    .filter((visit) => !savedAppointmentKeys.has(appointmentVisitId([
+    .filter((visit) => !savedJourneyVisits.some((saved) => saved.id === visit.id) && !savedAppointmentKeys.has(appointmentVisitId([
       selectedClient,
       visit.appointmentData.mobile,
       visit.appointmentData.date,
@@ -1478,14 +1479,15 @@ export function ClientJourneyPage() {
 
   const updateJourney = (changes) => {
     if (!selectedClient) return;
-    const targetId = selectedVisitId || patientJourneyRecord.activeVisitId || `visit-${Date.now()}`;
-    if (!selectedVisitId) setSelectedVisitId(targetId);
+    const targetId = activeVisitId || `visit-${Date.now()}`;
+    const sourceVisit = journeyVisits.find((visit) => visit.id === targetId);
+    if (selectedVisitId !== targetId) setSelectedVisitId(targetId);
     setJourneys((current) => {
       const record = normalizeJourneyRecord(current[selectedClient]);
       const now = new Date().toISOString();
       let visits = record.visits;
       if (!visits.some((visit) => visit.id === targetId)) {
-        visits = [...visits, { id: targetId, visitDate: currentSlot().date, createdAt: now }];
+        visits = [...visits, { visitDate: currentSlot().date, createdAt: now, ...sourceVisit, id: targetId }];
       }
       return {
         ...current,
@@ -1508,6 +1510,9 @@ export function ClientJourneyPage() {
     if (!savedConsultation && journey.appointmentData?.type) {
       initialSections[0].service = journey.appointmentData.type;
     }
+    setConsultationSaveError('');
+    setSectionDoctorNoteChoices({});
+    setDoctorNoteChoice('');
     setConsultationSections(initialSections);
     setConsultation(initialSections[0] || { complaint: '', diagnosis: '', investigation: '', notes: '', doctorNotes: '', vitals: '' });
     setConsultationOpen(true);
@@ -1568,7 +1573,7 @@ export function ClientJourneyPage() {
   };
 
   const saveConsultation = () => {
-    const cleanedSections = consultationSections.map((sec) => ({
+    const cleanedSections = consultationSections.map((sec, index) => ({
       ...sec,
       service: sec.service || 'Consultation',
       complaint: sec.complaint?.trim() || '',
@@ -1576,12 +1581,19 @@ export function ClientJourneyPage() {
       vitals: sec.vitals?.trim() || '',
       diagnosis: sec.diagnosis?.trim() || '',
       investigation: sec.investigation?.trim() || '',
-      doctorNotes: sec.doctorNotes?.trim() || '',
+      doctorNotes: [...new Map([
+        ...String(sec.doctorNotes ?? '').split('\n'),
+        String(sectionDoctorNoteChoices[index] ?? ''),
+      ].map((note) => note.trim()).filter(Boolean).map((note) => [note.toLowerCase(), note])).values()].join('\n'),
     }));
     const hasAnyContent = cleanedSections.some((sec) => (
       sec.complaint || sec.notes || sec.doctorNotes || sec.diagnosis || sec.investigation || sec.vitals
     ));
-    if (!hasAnyContent) return;
+    if (!hasAnyContent) {
+      setConsultationSaveError('Please enter complaints, examination, vitals, diagnosis, investigation, or doctor notes before completing the consultation.');
+      return;
+    }
+    setConsultationSaveError('');
 
     const primary = cleanedSections[0] || {};
     const consultationData = {
@@ -3212,6 +3224,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
               <button className="icon-btn" type="button" onClick={() => setConsultationOpen(false)} aria-label="Close modal">x</button>
             </div>
             <div className="modal-body detail-grid">
+              {consultationSaveError && <div className="action-note full-field" role="alert">{consultationSaveError}</div>}
               <div className="section-adder-row full-field">
                 <button className="add-section-btn" type="button" onClick={addConsultationSection}>
                   + Add Service Section
