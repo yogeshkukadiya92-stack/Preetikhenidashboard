@@ -3190,6 +3190,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
         <DietPlanModal
           client={selectedClient}
           clientRecord={selectedClientRecord}
+          serviceOptions={serviceOptions}
           dietPlanForm={dietPlanForm}
           setDietPlanForm={setDietPlanForm}
           onClose={() => setStageModal('')}
@@ -3420,9 +3421,10 @@ function JourneyModal({ title, client, children, onClose, onSave, saveLabel, sav
   return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className={`modal-shell ${shellClassName}`} role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><h2>{title}</h2><p>For patient: {client}</p></div><button className="icon-btn" type="button" onClick={onClose} aria-label="Close modal">x</button></div><div className="modal-body detail-grid">{children}</div><div className="modal-actions"><button className="pill" type="button" onClick={onClose}>Cancel</button><button className="pill primary-action" type="button" onClick={onSave} disabled={saveDisabled}>{saveLabel}</button></div></div></div>;
 }
 
-function DietPlanModal({
+export function DietPlanModal({
   client,
   clientRecord,
+  serviceOptions,
   dietPlanForm,
   setDietPlanForm,
   onClose,
