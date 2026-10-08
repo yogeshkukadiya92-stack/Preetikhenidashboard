@@ -5,6 +5,7 @@ import { useBranch } from '../context/BranchContext.jsx';
 import { loadAllLocalResponses, loadForms } from '../data/formStore.js';
 import { services as defaultServiceNames } from '../data/appConfig.js';
 import { loadServiceCatalog, serviceNames } from '../data/serviceCatalog.js';
+import { appointmentVisitId } from '../data/appointmentJourney.js';
 
 function loadValue(key, fallback) {
   try {
@@ -654,10 +655,6 @@ function normalizeAppointments(rows = []) {
   }).filter((row) => row.some((value) => String(value ?? '').trim()));
 }
 
-function appointmentVisitId(row) {
-  return `appointment-${row.slice(0, 5).map((value) => encodeURIComponent(String(value ?? '').trim().toLowerCase())).join('-')}`;
-}
-
 function visitDateFromJourney(visit) {
   return visit?.visitDate
     || visit?.appointmentData?.date
@@ -1028,6 +1025,16 @@ export function ClientJourneyPage() {
       window.removeEventListener('moms-pathshala:cloud-hydrated', refreshFormsAndResponses);
     };
   }, []);
+
+  useEffect(() => {
+    const refresh = () => setJourneys(loadValue(journeysKey, {}));
+    window.addEventListener('storage', refresh);
+    window.addEventListener('moms-pathshala:journey-updated', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('moms-pathshala:journey-updated', refresh);
+    };
+  }, [journeysKey]);
 
   useEffect(() => {
     window.localStorage.setItem(journeysKey, JSON.stringify(journeys));

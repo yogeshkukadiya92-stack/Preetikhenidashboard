@@ -29,6 +29,7 @@ import {
 import { loadAllLocalResponses, loadForms as loadSavedForms } from '../data/formStore.js';
 import { hashPassword, STAFF_PERMISSION_OPTIONS, getAllUsers, saveAuthUser, deleteAuthUser } from '../data/auth.js';
 import { loadServiceCatalog, serviceNames } from '../data/serviceCatalog.js';
+import { removeAppointmentFromJourneys } from '../data/appointmentJourney.js';
 import {
   AYURVEDIC_GUIDELINES,
   CLINICAL_DIET_PRESETS,
@@ -4293,7 +4294,11 @@ export function AppointmentsPage() {
             onClick: () => {
               const patient = row[0] || 'this patient';
               const schedule = [row[2], row[3]].filter(Boolean).join(' at ');
-              if (!window.confirm(`Delete ${patient}'s appointment${schedule ? ` on ${schedule}` : ''}? This cannot be undone.`)) return;
+              if (!window.confirm(`Delete ${patient}'s appointment${schedule ? ` on ${schedule}` : ''} and its patient journey entry? This cannot be undone.`)) return;
+              const journeysKey = branchKey('client-journeys:v1');
+              const journeys = loadSavedObject(journeysKey, {});
+              window.localStorage.setItem(journeysKey, JSON.stringify(removeAppointmentFromJourneys(journeys, row)));
+              window.dispatchEvent(new Event('moms-pathshala:journey-updated'));
               setTableRows((current) => {
                 const appointmentIndex = current.findIndex((candidate) => candidate === row);
                 return appointmentIndex < 0 ? current : current.filter((_, index) => index !== appointmentIndex);
