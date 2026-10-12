@@ -301,7 +301,7 @@ app.get('/api/health', asyncHandler(async (_request, response) => {
   const db = getPool();
   if (!db) return response.json({ ok: true, database: false });
   await db.query('select 1');
-  response.json({ ok: true, database: true });
+  response.json({ ok: true, database: true, branchSetupReady: await readState(FIRST_BRANCH_MIGRATION_KEY) === true });
 }));
 
 app.get('/api/app-state', requireIdentity, asyncHandler(async (request, response) => {
