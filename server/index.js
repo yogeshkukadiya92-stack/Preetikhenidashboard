@@ -14,6 +14,8 @@ const databaseUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '';
 const WORKSPACE_BRANCH = 'shreeayurved09@gmail.com';
 const USERS_KEY = 'moms-pathshala:auth-users:v1';
 const STAFF_USERS_KEY = 'moms-pathshala:Main Branch:users:rows:v3';
+const BRANCHES_KEY = 'moms-pathshala:branches:v1';
+const FIRST_BRANCH_MIGRATION_KEY = 'moms-pathshala:branch-1-initialized:v1';
 const COOKIE_NAME = 'moms_pathshala_session';
 const adminEmail = String(process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || 'shreeayurved09@gmail.com').toLowerCase();
 const adminPasswordHash = String(process.env.ADMIN_PASSWORD_SHA256 || process.env.VITE_ADMIN_PASSWORD_SHA256 || '').toLowerCase();
@@ -104,6 +106,30 @@ async function ensureSchema() {
      do update set form_id = excluded.form_id, form = excluded.form, updated_at = now()`,
     [WORKSPACE_BRANCH],
   );
+  if (await readState(FIRST_BRANCH_MIGRATION_KEY) !== true) {
+    const savedBranches = await readState(BRANCHES_KEY);
+    const branches = Array.isArray(savedBranches) ? savedBranches : ['Main Branch'];
+    if (!branches.includes('Branch 1')) branches.push('Branch 1');
+    await db.query(
+      `insert into app_state (branch, key, value) values ($1, $2, $3::jsonb)
+       on conflict (branch, key) do update set value = excluded.value, updated_at = now()`,
+      [WORKSPACE_BRANCH, BRANCHES_KEY, JSON.stringify(branches)],
+    );
+    const users = await readUsers();
+    if (!users.some((user) => user.branch === 'Branch 1' || String(user.email).toLowerCase() === 'janidisha357@gmail.com')) {
+      users.push({ name: 'Branch 1 Account', email: 'janidisha357@gmail.com', branch: 'Branch 1', role: 'Branch Manager', isBranchAccount: true, status: 'Pending', passwordHash: '', permissions: [] });
+      await db.query(
+        `insert into app_state (branch, key, value) values ($1, $2, $3::jsonb)
+         on conflict (branch, key) do update set value = excluded.value, updated_at = now()`,
+        [WORKSPACE_BRANCH, USERS_KEY, JSON.stringify(users)],
+      );
+    }
+    await db.query(
+      `insert into app_state (branch, key, value) values ($1, $2, 'true'::jsonb)
+       on conflict (branch, key) do update set value = excluded.value, updated_at = now()`,
+      [WORKSPACE_BRANCH, FIRST_BRANCH_MIGRATION_KEY],
+    );
+  }
 }
 
 function asyncHandler(handler) {
