@@ -22,11 +22,12 @@ Set these environment variables:
 DATABASE_URL=postgresql://user:password@host:5432/database
 POSTGRES_SSL=false
 PORT=3000
-VITE_ADMIN_EMAIL=admin@example.com
-VITE_ADMIN_PASSWORD_SHA256=<sha256-password-hash>
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD_SHA256=<sha256-password-hash>
 ```
 
 When using a Coolify PostgreSQL resource on the same network, use the internal database URL Coolify provides. Keep `POSTGRES_SSL=false` unless the database explicitly requires SSL.
+The admin credentials must be available to the running Node server. Existing deployments that already set `VITE_ADMIN_PASSWORD_SHA256` remain compatible, but should move the hash to `ADMIN_PASSWORD_SHA256` so it is no longer treated as a frontend build setting.
 
 ## Data Table
 

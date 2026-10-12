@@ -4,10 +4,8 @@ const LAST_PATH_KEY = 'moms-pathshala:last-protected-path:v1';
 export const STAFF_USERS_KEY = 'moms-pathshala:Main Branch:users:rows:v3';
 export const ALL_USERS_KEY = 'moms-pathshala:auth-users:v1';
 const configuredEmail = String(import.meta.env.VITE_ADMIN_EMAIL ?? 'shreeayurved09@gmail.com').trim().toLowerCase();
-const configuredPasswordHash = String(import.meta.env.VITE_ADMIN_PASSWORD_SHA256 ?? '').trim().toLowerCase();
 
 export const ADMIN_EMAIL = configuredEmail;
-export const AUTH_CONFIGURED = Boolean(configuredEmail && configuredPasswordHash);
 export const STAFF_PERMISSION_OPTIONS = [
   { path: '/', label: 'Dashboard / Overview' },
   { path: '/crm', label: 'CRM' },
@@ -117,39 +115,26 @@ function readSession(storage) {
 
 export function getAuthSession() {
   const session = readSession(window.sessionStorage) ?? readSession(window.localStorage);
-  if (!session || session.isAdmin) return session;
-  const users = getAllUsers();
-  const user = users.find((u) => String(u.email).trim().toLowerCase() === String(session.email).trim().toLowerCase());
-  if (!user || user.status !== 'Active') {
-    clearAuthSession();
-    return null;
-  }
-  return {
-    ...session,
-    name: user.name || session.name,
-    role: user.role || session.role,
-    branch: user.branch || session.branch || 'Main Branch',
-    permissions: Array.isArray(user.permissions) ? user.permissions : [],
-  };
+  return session;
 }
 
-export async function verifyCredentials(email, password) {
-  const normalizedEmail = String(email).trim().toLowerCase();
-  const passwordHash = await hashPassword(String(password));
-  if (AUTH_CONFIGURED && normalizedEmail === ADMIN_EMAIL && passwordHash === configuredPasswordHash) {
-    return { email: ADMIN_EMAIL, name: 'Administrator', role: 'Administrator', isAdmin: true, branch: null, permissions: ['*'] };
-  }
-  const users = getAllUsers();
-  const user = users.find((u) => String(u.email).trim().toLowerCase() === normalizedEmail);
-  if (!user || user.status !== 'Active' || !user.passwordHash || user.passwordHash !== passwordHash) return null;
-  return {
-    email: normalizedEmail,
-    name: user.name || normalizedEmail,
-    role: user.role || 'Branch User',
-    branch: user.branch || 'Main Branch',
-    isAdmin: false,
-    permissions: Array.isArray(user.permissions) ? user.permissions : [],
-  };
+export async function verifyCredentials(email, password, remember = false) {
+  const response = await fetch('/api/auth/login', {
+    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, remember }),
+  });
+  return response.ok ? response.json() : null;
+}
+
+export async function validateAuthSession() {
+  if (!getAuthSession()) return null;
+  try {
+    const response = await fetch('/api/auth/session', { credentials: 'same-origin' });
+    if (!response.ok) { clearAuthSession(); return null; }
+    const identity = await response.json();
+    createAuthSession(identity, Boolean(window.localStorage.getItem(SESSION_KEY)));
+    return identity;
+  } catch { return getAuthSession(); }
 }
 
 export function createAuthSession(identity, remember = false) {
@@ -190,6 +175,7 @@ export function getLastProtectedPath() {
 }
 
 export function clearAuthSession() {
+  fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
   window.sessionStorage.removeItem(SESSION_KEY);
   window.localStorage.removeItem(SESSION_KEY);
   window.sessionStorage.removeItem(LAST_PATH_KEY);

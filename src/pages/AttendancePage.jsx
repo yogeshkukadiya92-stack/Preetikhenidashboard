@@ -244,7 +244,7 @@ function downloadCsv(sessions) {
 }
 
 export function AttendancePage() {
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
   const sessionsKey = branchKey('attendance-sessions:v1');
   const formsKey = branchKey('attendance-forms:v1');
   const patientsKey = branchKey('ayurflow-clients:rows:v3');
@@ -410,6 +410,7 @@ export function AttendancePage() {
         body: JSON.stringify({
           ...form,
           sessionId: form.id,
+          branch: currentBranch,
         }),
       });
     } catch {

@@ -27,8 +27,9 @@ import {
   users,
 } from '../data/appConfig.js';
 import { loadAllLocalResponses, loadForms as loadSavedForms } from '../data/formStore.js';
-import { hashPassword, STAFF_PERMISSION_OPTIONS, getAllUsers, saveAuthUser, deleteAuthUser } from '../data/auth.js';
+import { getAuthSession, hashPassword, STAFF_PERMISSION_OPTIONS, getAllUsers, saveAuthUser, deleteAuthUser } from '../data/auth.js';
 import { loadServiceCatalog, serviceNames } from '../data/serviceCatalog.js';
+import { loadLiveDashboardData } from '../data/liveData.js';
 import { removeAppointmentFromJourneys } from '../data/appointmentJourney.js';
 import {
   AYURVEDIC_GUIDELINES,
@@ -6459,6 +6460,30 @@ export function BranchesPage() {
     status: 'Active',
   });
   const [modalMessage, setModalMessage] = useState('');
+  useEffect(() => {
+    if (!getAuthSession()?.isAdmin || !branches.includes('Branch 1')) return;
+    const accounts = getAllUsers();
+    if (accounts.some((user) => user.branch === 'Branch 1' || String(user.email).toLowerCase() === 'janidisha357@gmail.com')) return;
+    saveAuthUser({
+      name: 'Branch 1 Account', email: 'janidisha357@gmail.com', branch: 'Branch 1',
+      role: 'Branch Manager', isBranchAccount: true, status: 'Pending', passwordHash: '',
+      permissions: STAFF_PERMISSION_OPTIONS.map((item) => item.path),
+    });
+    setUsersList(getAllUsers());
+  }, [branches]);
+  const [dataRevision, setDataRevision] = useState(0);
+  useEffect(() => {
+    const refresh = () => {
+      setDataRevision((value) => value + 1);
+      setUsersList(getAllUsers());
+    };
+    window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
+    return () => window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
+  }, []);
+  const branchSummary = useMemo(() => branches.map((branch) => {
+    const data = loadLiveDashboardData(branch);
+    return { branch, patients: data.clients.length, appointments: data.appointments.length, payments: data.payments.length, leads: data.leads.length };
+  }), [branches, dataRevision]);
 
   const refreshUsers = () => {
     setUsersList(getAllUsers());
@@ -6481,10 +6506,12 @@ export function BranchesPage() {
         password: '',
         role: existing.role || 'Branch Manager',
         permissions: Array.isArray(existing.permissions) && existing.permissions.length ? existing.permissions : STAFF_PERMISSION_OPTIONS.map((p) => p.path),
-        status: existing.status || 'Active',
+        status: existing.passwordHash ? (existing.status || 'Active') : 'Active',
       });
     } else {
-      const defaultEmail = `${branch.toLowerCase().replace(/[^a-z0-9]+/g, '')}@clinic.com`;
+      const defaultEmail = branch === 'Branch 1'
+        ? 'janidisha357@gmail.com'
+        : `${branch.toLowerCase().replace(/[^a-z0-9]+/g, '')}@clinic.com`;
       setBranchLoginForm({
         email: defaultEmail,
         password: '',
@@ -6528,12 +6555,12 @@ export function BranchesPage() {
       setModalMessage('Enter a valid login email.');
       return;
     }
-    if (!existing && branchLoginForm.password.length < 6) {
-      setModalMessage('Enter a password of at least 6 characters.');
+    if ((!existing || !existing.passwordHash) && branchLoginForm.password.length < 12) {
+      setModalMessage('Enter a password of at least 12 characters.');
       return;
     }
-    if (branchLoginForm.password && branchLoginForm.password.length < 6) {
-      setModalMessage('Password must be at least 6 characters.');
+    if (branchLoginForm.password && branchLoginForm.password.length < 12) {
+      setModalMessage('Password must be at least 12 characters.');
       return;
     }
     if (!branchLoginForm.permissions.length) {
@@ -6588,7 +6615,7 @@ export function BranchesPage() {
         <div className="module-stats">
           <div className="mini-stat"><span>Branches</span><strong>{branches.length}</strong></div>
           <div className="mini-stat"><span>Active Workspace</span><strong>{currentBranch}</strong></div>
-          <div className="mini-stat"><span>Data Isolation</span><strong>100% Isolated</strong></div>
+          <div className="mini-stat"><span>View</span><strong>All Branches</strong></div>
         </div>
       </div>
 
@@ -6602,6 +6629,16 @@ export function BranchesPage() {
             placeholder="Enter branch name (e.g. Surat Branch, Varachha)"
           />
           <button className="pill primary-action" type="button" onClick={createBranch}>+ Add Branch</button>
+        </div>
+      </Card>
+
+      <Card title="All Branches Overview" subtitle="Main branch can review each branch's records. Open a branch to use the same pages with its data.">
+        <div className="table adaptive-table" style={{ '--table-columns': 6 }}>
+          <div className="table-head"><div>Branch</div><div>Patients</div><div>Appointments</div><div>Payments</div><div>Leads</div><div>Open</div></div>
+          {branchSummary.map((summary) => <div className="data-row" key={summary.branch}>
+            <div><strong>{summary.branch}</strong></div><div>{summary.patients}</div><div>{summary.appointments}</div><div>{summary.payments}</div><div>{summary.leads}</div>
+            <div><button className="row-link" type="button" onClick={() => { setCurrentBranch(summary.branch); navigate('/'); }}>View data</button></div>
+          </div>)}
         </div>
       </Card>
 
@@ -6628,7 +6665,7 @@ export function BranchesPage() {
                     <div className="branch-account-summary">
                       <span className="branch-account-email">📧 {account.email}</span>
                       <small className="branch-account-count">
-                        {Array.isArray(account.permissions) ? `${account.permissions.length} module(s) permitted` : 'Full access'}
+                        {!account.passwordHash ? 'Set a password to activate this login' : Array.isArray(account.permissions) ? `${account.permissions.length} module(s) permitted` : 'Full access'}
                       </small>
                     </div>
                   ) : (

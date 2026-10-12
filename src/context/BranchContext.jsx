@@ -4,15 +4,20 @@ import { getAuthSession } from '../data/auth.js';
 
 const BranchContext = createContext(null);
 const SINGLE_BRANCH = 'Main Branch';
+const FIRST_CHILD_BRANCH = 'Branch 1';
 const BRANCHES_KEY = 'moms-pathshala:branches:v1';
+const FIRST_CHILD_MIGRATION_KEY = 'moms-pathshala:branch-1-initialized:v1';
 const CURRENT_BRANCH_KEY = 'moms-pathshala:current-branch:v1';
 
 function readBranches() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(BRANCHES_KEY) ?? 'null');
-    return Array.isArray(saved) && saved.length ? saved : [SINGLE_BRANCH];
+    const branches = Array.isArray(saved) && saved.length ? saved : [SINGLE_BRANCH];
+    return window.localStorage.getItem(FIRST_CHILD_MIGRATION_KEY) === 'true' || branches.includes(FIRST_CHILD_BRANCH)
+      ? branches : [...branches, FIRST_CHILD_BRANCH];
   } catch {
-    return [SINGLE_BRANCH];
+    return window.localStorage.getItem(FIRST_CHILD_MIGRATION_KEY) === 'true'
+      ? [SINGLE_BRANCH] : [SINGLE_BRANCH, FIRST_CHILD_BRANCH];
   }
 }
 
@@ -21,11 +26,36 @@ export function BranchProvider({ children }) {
   const isBranchLocked = Boolean(session && !session.isAdmin && session.branch);
   const lockedBranch = isBranchLocked ? session.branch : null;
 
-  const [branches, setBranches] = useState(readBranches);
+  const [branches, setBranches] = useState(() => {
+    const saved = readBranches();
+    return lockedBranch && !saved.includes(lockedBranch) ? [...saved, lockedBranch] : saved;
+  });
+  useEffect(() => {
+    if (!session?.isAdmin) return;
+    if (window.localStorage.getItem(FIRST_CHILD_MIGRATION_KEY) === 'true') return;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(BRANCHES_KEY) ?? 'null');
+      if (!Array.isArray(saved) || !saved.includes(FIRST_CHILD_BRANCH)) {
+        window.localStorage.setItem(BRANCHES_KEY, JSON.stringify(branches));
+      }
+    } catch { window.localStorage.setItem(BRANCHES_KEY, JSON.stringify(branches)); }
+    window.localStorage.setItem(FIRST_CHILD_MIGRATION_KEY, 'true');
+  }, [session?.isAdmin, branches]);
   const [currentBranch, setCurrentBranchState] = useState(() => {
     if (lockedBranch) return lockedBranch;
     return readCurrentBranch(window.localStorage, readBranches());
   });
+
+  useEffect(() => {
+    const refresh = () => {
+      const next = readBranches();
+      if (lockedBranch && !next.includes(lockedBranch)) next.push(lockedBranch);
+      setBranches((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next);
+      if (!lockedBranch) setCurrentBranchState((current) => next.includes(current) ? current : next[0]);
+    };
+    window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
+    return () => window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
+  }, [lockedBranch]);
 
   useEffect(() => {
     const currentSession = getAuthSession();

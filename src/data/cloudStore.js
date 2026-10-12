@@ -1,3 +1,5 @@
+import { clearAuthSession, getAuthSession } from './auth.js';
+
 const originalSetItem = window.Storage.prototype.setItem;
 let syncInstalled = false;
 let refreshInstalled = false;
@@ -11,7 +13,10 @@ const LOGIN_HYDRATION_PAUSE_MS = API_REQUEST_TIMEOUT_MS + 2_000;
 export const CLOUD_STORAGE_CONFIGURED = true;
 
 function shouldSync(key) {
-  return (key.startsWith('moms-pathshala:') || key.startsWith('ayurflow:'))
+  const session = getAuthSession();
+  if (!session) return false;
+  const permitted = session.isAdmin || key === 'moms-pathshala:branches:v1' || key.startsWith(`moms-pathshala:${session.branch}:`);
+  return permitted && (key.startsWith('moms-pathshala:') || key.startsWith('ayurflow:'))
     && !key.includes(':auth-session:')
     && !key.includes(':supabase-session:')
     && key !== PENDING_KEY;
@@ -66,6 +71,10 @@ async function request(path, options = {}) {
       ...(options.headers ?? {}),
     },
   });
+  if (response.status === 401 && getAuthSession()) {
+    clearAuthSession();
+    window.location.replace('/login');
+  }
   if (!response.ok) throw new Error(`Cloud storage request failed (${response.status}).`);
   return response.status === 204 ? null : response.json();
 }
@@ -92,6 +101,19 @@ export function syncCloudValue(key, value) {
 }
 
 export async function hydrateCloudState() {
+  const session = getAuthSession();
+  if (!session) return 0;
+  if (!session.isAdmin) {
+    // Keep cached records from a previous administrator login out of this browser session.
+    const allowedPrefix = `moms-pathshala:${session.branch}:`;
+    Object.keys(window.localStorage).forEach((key) => {
+      if ((key.startsWith('moms-pathshala:') || key.startsWith('ayurflow:'))
+        && key !== 'moms-pathshala:branches:v1'
+        && key !== 'moms-pathshala:auth-session:v1'
+        && key !== PENDING_KEY
+        && !key.startsWith(allowedPrefix)) window.localStorage.removeItem(key);
+    });
+  }
   const rows = await request('/api/app-state?branch=workspace');
   if (!Array.isArray(rows)) return 0;
   const pending = readPending();

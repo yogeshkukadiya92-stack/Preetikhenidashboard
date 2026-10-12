@@ -1,11 +1,19 @@
 import { mergeFormsById } from './formSync.js';
+import { getAuthSession } from './auth.js';
 
-const FORMS_KEY = 'moms-pathshala:forms:v2';
+const branchName = () => {
+  const session = getAuthSession();
+  if (session?.branch) return session.branch;
+  if (!session?.isAdmin) return 'Main Branch';
+  try { return JSON.parse(window.localStorage.getItem('moms-pathshala:current-branch:v1')) || 'Main Branch'; }
+  catch { return window.localStorage.getItem('moms-pathshala:current-branch:v1') || 'Main Branch'; }
+};
+const FORMS_KEY = () => `moms-pathshala:${branchName()}:forms:v2`;
 const LEGACY_FORMS_KEY = 'ayurflow:forms:v1';
-const RESPONSES_KEY = 'moms-pathshala:form-responses:v2';
-const PATIENTS_KEY = 'moms-pathshala:Main Branch:ayurflow-clients:rows:v3';
+const RESPONSES_KEY = () => `moms-pathshala:${branchName()}:form-responses:v2`;
+const PATIENTS_KEY = () => `moms-pathshala:${branchName()}:ayurflow-clients:rows:v3`;
 const LEGACY_PATIENTS_KEY = 'ayurflow:ayurflow-clients:rows:v3';
-const PATIENT_UPDATES_KEY = 'moms-pathshala:Main Branch:patient-form-updates:v1';
+const PATIENT_UPDATES_KEY = () => `moms-pathshala:${branchName()}:patient-form-updates:v1`;
 
 const apiBase = String(import.meta.env.VITE_FORMS_API_URL ?? '/api').trim().replace(/\/$/, '');
 
@@ -64,7 +72,7 @@ function applyPatientDataMappings(form, response) {
   const submittedName = String(response.answers?.[nameField?.id] ?? '').trim();
   if (!mobile && !submittedName) return { status: 'skipped', reason: 'Patient mobile or name is missing.' };
 
-  const patients = readJson(PATIENTS_KEY, readJson(LEGACY_PATIENTS_KEY, []));
+  const patients = readJson(PATIENTS_KEY(), branchName() === 'Main Branch' ? readJson(LEGACY_PATIENTS_KEY, []) : []);
   const patientRows = Array.isArray(patients) ? patients : [];
   const mobileMatches = mobile ? patientRows.filter((row) => normalizePhone(patientMobile(row)) === mobile) : [];
   const normalizedSubmittedName = normalizeName(submittedName);
@@ -84,7 +92,7 @@ function applyPatientDataMappings(form, response) {
     if (field.dataTarget === 'patient_waist' || (field.type === 'number' && fieldMatches(field, /waist|tummy|abdomen|inch|કમર|પેટ|कमर|पेट/i))) return [{ field, type: 'waist', unit: 'inch' }];
     return [];
   });
-  const current = readJson(PATIENT_UPDATES_KEY, []);
+  const current = readJson(PATIENT_UPDATES_KEY(), []);
   const updates = mappedFields.flatMap(({ field, type, unit }) => {
     const numericValue = Number(String(response.answers?.[field.id] ?? '').replace(/[^\d.-]/g, ''));
     if (!Number.isFinite(numericValue) || numericValue <= 0) return [];
@@ -107,7 +115,7 @@ function applyPatientDataMappings(form, response) {
   const existing = Array.isArray(current) ? current : [];
   const existingIds = new Set(existing.map((item) => item.id));
   const newUpdates = updates.filter((item) => !existingIds.has(item.id));
-  if (newUpdates.length) writeJson(PATIENT_UPDATES_KEY, [...newUpdates, ...existing]);
+  if (newUpdates.length) writeJson(PATIENT_UPDATES_KEY(), [...newUpdates, ...existing]);
   return { status: newUpdates.length ? 'updated' : 'no-change', count: newUpdates.length, patientName: patientName(patient) };
 }
 
@@ -156,14 +164,18 @@ export function hasFormsApi() {
 }
 
 export function loadForms() {
-  const current = readJson(FORMS_KEY, null);
+  const current = readJson(FORMS_KEY(), null);
   if (Array.isArray(current)) return current.map(normalizeForm);
-  const legacy = readJson(LEGACY_FORMS_KEY, []);
+  if (branchName() === 'Main Branch') {
+    const oldCloudForms = readJson('moms-pathshala:forms:v2', null);
+    if (Array.isArray(oldCloudForms)) return oldCloudForms.map(normalizeForm);
+  }
+  const legacy = branchName() === 'Main Branch' ? readJson(LEGACY_FORMS_KEY, []) : [];
   return Array.isArray(legacy) ? legacy.map(normalizeForm) : [];
 }
 
 export function saveForms(forms) {
-  return writeJson(FORMS_KEY, forms.map(normalizeForm));
+  return writeJson(FORMS_KEY(), forms.map(normalizeForm));
 }
 
 export async function loadSharedForms() {
@@ -171,7 +183,9 @@ export async function loadSharedForms() {
   if (!apiBase) return { forms: localForms, source: 'local' };
   try {
     const payload = await apiRequest('/forms');
-    const remoteForms = (Array.isArray(payload) ? payload : payload?.forms ?? []).map(normalizeForm);
+    const remoteForms = (Array.isArray(payload) ? payload : payload?.forms ?? [])
+      .filter((form) => (form.branch || 'Main Branch') === branchName())
+      .map(normalizeForm);
     const deletedIds = new Set(remoteForms.filter((form) => form.status === 'Deleted').map((form) => form.id));
     const forms = mergeFormsById(
       localForms.filter((form) => !deletedIds.has(form.id)),
@@ -185,13 +199,13 @@ export async function loadSharedForms() {
 }
 
 export function loadLocalResponses(formId) {
-  const responses = readJson(RESPONSES_KEY, []);
+  const responses = readJson(RESPONSES_KEY(), []);
   if (!Array.isArray(responses)) return [];
   return responses.filter((response) => response.formId === formId);
 }
 
 export function loadAllLocalResponses() {
-  const responses = readJson(RESPONSES_KEY, []);
+  const responses = readJson(RESPONSES_KEY(), []);
   return Array.isArray(responses) ? responses : [];
 }
 
@@ -213,7 +227,7 @@ export async function publishForm(form) {
   try {
     const payload = await apiRequest(`/forms/${encodeURIComponent(normalized.slug)}`, {
       method: 'PUT',
-      body: JSON.stringify(normalized),
+      body: JSON.stringify({ ...normalized, branch: branchName() }),
     });
     return { form: normalizeForm(payload?.form ?? payload ?? normalized), delivery: 'api' };
   } catch (error) {
@@ -226,7 +240,7 @@ export async function deleteSharedForm(form) {
   try {
     await apiRequest(`/forms/${encodeURIComponent(form.slug)}`, {
       method: 'PUT',
-      body: JSON.stringify({ ...normalizeForm(form), status: 'Deleted', updatedAt: new Date().toISOString() }),
+      body: JSON.stringify({ ...normalizeForm(form), branch: branchName(), status: 'Deleted', updatedAt: new Date().toISOString() }),
     });
     return { delivery: 'api' };
   } catch (error) {
@@ -262,12 +276,12 @@ export async function submitFormResponse(form, answers, respondentEmail = '') {
     answers,
   };
 
-  const current = readJson(RESPONSES_KEY, []);
+  const current = readJson(RESPONSES_KEY(), []);
   const next = [response, ...(Array.isArray(current) ? current : [])];
-  let localSaved = writeJson(RESPONSES_KEY, next);
+  let localSaved = writeJson(RESPONSES_KEY(), next);
   if (!localSaved) {
     const pruned = [response, ...(Array.isArray(current) ? current.slice(0, 15) : [])];
-    localSaved = writeJson(RESPONSES_KEY, pruned);
+    localSaved = writeJson(RESPONSES_KEY(), pruned);
   }
   if (!localSaved) {
     const strippedResponse = {
@@ -284,7 +298,7 @@ export async function submitFormResponse(form, answers, respondentEmail = '') {
         })
       ),
     };
-    localSaved = writeJson(RESPONSES_KEY, [strippedResponse, ...(Array.isArray(current) ? current.slice(0, 10) : [])]);
+    localSaved = writeJson(RESPONSES_KEY(), [strippedResponse, ...(Array.isArray(current) ? current.slice(0, 10) : [])]);
   }
   const patientData = applyPatientDataMappings(form, response);
 
@@ -309,9 +323,9 @@ export async function submitFormResponse(form, answers, respondentEmail = '') {
 }
 
 export function deleteLocalResponse(responseId) {
-  const current = readJson(RESPONSES_KEY, []);
+  const current = readJson(RESPONSES_KEY(), []);
   if (!Array.isArray(current)) return false;
-  return writeJson(RESPONSES_KEY, current.filter((response) => response.id !== responseId));
+  return writeJson(RESPONSES_KEY(), current.filter((response) => response.id !== responseId));
 }
 
 export async function deleteResponseRecord(formIdentifier, responseId) {

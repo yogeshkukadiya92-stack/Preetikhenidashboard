@@ -45,19 +45,13 @@ export function LoginPage() {
     try {
       setSubmitting(true);
       setError('');
-      pauseCloudSync();
-      try {
-        await hydrateCloudState();
-      } catch {
-        // Local sign-in remains available when cloud hydration is temporarily unavailable.
-      } finally {
-        resumeCloudSync();
-      }
-      const identity = await verifyCredentials(email, password);
+      const identity = await verifyCredentials(email, password, remember);
       if (identity) {
         const session = createAuthSession(identity, remember);
+        pauseCloudSync();
+        try { await hydrateCloudState(); } catch { /* Account remains signed in if data refresh is temporarily unavailable. */ } finally { resumeCloudSync(); }
         const requestedPath = destination.split('?')[0];
-        navigate(identity.isAdmin || identity.permissions.includes(requestedPath) ? destination : getLandingPath(session), { replace: true });
+        window.location.replace(identity.isAdmin || identity.permissions.includes(requestedPath) ? destination : getLandingPath(session));
         return;
       }
 
