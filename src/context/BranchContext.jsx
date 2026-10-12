@@ -5,19 +5,22 @@ import { getAuthSession } from '../data/auth.js';
 const BranchContext = createContext(null);
 const SINGLE_BRANCH = 'Main Branch';
 const FIRST_CHILD_BRANCH = 'Branch 1';
+const SECOND_CHILD_BRANCH = 'Branch 2';
 const BRANCHES_KEY = 'moms-pathshala:branches:v1';
 const FIRST_CHILD_MIGRATION_KEY = 'moms-pathshala:branch-1-initialized:v1';
+const SECOND_CHILD_MIGRATION_KEY = 'moms-pathshala:branch-2-initialized:v1';
 const CURRENT_BRANCH_KEY = 'moms-pathshala:current-branch:v1';
 
 function readBranches() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(BRANCHES_KEY) ?? 'null');
     const branches = Array.isArray(saved) && saved.length ? saved : [SINGLE_BRANCH];
-    return window.localStorage.getItem(FIRST_CHILD_MIGRATION_KEY) === 'true' || branches.includes(FIRST_CHILD_BRANCH)
+    const withFirst = window.localStorage.getItem(FIRST_CHILD_MIGRATION_KEY) === 'true' || branches.includes(FIRST_CHILD_BRANCH)
       ? branches : [...branches, FIRST_CHILD_BRANCH];
+    return window.localStorage.getItem(SECOND_CHILD_MIGRATION_KEY) === 'true' || withFirst.includes(SECOND_CHILD_BRANCH)
+      ? withFirst : [...withFirst, SECOND_CHILD_BRANCH];
   } catch {
-    return window.localStorage.getItem(FIRST_CHILD_MIGRATION_KEY) === 'true'
-      ? [SINGLE_BRANCH] : [SINGLE_BRANCH, FIRST_CHILD_BRANCH];
+    return [SINGLE_BRANCH, FIRST_CHILD_BRANCH, SECOND_CHILD_BRANCH];
   }
 }
 
@@ -41,6 +44,13 @@ export function BranchProvider({ children }) {
     } catch { window.localStorage.setItem(BRANCHES_KEY, JSON.stringify(branches)); }
     window.localStorage.setItem(FIRST_CHILD_MIGRATION_KEY, 'true');
   }, [session?.isAdmin, branches]);
+  useEffect(() => {
+    if (!session?.isAdmin) return;
+    if (window.localStorage.getItem(SECOND_CHILD_MIGRATION_KEY) === 'true') return;
+    const saved = readBranches();
+    window.localStorage.setItem(BRANCHES_KEY, JSON.stringify(saved));
+    window.localStorage.setItem(SECOND_CHILD_MIGRATION_KEY, 'true');
+  }, [session?.isAdmin]);
   const [currentBranch, setCurrentBranchState] = useState(() => {
     if (lockedBranch) return lockedBranch;
     return readCurrentBranch(window.localStorage, readBranches());

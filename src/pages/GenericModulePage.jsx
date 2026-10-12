@@ -112,6 +112,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
   const importInputRef = useRef(null);
   const handledAddAction = useRef('');
   const hasMountedRows = useRef(false);
+  const skipCloudWrite = useRef(false);
   const activeViewPredicate = viewPresets.find((preset) => preset.id === activeView)?.match ?? null;
   const activeViewLabel = viewPresets.find((preset) => preset.id === activeView)?.label ?? 'All';
   const isAppointmentsPage = title === 'Appointments';
@@ -132,12 +133,35 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
       hasMountedRows.current = true;
       return;
     }
+    if (skipCloudWrite.current) {
+      skipCloudWrite.current = false;
+      return;
+    }
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(tableRows));
     } catch {
       setActionMessage('Local browser storage is full or blocked.');
     }
   }, [storageKey, tableRows]);
+
+  useEffect(() => {
+    const refresh = (event) => {
+      if (event.type === 'storage' && event.key !== storageKey) return;
+      if (event.type === 'moms-pathshala:cloud-hydrated' && !event.detail?.keys?.includes(storageKey)) return;
+      const next = normalizeRows(loadSavedRows(storageKey, isMainBranch ? rows : []));
+      setTableRows((current) => {
+        if (JSON.stringify(current) === JSON.stringify(next)) return current;
+        skipCloudWrite.current = true;
+        return next;
+      });
+    };
+    window.addEventListener('storage', refresh);
+    window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
+    };
+  }, [storageKey]);
 
   const filteredRows = tableRows.filter((row) => {
     if (activeViewPredicate && !activeViewPredicate(row, columns)) return false;

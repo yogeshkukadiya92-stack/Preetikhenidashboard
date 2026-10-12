@@ -1632,44 +1632,8 @@ export function PublicAttendancePage() {
         body: JSON.stringify(payload),
       });
       setSubmitted(true);
-    } catch (error) {
-      // Local fallback in case PostgreSQL is offline
-      try {
-        const key = 'moms-pathshala:Main Branch:attendance-sessions:v1';
-        const sessions = JSON.parse(window.localStorage.getItem(key) || '[]');
-        const record = {
-          id: payload.id,
-          name: payload.name,
-          mobile: payload.mobile,
-          source: 'Public Form',
-          status: 'Present',
-          note: 'Marked through public form',
-          answers,
-          submittedAt: payload.submittedAt,
-        };
-        const idx = sessions.findIndex((s) => s.publicSlug === slug || s.title === state.form?.title);
-        if (idx >= 0) {
-          sessions[idx].records = [...(sessions[idx].records || []).filter((r) => r.id !== record.id), record];
-        } else {
-          sessions.unshift({
-            id: `attendance_${Date.now()}`,
-            title: state.form?.title || 'Attendance Session',
-            group: state.form?.group || 'Mixed Group',
-            date: localDate(),
-            time: localTime(),
-            mode: state.form?.mode || 'Offline',
-            notes: state.form?.notes || '',
-            publicSlug: slug,
-            fields: state.form?.fields || [],
-            records: [record],
-            createdAt: new Date().toISOString(),
-          });
-        }
-        window.localStorage.setItem(key, JSON.stringify(sessions));
-        setSubmitted(true);
-      } catch {
-        setState((curr) => ({ ...curr, error: error.message }));
-      }
+    } catch {
+      setErrors((current) => ({ ...current, form: 'Attendance could not be submitted. Check your connection and try again.' }));
     } finally {
       setSubmitting(false);
     }
@@ -1737,6 +1701,7 @@ export function PublicAttendancePage() {
             </div>
 
             <form className="public-form attendance-checkin-form" onSubmit={submit} noValidate>
+              {errors.form && <p className="field-error" role="alert">{errors.form}</p>}
               {/* Primary identification */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '16px' }}>
                 <label className="field-block">

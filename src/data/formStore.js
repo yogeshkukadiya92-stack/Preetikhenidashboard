@@ -276,6 +276,16 @@ export async function submitFormResponse(form, answers, respondentEmail = '') {
     answers,
   };
 
+  // A public visitor's browser is not the clinic workspace. Confirm the server
+  // accepted the response before showing a success screen.
+  if (!getAuthSession()) {
+    if (!apiBase) throw new Error('The form service is unavailable. Please try again later.');
+    await apiRequest(`/forms/${encodeURIComponent(form.slug)}/responses`, {
+      method: 'POST', body: JSON.stringify(response),
+    });
+    return { response, delivery: 'api' };
+  }
+
   const current = readJson(RESPONSES_KEY(), []);
   const next = [response, ...(Array.isArray(current) ? current : [])];
   let localSaved = writeJson(RESPONSES_KEY(), next);

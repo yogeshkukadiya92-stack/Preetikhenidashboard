@@ -15,7 +15,7 @@ export const CLOUD_STORAGE_CONFIGURED = true;
 function shouldSync(key) {
   const session = getAuthSession();
   if (!session) return false;
-  const permitted = session.isAdmin || key === 'moms-pathshala:branches:v1' || key.startsWith(`moms-pathshala:${session.branch}:`);
+  const permitted = session.isAdmin || key.startsWith(`moms-pathshala:${session.branch}:`);
   return permitted && (key.startsWith('moms-pathshala:') || key.startsWith('ayurflow:'))
     && !key.includes(':auth-session:')
     && !key.includes(':supabase-session:')
@@ -144,8 +144,9 @@ export function installCloudSync() {
   if (syncInstalled) return;
   syncInstalled = true;
   window.Storage.prototype.setItem = function cloudSyncedSetItem(key, value) {
+    const unchanged = this.getItem(key) === String(value);
     originalSetItem.call(this, key, value);
-    if (this === window.localStorage && shouldSync(String(key)) && !cloudSyncPaused()) {
+    if (!unchanged && this === window.localStorage && shouldSync(String(key)) && !cloudSyncPaused()) {
       queuePending(String(key), String(value));
       syncCloudValue(String(key), String(value)).catch(() => {});
     }

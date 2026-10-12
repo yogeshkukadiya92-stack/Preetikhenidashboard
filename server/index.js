@@ -16,6 +16,7 @@ const USERS_KEY = 'moms-pathshala:auth-users:v1';
 const STAFF_USERS_KEY = 'moms-pathshala:Main Branch:users:rows:v3';
 const BRANCHES_KEY = 'moms-pathshala:branches:v1';
 const FIRST_BRANCH_MIGRATION_KEY = 'moms-pathshala:branch-1-initialized:v1';
+const SECOND_BRANCH_MIGRATION_KEY = 'moms-pathshala:branch-2-initialized:v1';
 const COOKIE_NAME = 'moms_pathshala_session';
 const adminEmail = String(process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || 'shreeayurved09@gmail.com').toLowerCase();
 const adminPasswordHash = String(process.env.ADMIN_PASSWORD_SHA256 || process.env.VITE_ADMIN_PASSWORD_SHA256 || '').toLowerCase();
@@ -128,6 +129,21 @@ async function ensureSchema() {
       `insert into app_state (branch, key, value) values ($1, $2, 'true'::jsonb)
        on conflict (branch, key) do update set value = excluded.value, updated_at = now()`,
       [WORKSPACE_BRANCH, FIRST_BRANCH_MIGRATION_KEY],
+    );
+  }
+  if (await readState(SECOND_BRANCH_MIGRATION_KEY) !== true) {
+    const savedBranches = await readState(BRANCHES_KEY);
+    const branches = Array.isArray(savedBranches) ? savedBranches : ['Main Branch'];
+    if (!branches.includes('Branch 2')) branches.push('Branch 2');
+    await db.query(
+      `insert into app_state (branch, key, value) values ($1, $2, $3::jsonb)
+       on conflict (branch, key) do update set value = excluded.value, updated_at = now()`,
+      [WORKSPACE_BRANCH, BRANCHES_KEY, JSON.stringify(branches)],
+    );
+    await db.query(
+      `insert into app_state (branch, key, value) values ($1, $2, 'true'::jsonb)
+       on conflict (branch, key) do update set value = excluded.value, updated_at = now()`,
+      [WORKSPACE_BRANCH, SECOND_BRANCH_MIGRATION_KEY],
     );
   }
 }
@@ -301,16 +317,18 @@ app.get('/api/health', asyncHandler(async (_request, response) => {
   const db = getPool();
   if (!db) return response.json({ ok: true, database: false });
   await db.query('select 1');
-  response.json({ ok: true, database: true, branchSetupReady: await readState(FIRST_BRANCH_MIGRATION_KEY) === true });
+  response.json({ ok: true, database: true, branchSetupReady: await readState(FIRST_BRANCH_MIGRATION_KEY) === true, branch2Ready: await readState(SECOND_BRANCH_MIGRATION_KEY) === true });
 }));
 
 app.get('/api/app-state', requireIdentity, asyncHandler(async (request, response) => {
   const db = getPool();
   if (!db) return response.status(503).json({ error: 'PostgreSQL is not configured.' });
-  const result = await db.query(
-    'select key, value, updated_at from app_state where branch = $1 order by key',
-    [WORKSPACE_BRANCH],
-  );
+  const result = request.identity.isAdmin
+    ? await db.query('select key, value, updated_at from app_state where branch = $1 order by key', [WORKSPACE_BRANCH])
+    : await db.query(
+      'select key, value, updated_at from app_state where branch = $1 and left(key, length($2)) = $2 order by key',
+      [WORKSPACE_BRANCH, `moms-pathshala:${request.identity.branch}:`],
+    );
   response.json(result.rows.filter((row) => mayAccessKey(request.identity, row.key)));
 }));
 

@@ -844,7 +844,7 @@ function ImportExportModule({
         const values = rowToValues(recordToSave);
         const fileCharge = parseMoney(values['File Charge']);
         if (fileCharge) {
-          const currentPayments = loadSavedArray(paymentsStorageKey, loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []));
+          const currentPayments = loadSavedArray(paymentsStorageKey, isMainBranch ? loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []) : []);
           invoice = nextInvoiceNumber(currentPayments);
           const paidOn = normalizeDateInput(values['Visit Date']) || todayIsoDate();
           const payment = normalizePaymentRecord({
@@ -1703,22 +1703,24 @@ export function CRMPage() {
 
 function ClientProfile({ client, onBack }) {
   const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
   const clientName = client.name ?? '';
   const clientId = normalizeClientId(client.clientId);
   const appointmentsStorageKey = branchKey('Appointments:rows:v3');
   const paymentsStorageKey = branchKey('ayurflow-payments:rows:v3');
+  const treatmentPlansStorageKey = branchKey('Treatment Plans:rows:v2');
   const [activeTab, setActiveTab] = useState('overview');
   const [refreshKey, setRefreshKey] = useState(0);
   const [treatModal, setTreatModal] = useState(false);
   const [apptModal, setApptModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
   const treatmentTemplatesKey = branchKey('treatment-templates:v2');
-  const [treatTemplates, setTreatTemplates] = useState(() => loadSavedArray(treatmentTemplatesKey, loadSavedArray('ayurflow:treatment-templates:v1', [])));
+  const [treatTemplates, setTreatTemplates] = useState(() => loadSavedArray(treatmentTemplatesKey, isMainBranch ? loadSavedArray('ayurflow:treatment-templates:v1', []) : []));
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [templateName, setTemplateName] = useState('');
   const [treatError, setTreatError] = useState('');
   const medicineCatalog = useMemo(() => {
-    const operations = loadSavedObject(branchKey('Operations:tabs:v3'), loadSavedObject('ayurflow:Operations:tabs:v3', {}));
+    const operations = loadSavedObject(branchKey('Operations:tabs:v3'), isMainBranch ? loadSavedObject('ayurflow:Operations:tabs:v3', {}) : {});
     return (Array.isArray(operations.medicines) ? operations.medicines : []).map((row) => (
       Array.isArray(row)
         ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '' }
@@ -1731,7 +1733,7 @@ function ClientProfile({ client, onBack }) {
   const [nextAppointment, setNextAppointment] = useState(() => ({ enabled: false, mobile: client.mobile ?? '', ...currentAppointmentSlot(), status: 'Confirmed' }));
   const [apptForm, setApptForm] = useState(() => ({ mobile: '', ...currentAppointmentSlot(), type: treatServiceOptions[0] ?? '', status: 'Confirmed' }));
   const [payForm, setPayForm] = useState(() => {
-    const savedPayments = loadSavedArray(paymentsStorageKey, loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []));
+    const savedPayments = loadSavedArray(paymentsStorageKey, isMainBranch ? loadSavedArray('ayurflow:ayurflow-payments:rows:v3', []) : []);
     return { invoice: nextInvoiceNumber(savedPayments), amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paymentMode: 'Cash', paidOn: new Date().toISOString().slice(0, 10) };
   });
   const hasMountedTreatmentTemplates = useRef(false);
@@ -1816,19 +1818,19 @@ function ClientProfile({ client, onBack }) {
   };
 
   const allTreatments = useMemo(() => {
-    const saved = loadSavedState('ayurflow:Treatment Plans:rows:v2', []);
+    const saved = loadSavedState(treatmentPlansStorageKey, isMainBranch ? loadSavedState('ayurflow:Treatment Plans:rows:v2', []) : []);
     return saved.filter((row) => String(row[0] ?? '').toLowerCase().includes(clientName.toLowerCase()));
-  }, [clientName, refreshKey]);
+  }, [clientName, isMainBranch, refreshKey, treatmentPlansStorageKey]);
 
   const allAppointments = useMemo(() => {
-    const saved = loadSavedState(appointmentsStorageKey, loadSavedState('ayurflow:Appointments:rows:v2', []));
+    const saved = loadSavedState(appointmentsStorageKey, isMainBranch ? loadSavedState('ayurflow:Appointments:rows:v2', []) : []);
     return normalizeAppointmentRows(saved).filter((row) => String(row[0] ?? '').toLowerCase().includes(clientName.toLowerCase()));
-  }, [appointmentsStorageKey, clientName, refreshKey]);
+  }, [appointmentsStorageKey, clientName, isMainBranch, refreshKey]);
 
   const allPayments = useMemo(() => {
-    const saved = loadSavedState(paymentsStorageKey, loadSavedState('ayurflow:ayurflow-payments:rows:v3', []));
+    const saved = loadSavedState(paymentsStorageKey, isMainBranch ? loadSavedState('ayurflow:ayurflow-payments:rows:v3', []) : []);
     return saved.map(normalizePaymentRecord).filter((row) => String(row.client ?? '').toLowerCase().includes(clientName.toLowerCase()));
-  }, [clientName, paymentsStorageKey, refreshKey]);
+  }, [clientName, isMainBranch, paymentsStorageKey, refreshKey]);
 
   const saveTreatment = () => {
     const selectedRows = treatMedicineRows.filter((row) => row.medicine.trim());
@@ -1841,9 +1843,8 @@ function ClientProfile({ client, onBack }) {
       setTreatError(`${invalidMedicine.medicine} is not in the Medicines master. Select a medicine from search results.`);
       return;
     }
-    const key = 'ayurflow:Treatment Plans:rows:v2';
-    const current = loadSavedArray(key, []);
-    window.localStorage.setItem(key, JSON.stringify([[clientName, treatForm.service, treatForm.goal, treatForm.duration, treatForm.medicine, treatForm.dose, treatForm.timing, treatForm.status], ...current]));
+    const current = loadSavedArray(treatmentPlansStorageKey, isMainBranch ? loadSavedArray('ayurflow:Treatment Plans:rows:v2', []) : []);
+    window.localStorage.setItem(treatmentPlansStorageKey, JSON.stringify([[clientName, treatForm.service, treatForm.goal, treatForm.duration, treatForm.medicine, treatForm.dose, treatForm.timing, treatForm.status], ...current]));
     if (nextAppointment.enabled && nextAppointment.date && nextAppointment.time) {
       const appointments = loadSavedArray(appointmentsStorageKey, []);
       const appointment = [clientName, nextAppointment.mobile, nextAppointment.date, nextAppointment.time, treatForm.service, nextAppointment.status];
@@ -2246,7 +2247,7 @@ export function ClientsPage() {
   const { branchKey, currentBranch } = useBranch();
   const isMainBranch = currentBranch === 'Main Branch';
   const savedClientRows = loadSavedArray(branchKey('ayurflow-clients:rows:v3'), isMainBranch ? loadSavedArray('ayurflow:ayurflow-clients:rows:v3', clients) : []);
-  const savedTreatmentRows = loadSavedArray(TREATMENT_PLANS_KEY, []);
+  const savedTreatmentRows = loadSavedArray(branchKey('Treatment Plans:rows:v2'), isMainBranch ? loadSavedArray(TREATMENT_PLANS_KEY, []) : []);
 
   if (selectedClient) {
     return <ClientProfile client={selectedClient} onBack={() => setSelectedClient(null)} />;
@@ -2770,6 +2771,7 @@ export function UsersPage() {
 function ModuleHubPage({ title, description, tabs, defaultTab }) {
   const { branchKey, currentBranch } = useBranch();
   const isMainBranch = currentBranch === 'Main Branch';
+  const treatmentPlansKey = branchKey('Treatment Plans:rows:v2');
   const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
   const queryAction = searchParams.get('action');
@@ -2809,9 +2811,8 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       : Object.fromEntries(tabs.map((tab) => [tab.id, []]));
     const savedTabs = loadSavedObject(storageKey, fallbackTabs);
     if (title !== 'Operations') return savedTabs;
-    const sharedTreatments = isMainBranch
-      ? loadSavedArray(TREATMENT_PLANS_KEY, []).map(treatmentPlanToOperationRow)
-      : [];
+    const sharedTreatments = loadSavedArray(treatmentPlansKey, isMainBranch ? loadSavedArray(TREATMENT_PLANS_KEY, []) : [])
+      .map(treatmentPlanToOperationRow);
     return {
       ...savedTabs,
       services: loadServiceCatalog({
@@ -2884,17 +2885,17 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
       if (title === 'Operations') {
         window.localStorage.setItem(serviceCatalogStorageKey, JSON.stringify(rowsByTab.services ?? []));
         const sharedTreatments = (rowsByTab.treatments ?? []).map(operationRowToTreatmentPlan);
-        window.localStorage.setItem(TREATMENT_PLANS_KEY, JSON.stringify(sharedTreatments));
+        window.localStorage.setItem(treatmentPlansKey, JSON.stringify(sharedTreatments));
       }
     } catch {
       setMessage('Local browser storage is full or blocked.');
     }
-  }, [rowsByTab, serviceCatalogStorageKey, storageKey, title]);
+  }, [rowsByTab, serviceCatalogStorageKey, storageKey, title, treatmentPlansKey]);
 
   useEffect(() => {
     if (title !== 'Operations') return undefined;
     const syncSharedTreatments = (event) => {
-      if (event.key !== TREATMENT_PLANS_KEY || !event.newValue) return;
+      if (event.key !== treatmentPlansKey || !event.newValue) return;
       try {
         const sharedTreatments = JSON.parse(event.newValue).map(treatmentPlanToOperationRow);
         setRowsByTab((current) => ({
@@ -2907,7 +2908,7 @@ function ModuleHubPage({ title, description, tabs, defaultTab }) {
     };
     window.addEventListener('storage', syncSharedTreatments);
     return () => window.removeEventListener('storage', syncSharedTreatments);
-  }, [title]);
+  }, [title, treatmentPlansKey]);
 
   useEffect(() => {
     if (title !== 'Operations') return undefined;
@@ -4370,7 +4371,7 @@ export function TreatmentPlansPage() {
   const [dietPlans, setDietPlans] = useState(() => loadSavedArray(DIET_PLANS_KEY, []));
   const [dietTemplates, setDietTemplates] = useState(() => loadSavedArray(DIET_TEMPLATES_KEY, []));
   const medicineCatalog = useMemo(() => {
-    const operations = loadSavedObject(branchKey('Operations:tabs:v3'), loadSavedObject('ayurflow:Operations:tabs:v3', {}));
+    const operations = loadSavedObject(branchKey('Operations:tabs:v3'), isMainBranch ? loadSavedObject('ayurflow:Operations:tabs:v3', {}) : {});
     return (Array.isArray(operations.medicines) ? operations.medicines : []).map((row) => Array.isArray(row)
       ? { Medicine: row[0] ?? '', 'Default Dose': row[2] ?? '', Timing: row[3] ?? '' }
       : row).filter((row) => row.Medicine);
@@ -5468,11 +5469,12 @@ export function TreatmentPlansPage() {
 }
 
 export function MedicinesPage() {
-  const { branchKey } = useBranch();
+  const { branchKey, currentBranch } = useBranch();
+  const isMainBranch = currentBranch === 'Main Branch';
   const catalogStorageKey = branchKey('Operations:tabs:v3');
   const medicineHeaders = ['Medicine', 'Category', 'Default Dose', 'Timing'];
   const [catalog, setCatalog] = useState(() => {
-    const saved = loadSavedObject(catalogStorageKey, loadSavedObject('ayurflow:Operations:tabs:v3', {}));
+    const saved = loadSavedObject(catalogStorageKey, isMainBranch ? loadSavedObject('ayurflow:Operations:tabs:v3', {}) : {});
     return Array.isArray(saved.medicines) ? saved.medicines : [];
   });
   const [draft, setDraft] = useState({ Medicine: '', Category: '', 'Default Dose': '', Timing: '' });
@@ -5486,12 +5488,12 @@ export function MedicinesPage() {
 
   useEffect(() => {
     try {
-      const saved = loadSavedObject(catalogStorageKey, loadSavedObject('ayurflow:Operations:tabs:v3', {}));
+      const saved = loadSavedObject(catalogStorageKey, isMainBranch ? loadSavedObject('ayurflow:Operations:tabs:v3', {}) : {});
       window.localStorage.setItem(catalogStorageKey, JSON.stringify({ ...saved, medicines: catalog }));
     } catch {
       setMessage('Local browser storage is full or blocked.');
     }
-  }, [catalog, catalogStorageKey]);
+  }, [catalog, catalogStorageKey, isMainBranch]);
 
   const save = () => {
     if (!draft.Medicine.trim()) {
@@ -6446,7 +6448,7 @@ export function IntegrationsPage() {
 
 export function BranchesPage() {
   const navigate = useNavigate();
-  const { branches, currentBranch, setCurrentBranch, addBranch, renameBranch, deleteBranch } = useBranch();
+  const { branches, currentBranch, setCurrentBranch, addBranch } = useBranch();
   const [branchName, setBranchName] = useState('');
   const [message, setMessage] = useState('Add a branch to keep its records separate.');
   const [usersList, setUsersList] = useState(getAllUsers);
@@ -6511,7 +6513,7 @@ export function BranchesPage() {
     } else {
       const defaultEmail = branch === 'Branch 1'
         ? 'janidisha357@gmail.com'
-        : `${branch.toLowerCase().replace(/[^a-z0-9]+/g, '')}@clinic.com`;
+        : '';
       setBranchLoginForm({
         email: defaultEmail,
         password: '',
@@ -6633,17 +6635,17 @@ export function BranchesPage() {
       </Card>
 
       <Card title="All Branches Overview" subtitle="Main branch can review each branch's records. Open a branch to use the same pages with its data.">
-        <div className="table adaptive-table" style={{ '--table-columns': 6 }}>
+        <div className="table adaptive-table branch-overview-table" style={{ '--table-columns': 5 }}>
           <div className="table-head"><div>Branch</div><div>Patients</div><div>Appointments</div><div>Payments</div><div>Leads</div><div>Open</div></div>
           {branchSummary.map((summary) => <div className="data-row" key={summary.branch}>
-            <div><strong>{summary.branch}</strong></div><div>{summary.patients}</div><div>{summary.appointments}</div><div>{summary.payments}</div><div>{summary.leads}</div>
-            <div><button className="row-link" type="button" onClick={() => { setCurrentBranch(summary.branch); navigate('/'); }}>View data</button></div>
+            <div data-label="Branch"><strong>{summary.branch}</strong></div><div data-label="Patients">{summary.patients}</div><div data-label="Appointments">{summary.appointments}</div><div data-label="Payments">{summary.payments}</div><div data-label="Leads">{summary.leads}</div>
+            <div data-label="Open"><button className="row-link" type="button" onClick={() => { setCurrentBranch(summary.branch); navigate('/'); }}>View data</button></div>
           </div>)}
         </div>
       </Card>
 
       <Card title="Your Branches & Access Control" subtitle="Each branch has its own isolated records, login credentials, and permission settings.">
-        <div className="table adaptive-table" style={{ '--table-columns': 4 }}>
+        <div className="table adaptive-table branch-management-table" style={{ '--table-columns': 3 }}>
           <div className="table-head">
             <div>Branch</div>
             <div>Status</div>
@@ -6655,12 +6657,12 @@ export function BranchesPage() {
               || usersList.find((u) => u.branch === branch);
             return (
               <div className="data-row" key={branch}>
-                <div>
+                <div data-label="Branch">
                   <strong>{branch}</strong>
                   {branch === currentBranch && <span className="branch-current-tag">Current</span>}
                 </div>
-                <div>{branch === currentBranch ? <Tag tone="tag-contacted">Active</Tag> : <Tag tone="tag-follow">Available</Tag>}</div>
-                <div>
+                <div data-label="Status">{branch === currentBranch ? <Tag tone="tag-contacted">Current</Tag> : <Tag tone="tag-follow">Available</Tag>}</div>
+                <div data-label="Login & Permissions">
                   {account ? (
                     <div className="branch-account-summary">
                       <span className="branch-account-email">📧 {account.email}</span>
@@ -6672,13 +6674,13 @@ export function BranchesPage() {
                     <span className="branch-no-login">No branch login (Admin only)</span>
                   )}
                 </div>
-                <div className="card-action-group">
+                <div className="card-action-group" data-label="Actions">
                   <button className="pill" type="button" onClick={() => setCurrentBranch(branch)}>Open</button>
                   <button className="pill primary-action" type="button" onClick={() => openBranchLoginModal(branch)}>
                     🔑 Login & Permissions
                   </button>
-                  <button className="pill" type="button" onClick={() => { const next = window.prompt('New branch name', branch); if (next && !renameBranch(branch, next)) setMessage('Branch name must be unique.'); }}>Rename</button>
-                  <button className="pill danger-action" type="button" disabled={branches.length === 1} onClick={() => { if (window.confirm(`Delete ${branch}?`)) deleteBranch(branch); }}>Delete</button>
+                  <button className="pill" type="button" disabled title="Branch names are linked to stored records and accounts. Contact an administrator to migrate them safely.">Rename</button>
+                  <button className="pill danger-action" type="button" disabled title="Branch deletion requires a verified data migration and account review.">Delete</button>
                 </div>
               </div>
             );

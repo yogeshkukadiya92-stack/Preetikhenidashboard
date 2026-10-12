@@ -5976,6 +5976,32 @@ textarea.lead-input,
   font-size: 0.8rem;
 }
 
+.branch-management-table > .table-head,
+.branch-management-table > .data-row {
+  grid-template-columns: minmax(130px, 1fr) minmax(86px, 0.55fr) minmax(190px, 1.5fr) minmax(230px, 1.7fr);
+  min-width: 700px;
+}
+
+.branch-management-table .card-action-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.branch-management-table .card-action-group .pill {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+@media (max-width: 640px) {
+  .branch-management-table > .data-row,
+  .branch-overview-table > .data-row {
+    min-width: 0;
+    grid-template-columns: 1fr;
+  }
+}
+
 .branch-account-email {
   font-weight: 600;
   color: var(--text, #1e293b);
