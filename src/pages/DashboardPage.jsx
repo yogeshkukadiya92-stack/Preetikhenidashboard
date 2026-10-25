@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { ActionMenu, Card, StatusPill, Tag } from '../components/ui.jsx';
 import { ChevronRight, SearchIcon } from '../components/icons.jsx';
 import { loadLiveDashboardData, parseLiveAmount } from '../data/liveData.js';
+import { buildServiceOverview } from '../data/serviceOverview.js';
+import { loadServiceCatalog } from '../data/serviceCatalog.js';
+import { services as defaultServices } from '../data/appConfig.js';
 import { useBranch } from '../context/BranchContext.jsx';
 
 const DATE_PRESETS = [
@@ -43,6 +46,7 @@ export function DashboardPage() {
   const [operationalView, setOperationalView] = useState('queue'); // 'queue' | 'calendar'
   const [activeInsightsTab, setActiveInsightsTab] = useState('aging'); // 'aging' | 'sales' | 'leads' | 'staff' | 'inventory' | 'birthdays'
   const [priorityFilter, setPriorityFilter] = useState('all'); // 'all' | 'collection' | 'followup' | 'stock' | 'reminder'
+  const [selectedService, setSelectedService] = useState('');
   const [patientSearch, setPatientSearch] = useState('');
   const [dataRevision, setDataRevision] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
@@ -134,6 +138,15 @@ export function DashboardPage() {
   const pendingPaymentsSum = useMemo(() => {
     return filteredPendingPayments.reduce((sum, payment) => sum + paymentPendingAmount(payment), 0);
   }, [filteredPendingPayments]);
+
+  const serviceOverview = buildServiceOverview(normalizedPatients, filterRowsByPreset(
+    payments.map(normalizeServicePayment), datePreset, (payment) => payment.paidOn, customDateRange,
+  ), loadServiceCatalog({
+    key: `moms-pathshala:${currentBranch}:Services:rows:v3`,
+    isMainBranch: currentBranch === 'Main Branch', defaults: defaultServices,
+  }).map((row) => row[0]));
+  const visibleServices = serviceOverview.filter((row) => !selectedService || row.key === selectedService);
+  useEffect(() => setSelectedService(''), [currentBranch]);
 
   const paymentAging = buildPaymentAging(filteredPayments);
   const leadSources = buildLeadSourcePerformance(filteredLeads);
@@ -332,6 +345,34 @@ export function DashboardPage() {
             </div>
           </article>
         ))}
+      </section>
+
+      <section className="dash-panel service-overview" aria-label="Service collection overview">
+        <div className="dash-panel-head">
+          <div><h2 className="dash-panel-title">Service Overview</h2>
+            <p>Collections, billing and dues: {datePreset}. Clients: all registered clients in this workspace.</p>
+          </div>
+          <label className="service-filter">Service
+            <select value={selectedService} onChange={(event) => setSelectedService(event.target.value)}>
+              <option value="">All Services</option>
+              {serviceOverview.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="service-overview-table">
+          <table><thead><tr><th>Service</th><th>Clients</th><th>Invoices</th><th>Collection</th><th>Total Billing</th><th>Pending Dues</th></tr></thead>
+            <tbody>{visibleServices.map((row) => <tr key={row.key}>
+              <th scope="row">{row.label}</th><td>{row.clients}</td><td>{row.invoices}</td>
+              <td>{formatServiceMoney(row.collection)}</td><td>{formatServiceMoney(row.billing)}</td><td>{formatServiceMoney(row.pending)}</td>
+            </tr>)}</tbody>
+            <tfoot><tr><th scope="row">Total</th>{['clients', 'invoices', 'collection', 'billing', 'pending'].map((field) => {
+              const total = visibleServices.reduce((sum, row) => sum + row[field], 0);
+              return <td key={field}>{['clients', 'invoices'].includes(field) ? total : formatServiceMoney(total)}</td>;
+            })}</tr></tfoot>
+          </table>
+          {!visibleServices.length && <p className="service-overview-note">No records for this service.</p>}
+        </div>
+        <p className="service-overview-note">Payments without a service use the matched client's current service. Unmatched or ambiguous payments appear under Unassigned.</p>
       </section>
 
       {/* 3. Balanced 2-Column Operational Center */}
@@ -767,7 +808,7 @@ function normalizeDashboardPatient(row) {
       id: hasId ? String(row[0] ?? '').trim() : '',
       name: String(row[hasId ? 1 : 0] ?? '').trim(),
       mobile: String(row[hasId ? 2 : 1] ?? '').trim(),
-      service: String(row[row.length >= 8 ? 7 : hasId ? 6 : 5] ?? '').trim(),
+      service: String(row[row.length >= 13 ? 8 : row.length >= 8 ? 7 : hasId ? 6 : 5] ?? '').trim(),
     };
   }
   return {
@@ -1202,4 +1243,17 @@ function ModuleTable({ type, rows = [] }) {
       ))}
     </div>
   );
+}
+
+function formatServiceMoney(value) {
+  return `₹ ${value.toLocaleString('en-IN')}`;
+}
+
+function normalizeServicePayment(entry) {
+  const row = Array.isArray(entry) ? (entry.length >= 7
+    ? { client: entry[0], amount: entry[2], paidAmount: entry[3], status: entry[5], paidOn: entry[7] }
+    : { client: entry[0], amount: entry[2], status: entry[3], paidOn: entry[4], paidAmount: entry[5] }) : entry;
+  return { ...row, client: row.client ?? row.Client, amount: row.amount ?? row.totalAmount ?? row['Total Amount'] ?? row.Amount,
+    paidAmount: row.paidAmount ?? row['Paid Amount'], status: row.status ?? row.Status,
+    paidOn: row.paidOn ?? row['Paid On'] };
 }

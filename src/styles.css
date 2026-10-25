@@ -6060,3 +6060,17 @@ textarea.lead-input,
   border-radius: 5px;
   cursor: pointer;
 }
+
+.service-overview { margin-bottom: 24px; }
+.service-overview .dash-panel-head { flex-wrap: wrap; gap: 16px; }
+.service-overview .dash-panel-head p, .service-overview-note { color: #597a6e; font-size: .82rem; line-height: 1.5; }
+.service-filter { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.service-filter select { max-width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid #c4d9cf; border-radius: 10px; background: white; color: #143f32; font: inherit; }
+.service-overview-table { overflow-x: auto; }
+.service-overview table { width: 100%; border-collapse: collapse; white-space: nowrap; text-align: right; }
+.service-overview th, .service-overview td { padding: 14px 20px; border-bottom: 1px solid #e5eee8; }
+.service-overview th:first-child { text-align: left; }
+.service-overview thead, .service-overview tfoot { background: #f3f8f5; color: #214f3e; }
+.service-overview tfoot { font-weight: 700; }
+.service-overview-note { padding: 0 20px; }
+@media (max-width: 600px) { .service-filter { width: 100%; } .service-filter select { flex: 1; min-width: 0; } }
