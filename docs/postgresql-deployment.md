@@ -1,5 +1,14 @@
 # PostgreSQL Deployment
 
+## Production application
+
+The live clinic is https://dashboard.shreeayurvedhospital.in. Coolify application
+`me86ksda5ecm4kp84pha9nl8` serves this domain on container port 3000.
+The historical `https://pn.yogeshaihub.in` address is also mapped to the same application
+on port 3000. Restore both domain entries in Coolify when migrating or recreating the resource.
+Check `/api/health` on each domain to confirm both application and database readiness.
+
+
 Mom's Pathshala now uses the app's Node server for shared live data:
 
 - Frontend writes dashboard state to `/api/app-state/:key`.
