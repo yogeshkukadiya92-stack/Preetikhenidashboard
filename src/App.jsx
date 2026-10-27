@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Layout } from './components/Layout.jsx';
 import { ProtectedRoute } from './components/ProtectedRoute.jsx';
+import { CareProgramPage } from './pages/CareProgramPage.jsx';
 import { DashboardPage } from './pages/DashboardPage.jsx';
 import { FormsPage, PublicFormPage } from './pages/forms.jsx';
 import { LoginPage } from './pages/LoginPage.jsx';
@@ -48,6 +49,8 @@ export function App() {
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/appointments" element={<AppointmentsPage />} />
           <Route path="/attendance" element={<AttendancePage />} />
+          <Route path="/panchakarma" element={<CareProgramPage key="panchakarma" program="panchakarma" />} />
+          <Route path="/garbhsanskar" element={<CareProgramPage key="garbhsanskar" program="garbhsanskar" />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/operations" element={<OperationsPage />} />
           <Route path="/medicines" element={<MedicinesPage />} />

@@ -5,6 +5,8 @@ export const navItems = [
   { path: '/journey', label: 'Patient Journey', section: 'Patients & CRM' },
   { path: '/appointments', label: 'Appointments', section: 'Patients & CRM' },
   { path: '/forms', label: 'Forms', section: 'Patients & CRM' },
+  { path: '/panchakarma', label: 'Panchakarma', section: 'Care Programs' },
+  { path: '/garbhsanskar', label: 'Garbhsanskar', section: 'Care Programs' },
   { path: '/services', label: 'Services', section: 'Care Programs' },
   { path: '/treatments', label: 'Treatments', section: 'Care Programs' },
   { path: '/packages', label: 'Packages', section: 'Care Programs' },

@@ -6,6 +6,8 @@ import { loadLiveDashboardData, parseLiveAmount } from '../data/liveData.js';
 import { buildServiceOverview } from '../data/serviceOverview.js';
 import { loadServiceCatalog } from '../data/serviceCatalog.js';
 import { services as defaultServices } from '../data/appConfig.js';
+import { CareMonthlyReport } from '../components/CareMonthlyReport.jsx';
+import { MonthlyClinicReport } from '../components/MonthlyClinicReport.jsx';
 import { useBranch } from '../context/BranchContext.jsx';
 
 const DATE_PRESETS = [
@@ -100,9 +102,11 @@ export function DashboardPage() {
 
   useEffect(() => {
     const refresh = () => setDataRevision((current) => current + 1);
+    window.addEventListener('moms-pathshala:care-updated', refresh);
     window.addEventListener('storage', refresh);
     window.addEventListener('moms-pathshala:cloud-hydrated', refresh);
     return () => {
+      window.removeEventListener('moms-pathshala:care-updated', refresh);
       window.removeEventListener('storage', refresh);
       window.removeEventListener('moms-pathshala:cloud-hydrated', refresh);
     };
@@ -322,6 +326,9 @@ export function DashboardPage() {
           </div>
         </div>
       </section>
+
+      <MonthlyClinicReport key={currentBranch} data={liveData} branch={currentBranch} />
+      <CareMonthlyReport key={`care-${currentBranch}`} state={liveData.carePrograms} payments={payments} clients={clients} />
 
       {/* 2. Executive 5-Column KPI Stat Cards */}
       <section className="dashboard-kpi-grid" aria-label="Key Performance Indicators">

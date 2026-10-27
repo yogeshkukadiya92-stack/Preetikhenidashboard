@@ -70,7 +70,11 @@ export function loadLiveDashboardData(branch) {
   const totalBilling = payments.reduce((sum, payment) => sum + paymentTotal(payment), 0);
   const todaysAppointments = appointments.filter((row) => isToday(row[2]));
 
+  const savedCare = readStorage(branchKey(branch, 'care-programs:v1'), {});
+  const carePrograms = Object.fromEntries(['enrollments', 'sessions', 'packages', 'services'].map(key => [key, asArray(savedCare?.[key])]));
+
   return {
+    carePrograms,
     leads,
     appointments,
     payments,

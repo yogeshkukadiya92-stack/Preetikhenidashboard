@@ -26,6 +26,8 @@ const iconByPath = {
   '/forms': FileIcon,
   '/appointments': CalendarIcon,
   '/services': FileIcon,
+  '/panchakarma': ChartIcon,
+  '/garbhsanskar': UsersIcon,
   '/operations': ChartIcon,
   '/treatments': ChartIcon,
   '/packages': MoneyIcon,

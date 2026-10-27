@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf';
 import { ChevronRight } from '../components/icons.jsx';
 import { ActionMenu, Card, StatusPill, Tag } from '../components/ui.jsx';
 import { useBranch } from '../context/BranchContext.jsx';
+import { readCareState, validateCareReceiptEdit } from '../data/carePrograms.js';
 import { GenericModulePage } from './GenericModulePage.jsx';
 import {
   accounts,
@@ -270,6 +271,13 @@ function normalizePaymentRecord(entry) {
     ? calculatePendingAmount(totalAmount, paidAmount, status)
     : sourcePendingAmount;
   return {
+    id: source.id,
+    careProgramId: source.careProgramId,
+    careEnrollmentId: source.careEnrollmentId,
+    note: source.note,
+    feeType: source['Fee Type'] || source.feeType || 'Unclassified',
+    clientId: source.clientId ?? source['Client ID'] ?? '',
+    service: source.service ?? source.Service ?? '',
     client: source.Client ?? source.client ?? '',
     invoice: source.Invoice ?? source.invoice ?? '',
     amount: formatMoneyValue(totalAmount),
@@ -849,6 +857,8 @@ function ImportExportModule({
           const paidOn = normalizeDateInput(values['Visit Date']) || todayIsoDate();
           const payment = normalizePaymentRecord({
             client: values.Client,
+            clientId: values['Client ID'],
+            feeType: 'File Charge',
             invoice,
             amount: String(fileCharge),
             paidAmount: String(fileCharge),
@@ -900,6 +910,10 @@ function ImportExportModule({
       setEditSaveError(error);
       setMessage(error);
       return;
+    }
+    if (isPaymentsModule && normalized.careEnrollmentId) {
+      const issue = validateCareReceiptEdit(normalized, readCareState(window.localStorage, currentBranch), rows.filter((_, index) => index !== editIndex));
+      if (issue) { setEditSaveError(issue); return; }
     }
     const clientId = clientIdFromRow(normalized, rowToValues);
     if (isClientModule && clientId && rows.some((row, index) => index !== editIndex && clientIdFromRow(row, rowToValues) === clientId)) {
@@ -2175,6 +2189,12 @@ function ClientProfile({ client, onBack }) {
                 </select>
               </label>
               <label className="field-block">
+                <span>Fee Type</span>
+                <select className="lead-input" value={payForm.feeType || 'Unclassified'} onChange={e => setPayForm(f => ({ ...f, feeType: e.target.value }))}>
+                  {['Unclassified', 'Consultation', 'File Charge', 'Medicine', 'Treatment', 'Other'].map(type => <option key={type}>{type}</option>)}
+                </select>
+              </label>
+              <label className="field-block">
                 <span>Payment Mode</span>
                 <select className="lead-input" value={payForm.paymentMode} onChange={(e) => setPayForm((f) => ({ ...f, paymentMode: e.target.value }))}>
                   <option>Cash</option><option>GPay</option>
@@ -2374,13 +2394,19 @@ export function PaymentsPage() {
         { label: 'Pending', value: '0' },
         { label: 'Invoices', value: '0' },
       ]}
-      headers={['Client', 'Invoice', 'Total Amount', 'Paid Amount', 'Pending Amount', 'Status', 'Payment Mode', 'Paid On']}
+      headers={['Client', 'Invoice', 'Total Amount', 'Paid Amount', 'Pending Amount', 'Status', 'Payment Mode', 'Paid On', 'Fee Type']}
       seedRows={payments}
       filenameBase="ayurflow-payments"
-      fieldOptions={{ Client: clientNames, Status: ['Paid', 'Partial', 'Pending'], 'Payment Mode': ['Cash', 'GPay'] }}
+      fieldOptions={{ 'Fee Type': ['Consultation', 'File Charge', 'Medicine', 'Treatment', 'Therapy / Activity', 'Package', 'Other', 'Unclassified'], Client: clientNames, Status: ['Paid', 'Partial', 'Pending'], 'Payment Mode': ['Cash', 'GPay'] }}
       fieldTypes={{ 'Total Amount': 'number', 'Paid Amount': 'number', 'Pending Amount': 'number', 'Paid On': 'date' }}
       createDefaultRecord={(rows) => ({ Invoice: nextInvoiceNumber(rows), Status: 'Paid', 'Paid On': new Date().toISOString().slice(0, 10) })}
       rowToValues={(row) => ({
+        id: row.id,
+        careProgramId: row.careProgramId,
+        careEnrollmentId: row.careEnrollmentId,
+        clientId: row.clientId,
+        service: row.service,
+        note: row.note,
         Client: normalizePaymentRecord(row).client,
         Invoice: normalizePaymentRecord(row).invoice,
         'Total Amount': normalizePaymentRecord(row).amount,
@@ -2389,6 +2415,7 @@ export function PaymentsPage() {
         Status: normalizePaymentRecord(row).status,
         'Payment Mode': normalizePaymentRecord(row).paymentMode,
         'Paid On': normalizePaymentRecord(row).paidOn,
+        'Fee Type': normalizePaymentRecord(row).feeType,
       })}
       parseRow={normalizePaymentRecord}
       rowActions={(row, openEditRecord, deleteRecord) => {

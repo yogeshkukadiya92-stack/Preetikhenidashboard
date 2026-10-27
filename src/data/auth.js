@@ -13,6 +13,8 @@ export const STAFF_PERMISSION_OPTIONS = [
   { path: '/journey', label: 'Patient Journey' },
   { path: '/appointments', label: 'Appointments' },
   { path: '/forms', label: 'Forms' },
+  { path: '/panchakarma', label: 'Panchakarma' },
+  { path: '/garbhsanskar', label: 'Garbhsanskar' },
   { path: '/services', label: 'Services' },
   { path: '/treatments', label: 'Treatments' },
   { path: '/packages', label: 'Packages' },

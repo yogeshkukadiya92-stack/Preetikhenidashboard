@@ -6080,3 +6080,54 @@ textarea.lead-input,
 .journey-print-brands img { display: block; }
 .journey-print-brands .moms-logo { width: min(240px, 65%); height: 90px; object-fit: cover; object-position: center; }
 .journey-print-brands .shree-logo { width: 82px; height: 94px; object-fit: contain; }
+
+.monthly-clinic-report { margin-bottom: 24px; }
+.monthly-clinic-report > .subtle, .monthly-clinic-report > .table-wrap { margin: 16px 20px; }
+.monthly-report-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 0 20px; }
+.monthly-report-filters .field-block { flex: 1 1 145px; min-width: 0; }
+.monthly-report-stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 12px; padding: 0 20px; }
+.monthly-clinic-report .table-wrap { overflow-x: auto; max-height: 420px; }
+
+/* Service-specific care workspaces share the clinic's existing design system. */
+.care-page { display: grid; gap: 22px; min-width: 0; }
+.care-page-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.care-page-heading h1 { color: var(--green); margin: 0 0 6px; font-size: 1.8rem; }
+.care-page-heading p { margin: 0; color: var(--muted); }
+.care-actions, .care-row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.care-row-actions { min-width: 220px; }
+.care-row-actions .pill { font-size: .74rem; padding: 6px 10px; }
+.care-stats { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 12px; }
+.care-stats .mini-stat { min-width: 0; }
+.care-stats strong { overflow-wrap: anywhere; }
+.care-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.care-toolbar { padding: 18px 20px; display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+.care-toolbar .field-block { flex: 1 1 145px; min-width: 0; }
+.care-toolbar .lead-input { width: 100%; }
+.care-table-wrap { overflow-x: auto; max-width: 100%; }
+.care-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+.care-table th { text-align: left; font-size: .72rem; color: #536f64; background: #f5faf7; }
+.care-table th, .care-table td { padding: 15px 18px; border-bottom: 1px solid #e5eee8; vertical-align: top; }
+.care-table td small, .care-table td > span { display: block; margin-top: 5px; color: var(--muted); }
+.care-table tr:last-child td { border-bottom: 0; }
+.care-table tbody tr:hover { background: #fbfdfb; }
+.care-note-cell { min-width: 180px; max-width: 320px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.care-empty { text-align: center; padding: 45px 24px; color: var(--muted); }
+.care-empty strong { color: var(--green); }
+.care-hint { margin: 14px 20px 20px; color: var(--muted); font-size: .78rem; line-height: 1.65; }
+.care-notice { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: #e8f5eb; color: #195d3c; border-radius: 10px; }
+.care-report { margin-bottom: 24px; min-width: 0; }
+.care-modal-backdrop { position: fixed; inset: 0; background: #102d2466; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.care-modal { width: min(820px,100%); max-height: 92dvh; overflow-y: auto; background: #fff; border-radius: 18px; box-shadow: 0 24px 80px #102d2440; }
+.care-modal-head { padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e5eee8; }
+.care-modal-head h2 { margin: 0; font-size: 1.2rem; color: var(--green); }
+.care-form-grid { padding: 22px 24px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
+.care-form-grid .lead-input { width: 100%; min-width: 0; }
+.care-service-checks { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; border: 1px solid #dce7df; border-radius: 10px; padding: 16px; max-height: 240px; overflow-y: auto; }
+.care-service-checks legend { color: #345e48; font-weight: 600; padding: 0 5px; }
+.care-service-checks label, .care-checkbox { display: flex; align-items: center; gap: 9px; font-size: .82rem; }
+.care-service-checks input, .care-checkbox input { accent-color: #087c68; }
+.care-modal-foot { padding: 16px 24px; border-top: 1px solid #e5eee8; display: flex; justify-content: flex-end; gap: 12px; }
+.care-error { padding: 10px 16px; margin: 0 24px 15px; background: #fff1ee; color: #9e3226; border-radius: 8px; }
+.care-full { grid-column: 1 / -1; margin: 0; }
+@media(max-width:1100px){ .care-stats { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media(max-width:650px){ .care-page-heading { align-items: flex-start; flex-direction: column; } .care-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } .care-form-grid { grid-template-columns: 1fr; padding: 18px; } .care-service-checks { grid-template-columns: 1fr; } .care-modal-backdrop { padding: 8px; } .care-modal-head { padding: 18px; } .care-tabs { gap: 6px; } .care-tabs .pill { padding: 8px 12px; } }
