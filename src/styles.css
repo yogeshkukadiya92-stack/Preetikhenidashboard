@@ -6074,3 +6074,9 @@ textarea.lead-input,
 .service-overview tfoot { font-weight: 700; }
 .service-overview-note { padding: 0 20px; }
 @media (max-width: 600px) { .service-filter { width: 100%; } .service-filter select { flex: 1; min-width: 0; } }
+
+/* Match the default branding in Patient Journey printed documents. */
+.journey-print-brands { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 16px; break-inside: avoid; }
+.journey-print-brands img { display: block; }
+.journey-print-brands .moms-logo { width: min(240px, 65%); height: 90px; object-fit: cover; object-position: center; }
+.journey-print-brands .shree-logo { width: 82px; height: 94px; object-fit: contain; }

@@ -6,6 +6,13 @@ import { loadAllLocalResponses, loadForms } from '../data/formStore.js';
 import { services as defaultServiceNames } from '../data/appConfig.js';
 import { loadServiceCatalog, serviceNames } from '../data/serviceCatalog.js';
 import { appointmentVisitId } from '../data/appointmentJourney.js';
+import momsPathshalaLogo from '../assets/print/moms-pathshala.jpg';
+import shreeAyurvedLogo from '../assets/print/shree-ayurved.png';
+
+// Shared by every Patient Journey print, independent of saved print templates.
+const journeyPrintBrandStyles = `.journey-print-brands{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:16px;break-inside:avoid}.journey-print-brands img{display:block}.journey-print-brands .moms-logo{width:240px;height:90px;object-fit:cover;object-position:center}.journey-print-brands .shree-logo{width:82px;height:94px;object-fit:contain}`;
+const journeyPrintBrandsHtml = () => `<div class="journey-print-brands"><img class="moms-logo" src="${new URL(momsPathshalaLogo, window.location.href).href}" alt="Mom's Pathshala"><img class="shree-logo" src="${new URL(shreeAyurvedLogo, window.location.href).href}" alt="Shree Ayurved"></div>`;
+
 
 function loadValue(key, fallback) {
   try {
@@ -507,6 +514,7 @@ function buildDietPlanPrintHtml(plan) {
   <meta charset="utf-8">
   <title>Diet Plan - ${escapeDietHtml(plan.client || 'Patient')}</title>
   <style>
+    ${journeyPrintBrandStyles}
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 32px; color: #163f33; background: #fff; }
     .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #138f86; padding-bottom: 14px; margin-bottom: 20px; }
     .logo-box h1 { margin: 0; font-size: 22px; color: #1f6b4a; }
@@ -536,6 +544,7 @@ function buildDietPlanPrintHtml(plan) {
   <div class="toolbar">
     <button onclick="window.print()">🖨️ Print / Save as PDF</button>
   </div>
+  ${journeyPrintBrandsHtml()}
   <div class="header">
     <div class="logo-box">
       <h1>SHREE AYURVED HOSPITAL & CLINIC</h1>
@@ -2110,7 +2119,7 @@ export function ClientJourneyPage() {
     }).join('');
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapePrintHtml(selectedClient)} - Clinical Summary</title><style>*{box-sizing:border-box}body{margin:0;padding:28px 34px;color:#173b31;font-family:Arial,sans-serif;font-size:12px;line-height:1.5}.header{display:flex;justify-content:space-between;gap:20px;padding-bottom:14px;border-bottom:3px solid #0e5b52}.header h1{margin:0 0 4px;color:#0e5b52;font-size:22px}.header p{margin:0;color:#60776f}.clinic{text-align:right;font-weight:700}.patient-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:start;gap:38px;margin-top:16px;padding-bottom:9px;border-bottom:1px solid #173b31;color:#111}.patient-line strong{overflow-wrap:anywhere}.visit-summary{margin-top:24px;padding-top:14px;border-top:2px solid #0e5b52;break-before:auto}.visit-summary>h1{margin:0;color:#0e5b52;font-size:17px}section{margin-top:17px;break-inside:avoid}h2{margin:0 0 8px;padding-bottom:5px;border-bottom:1px solid #d6e4df;color:#0e5b52;font-size:14px}p{margin:0;white-space:pre-wrap}.print-list{margin:0;padding-left:18px}.print-list li{margin:0 0 5px;break-inside:avoid}.details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.detail{padding:8px;border:1px solid #dbe7e2;border-radius:6px}.detail span{display:block;margin-bottom:2px;color:#6a7f77;font-size:10px}.detail strong{overflow-wrap:anywhere}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #d6e4df;text-align:left;vertical-align:top}th{background:#edf7f3}.custom-note{margin-top:18px;padding:10px;border:1px solid #d6e4df;border-radius:6px;white-space:pre-wrap}.footer{margin-top:28px;padding-top:10px;border-top:1px solid #d6e4df;color:#758a82;font-size:10px;display:flex;justify-content:space-between}@page{margin:14mm}@media print{body{padding:0}th{background:#edf7f3!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><div><h1>${escapePrintHtml(clinicalPrintTitle || 'Clinical Summary')}</h1><p>${selectedVisits.length} selected patient journey${selectedVisits.length === 1 ? '' : 's'}</p></div><div class="clinic">Mom's Pathshala<br>${escapePrintHtml(currentBranch)}</div></div>${patientSection}${visitSections}${clinicalPrintNote.trim() ? `<div class="custom-note"><strong>Additional Instructions</strong><br>${escapePrintHtml(clinicalPrintNote).replaceAll('\n', '<br>')}</div>` : ''}<div class="footer"><span>Generated from Patient Journey</span><span>Doctor / Consultant Signature: __________________</span></div><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},300)});<\/script></body></html>`);
+    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapePrintHtml(selectedClient)} - Clinical Summary</title><style>${journeyPrintBrandStyles}*{box-sizing:border-box}body{margin:0;padding:28px 34px;color:#173b31;font-family:Arial,sans-serif;font-size:12px;line-height:1.5}.header{display:flex;justify-content:space-between;gap:20px;padding-bottom:14px;border-bottom:3px solid #0e5b52}.header h1{margin:0 0 4px;color:#0e5b52;font-size:22px}.header p{margin:0;color:#60776f}.clinic{text-align:right;font-weight:700}.patient-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:start;gap:38px;margin-top:16px;padding-bottom:9px;border-bottom:1px solid #173b31;color:#111}.patient-line strong{overflow-wrap:anywhere}.visit-summary{margin-top:24px;padding-top:14px;border-top:2px solid #0e5b52;break-before:auto}.visit-summary>h1{margin:0;color:#0e5b52;font-size:17px}section{margin-top:17px;break-inside:avoid}h2{margin:0 0 8px;padding-bottom:5px;border-bottom:1px solid #d6e4df;color:#0e5b52;font-size:14px}p{margin:0;white-space:pre-wrap}.print-list{margin:0;padding-left:18px}.print-list li{margin:0 0 5px;break-inside:avoid}.details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.detail{padding:8px;border:1px solid #dbe7e2;border-radius:6px}.detail span{display:block;margin-bottom:2px;color:#6a7f77;font-size:10px}.detail strong{overflow-wrap:anywhere}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #d6e4df;text-align:left;vertical-align:top}th{background:#edf7f3}.custom-note{margin-top:18px;padding:10px;border:1px solid #d6e4df;border-radius:6px;white-space:pre-wrap}.footer{margin-top:28px;padding-top:10px;border-top:1px solid #d6e4df;color:#758a82;font-size:10px;display:flex;justify-content:space-between}@page{margin:14mm}@media print{body{padding:0}th{background:#edf7f3!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${journeyPrintBrandsHtml()}<div class="header"><div><h1>${escapePrintHtml(clinicalPrintTitle || 'Clinical Summary')}</h1><p>${selectedVisits.length} selected patient journey${selectedVisits.length === 1 ? '' : 's'}</p></div><div class="clinic">Mom's Pathshala<br>${escapePrintHtml(currentBranch)}</div></div>${patientSection}${visitSections}${clinicalPrintNote.trim() ? `<div class="custom-note"><strong>Additional Instructions</strong><br>${escapePrintHtml(clinicalPrintNote).replaceAll('\n', '<br>')}</div>` : ''}<div class="footer"><span>Generated from Patient Journey</span><span>Doctor / Consultant Signature: __________________</span></div><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},300)});<\/script></body></html>`);
     printWindow.document.close();
   };
 
@@ -2932,6 +2941,10 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                 <label className="field-block"><span>Additional Instructions</span><textarea className="lead-input" rows="4" value={clinicalPrintNote} onChange={(event) => setClinicalPrintNote(event.target.value)} placeholder="Optional custom instruction for this patient..." /></label>
               </div>
               <div className="clinical-print-preview" aria-live="polite">
+                <div className="journey-print-brands">
+                  <img className="moms-logo" src={momsPathshalaLogo} alt="Mom's Pathshala" />
+                  <img className="shree-logo" src={shreeAyurvedLogo} alt="Shree Ayurved" />
+                </div>
                 <div className="clinical-preview-header"><div><strong>{clinicalPrintTitle || 'Clinical Summary'}</strong><span>Mom&apos;s Pathshala</span></div><small>Print preview</small></div>
                 <div className="clinical-preview-section"><strong>Selected Journey Dates</strong><p>{selectedClinicalPrintVisits.map((visit) => `${formatResponseDate(visit.visitDate)} · ${visit.appointmentData?.time || 'Time not recorded'} · ${visit.appointmentData?.type || 'Patient visit'}`).join('\n') || 'Select at least one journey date.'}</p></div>
                 {clinicalPrintSections.patient && <div className="clinical-preview-section"><strong>{patientIdentity(selectedClient, selectedClientRecord)}</strong><p>{clientMobile(selectedClientRecord) || 'Mobile not saved'} · {new Date().toLocaleDateString('en-GB').replaceAll('/', '-')}</p></div>}
