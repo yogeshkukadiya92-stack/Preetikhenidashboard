@@ -40,3 +40,23 @@ test('care enrolments count each patient once across services and filter service
  const r=buildMonthlyClinicReport({clients:[{clientId:'1',name:'Patient',visitDate:'2026-09-01',service:'Panchakarma'}],carePrograms:{enrollments:[{id:'e1',clientId:'1',patientName:'Patient',program:'panchakarma',startDate:'2026-10-01'},{id:'e2',clientId:'1',patientName:'Patient',program:'garbhsanskar',startDate:'2026-10-01'}],sessions:[]},payments:[{clientId:'1',client:'Patient',service:'Panchakarma',paidOn:'2026-10-01',amount:100,status:'Paid'},{clientId:'1',client:'Patient',service:'Garbhsanskar',paidOn:'2026-10-01',amount:200,status:'Paid'}]},'2026-10',{service:'Garbhsanskar'});
  assert.equal(r.patients.length,1);assert.equal(r.patients[0].type,'Old');assert.equal(r.collections.length,1);assert.equal(r.collections[0].amount,200);
 });
+test('file charge collections count received amounts by mode and exclude other fees', () => {
+  const payment = { paidOn: '2026-11-04', status: 'Paid', paymentMode: 'Cash' };
+  const r = buildMonthlyClinicReport({ payments: [
+    { ...payment, feeType: 'File Charge', amount: 300, paymentMode: 'GPay' },
+    { ...payment, 'Fee Type': ' file charge ', amount: 500, paidAmount: 200, status: 'Partial' },
+    { ...payment, feeType: 'File Charge', amount: 300, status: 'Pending' },
+    ...['Consultation', 'Medicine', 'Treatment', 'Package', 'Unclassified'].map(feeType => ({ ...payment, feeType, amount: 1000 })),
+    { ...payment, feeType: 'File Charge', amount: 300, paidOn: '2026-10-04' },
+  ] }, '2026-11');
+  const files = r.collections.filter(p => p.category === 'File Charge');
+  assert.equal(files.reduce((n, p) => n + p.amount, 0), 500);
+  assert.equal(files.filter(p => p.mode === 'GPay').reduce((n, p) => n + p.amount, 0), 300);
+  assert.equal(files.filter(p => p.mode === 'Cash').reduce((n, p) => n + p.amount, 0), 200);
+  const cash = buildMonthlyClinicReport({ payments: [
+    { ...payment, feeType: 'File Charge', amount: 200 },
+    { ...payment, feeType: 'File Charge', amount: 300, paymentMode: 'GPay' },
+  ] }, '2026-11', { mode: 'Cash' });
+  assert.equal(cash.collections.length, 1);
+  assert.equal(cash.collections[0].amount, 200);
+});

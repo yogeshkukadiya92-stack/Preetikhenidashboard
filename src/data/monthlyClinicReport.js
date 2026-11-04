@@ -83,7 +83,7 @@ export function buildMonthlyClinicReport({ clients = [], appointments = [], paym
     const explicit = p.paidAmount ?? p['Paid Amount'];
     const amount = explicit !== undefined && explicit !== '' ? parseLiveAmount(explicit) : key(p.status ?? p.Status) === 'paid' ? parseLiveAmount(p.amount ?? p['Total Amount']) : 0;
     if (amount <= 0) return;
-    collections.push({ mode, amount, category: p.feeType || p['Fee Type'] || 'Unclassified' });
+    collections.push({ mode, amount, category: key(p.feeType || p['Fee Type']) === 'file charge' ? 'File Charge' : p.feeType || p['Fee Type'] || 'Unclassified' });
   });
   return { patients: selected, collections, services: [...new Set([...patients.values()].flatMap(p => p.services || [p.service]))].sort(), unknownDates: [...patients.values()].filter(p => !p.firstDate).length };
 }
