@@ -42,7 +42,12 @@ export function receivedAmount(p) {
   return Math.max(0, explicit !== undefined && explicit !== '' ? parseLiveAmount(explicit) : String(p.status ?? p.Status).toLowerCase() === 'paid' ? parseLiveAmount(p.amount ?? p['Total Amount']) : 0);
 }
 export function enrollmentBalance(enrollment, payments) {
-  const received = payments.filter(p => p.careEnrollmentId === enrollment.id).reduce((n,p) => n + receivedAmount(p), 0);
+  const linked = payments.filter(p => p.careEnrollmentId === enrollment.id);
+  const legacy = String(enrollment.payment || '').split('/').reduce((sum, part) => sum + (Number(part.replace(/[,₹\s]/g, '')) || 0), 0);
+  // Older forms copied linked receipts into the payment text; count those only once.
+  const copiedReceipts = linked.length && String(enrollment.payment || '') === linked.map(p => p.paidAmount || '').join(' / ');
+  const opening = enrollment.openingPaidAmount ?? (copiedReceipts ? 0 : legacy);
+  const received = Number(opening) + (enrollment.paymentEntries || []).reduce((sum, entry) => sum + Number(entry.amount), 0) + linked.reduce((n,p) => n + receivedAmount(p), 0);
   return { received, pending: Math.max(0, Number(enrollment.fee || 0) - received) };
 }
 export function usedSessions(enrollmentId, sessions) { return sessions.filter(s => s.enrollmentId === enrollmentId && s.status === 'Completed' && s.attendance === 'Present' && s.consumesCredit !== false).length; }

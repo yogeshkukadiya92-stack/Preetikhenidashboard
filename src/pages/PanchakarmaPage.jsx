@@ -5,6 +5,9 @@ import { loadLiveDashboardData } from '../data/liveData.js';
 import { CARE_STORAGE, carePatients, readCareState, newCareId, enrollmentBalance } from '../data/carePrograms.js';
 import { Field, Modal } from './CareProgramPage.jsx';
 
+const completionOptions = [{ value: '', label: 'Select status' }, { value: 'Yes', label: 'Yes' }, { value: 'No', label: 'No' }];
+const completionLabel = value => value === 'Yes' || value === 'No' ? value : 'Not recorded';
+const money = value => `₹ ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const dateLabel = value => value ? value.split('-').reverse().join('/') : '—';
 export function PanchakarmaPage() {
   const { currentBranch, branchKey } = useBranch();
@@ -27,9 +30,9 @@ export function PanchakarmaPage() {
   const open = row => {
     setError('');
     const days = row ? (row.treatmentDays || state.sessions.filter(s => s.enrollmentId === row.id).sort((a,b) => a.date.localeCompare(b.date)).map(s => ({ date: s.date, staff: s.therapist || '' }))) : [];
-    setDraft({ patientKey: '', name: '', totalSessions: 1, installmentDate: '', feedbackBy: '', feedbackDate: '', reviewBy: '', reviewDate: '', ...row,
-      payment: row?.payment ?? (row ? live.payments.filter(p => p.careEnrollmentId === row.id).map(p => p.paidAmount || '').join(' / ') : ''),
-      remainingPayment: row?.remainingPayment ?? (row ? enrollmentBalance(row, live.payments).pending : ''), treatmentDays: days });
+    setDraft({ patientKey: '', name: '', totalSessions: 1, installmentDate: '', feedbackTaken: '', reviewGiven: '', feedbackBy: '', feedbackDate: '', reviewBy: '', reviewDate: '', ...row,
+      fee: row ? (Number(row.fee) || (enrollmentBalance(row, live.payments).received + Number(row.remainingPayment || 0))) : '',
+      newPayment: '', paymentDate: new Date().toLocaleDateString('en-CA'), treatmentDays: days });
   };
   const save = () => {
     const patient = patients.find(p => p.key === draft.patientKey);
@@ -37,11 +40,20 @@ export function PanchakarmaPage() {
     if (!draft.name.trim() || !Number.isInteger(Number(draft.totalSessions)) || Number(draft.totalSessions) < 1) { setError('Enter the type of Panchkarma and total days suggested by doctor.'); return; }
     if (draft.treatmentDays.length > Number(draft.totalSessions)) { setError('Total days cannot be fewer than the day entries.'); return; }
     if (draft.treatmentDays.some(d => !d.date)) { setError('Enter a date for each day.'); return; }
-    if (draft.remainingPayment !== '' && (!Number.isFinite(Number(draft.remainingPayment)) || Number(draft.remainingPayment) < 0)) { setError('Enter a valid remaining payment.'); return; }
+    if (draft.fee === '' || !Number.isFinite(Number(draft.fee)) || Number(draft.fee) < 0) { setError('Enter a valid total service amount.'); return; }
+    if (!Number.isFinite(Number(draft.newPayment)) || Number(draft.newPayment) < 0) { setError('Enter a valid payment amount.'); return; }
+    if (Number(draft.newPayment) > 0 && !draft.paymentDate) { setError('Enter the payment date.'); return; }
     try {
       const latest = readCareState(window.localStorage, currentBranch);
-      const row = { ...draft, id: draft.id || newCareId(), program: 'panchakarma', patientName: patient?.name || draft.patientName, clientId: patient?.id || draft.clientId, mobile: patient?.mobile || draft.mobile,
-        totalSessions: Number(draft.totalSessions), startDate: draft.treatmentDays[0]?.date || draft.startDate || '', serviceIds: draft.serviceIds || [], status: draft.status || 'Active', fee: draft.fee || 0 };
+      const latestPayments = loadLiveDashboardData(currentBranch).payments;
+      const existing = latest.enrollments.find(e => e.id === draft.id);
+      const balance = enrollmentBalance(existing || {}, latestPayments);
+      if (balance.received + Number(draft.newPayment) > Number(draft.fee)) { setError('Total service amount cannot be less than the payments received.'); return; }
+      const paymentEntries = [...(existing?.paymentEntries || [])];
+      if (Number(draft.newPayment) > 0) paymentEntries.push({ id: newCareId(), amount: Number(draft.newPayment), date: draft.paymentDate });
+      const row = { ...draft, paymentEntries, id: draft.id || newCareId(), program: 'panchakarma', patientName: patient?.name || draft.patientName, clientId: patient?.id || draft.clientId, mobile: patient?.mobile || draft.mobile,
+        totalSessions: Number(draft.totalSessions), startDate: draft.treatmentDays[0]?.date || draft.startDate || '', serviceIds: draft.serviceIds || [], status: draft.status || 'Active', fee: Number(draft.fee), remainingPayment: Number(draft.fee) - balance.received - Number(draft.newPayment) };
+      delete row.newPayment; delete row.paymentDate;
       window.localStorage.setItem(branchKey(CARE_STORAGE), JSON.stringify({ ...latest, enrollments: [...latest.enrollments.filter(e => e.id !== row.id), row] }));
       window.dispatchEvent(new Event('moms-pathshala:care-updated'));
       setDraft(null); setMessage('Panchkarma record saved.');
@@ -52,8 +64,8 @@ export function PanchakarmaPage() {
     {message && <p className="care-notice" role="status">{message}</p>}
     <Card title="Patients">
       <Field label="Search patient" value={search} onChange={setSearch}/>
-      <div className="care-table-wrap"><table className="care-table"><thead><tr><th>Patient name</th><th>Type of Panchkarma</th><th>Total days suggested by doctor</th><th>Day, date & staff</th><th>Payment</th><th>Remain payment</th><th>Installment date</th><th>Feedback taken by & date</th><th>Google review taken by & date</th><th>Action</th></tr></thead>
-        <tbody>{rows.map(row => <tr key={row.id}><td><strong>{row.patientName}</strong></td><td>{row.name}</td><td>{row.totalSessions}</td><td>{(row.treatmentDays || state.sessions.filter(s => s.enrollmentId === row.id).map(s => ({date:s.date,staff:s.therapist}))).map((day,i) => <small key={i}>Day {i+1}: {dateLabel(day.date)} · {day.staff || '—'}</small>)}</td><td>{(row.payment ?? live.payments.filter(p => p.careEnrollmentId === row.id).map(p => p.paidAmount).join(' / ')) || '—'}</td><td>{row.remainingPayment ?? enrollmentBalance(row,live.payments).pending}</td><td>{dateLabel(row.installmentDate)}</td><td>{row.feedbackBy || '—'}<small>{dateLabel(row.feedbackDate)}</small></td><td>{row.reviewBy || '—'}<small>{dateLabel(row.reviewDate)}</small></td><td><button className="pill" onClick={() => open(row)}>Edit</button></td></tr>)}</tbody>
+      <div className="care-table-wrap"><table className="care-table"><thead><tr><th>Patient name</th><th>Type of Panchkarma</th><th>Total days suggested by doctor</th><th>Day, date & staff</th><th>Total service amount</th><th>Paid amount & history</th><th>Pending amount</th><th>Installment date</th><th>Feedback taken? / By & date</th><th>Google review given? / By & date</th><th>Action</th></tr></thead>
+        <tbody>{rows.map(row => <tr key={row.id}><td><strong>{row.patientName}</strong></td><td>{row.name}</td><td>{row.totalSessions}</td><td>{(row.treatmentDays || state.sessions.filter(s => s.enrollmentId === row.id).map(s => ({date:s.date,staff:s.therapist}))).map((day,i) => <small key={i}>Day {i+1}: {dateLabel(day.date)} · {day.staff || '—'}</small>)}</td><td>{money(Number(row.fee) || (enrollmentBalance(row,live.payments).received + Number(row.remainingPayment || 0)))}</td><td><strong>{money(enrollmentBalance(row,live.payments).received)}</strong>{row.payment && <small>Earlier payments: {row.payment}</small>}{(row.paymentEntries || []).map(entry => <small key={entry.id}>{dateLabel(entry.date)} · {money(entry.amount)}</small>)}</td><td>{money(Math.max(0, (Number(row.fee) || (enrollmentBalance(row,live.payments).received + Number(row.remainingPayment || 0))) - enrollmentBalance(row,live.payments).received))}</td><td>{dateLabel(row.installmentDate)}</td><td><strong>{completionLabel(row.feedbackTaken)}</strong><small>{row.feedbackBy || '—'}</small><small>{dateLabel(row.feedbackDate)}</small></td><td><strong>{completionLabel(row.reviewGiven)}</strong><small>{row.reviewBy || '—'}</small><small>{dateLabel(row.reviewDate)}</small></td><td><button className="pill" onClick={() => open(row)}>Edit</button></td></tr>)}</tbody>
       </table>{!rows.length && <p className="care-empty">No Panchkarma records found.</p>}</div>
     </Card>
     {draft && <Modal title="Panchkarma" onClose={() => setDraft(null)} onSave={save} error={error}>
@@ -65,9 +77,15 @@ export function PanchakarmaPage() {
         <Field label={`Day ${i+1} process done by (staff name)`} value={day.staff} onChange={v => update('treatmentDays',draft.treatmentDays.map((d,j) => j===i ? {...d,staff:v} : d))}/>
         <button type="button" className="pill" onClick={() => update('treatmentDays',draft.treatmentDays.filter((_,j) => j!==i))}>Remove day {i+1}</button>
       </div>)}<button type="button" className="pill" disabled={draft.treatmentDays.length >= Number(draft.totalSessions)} onClick={() => update('treatmentDays',[...draft.treatmentDays,{date:'',staff:''}])}>+ Add day</button></div>
-      <Field label="Payment (e.g. 300 / 1500 / 800)" value={draft.payment} onChange={v => update('payment',v)}/>
-      <Field label="Remain payment" type="number" min="0" step="0.01" value={draft.remainingPayment} onChange={v => update('remainingPayment',v)}/>
+      <Field label="Total service amount" type="number" min="0" step="0.01" required value={draft.fee} onChange={v => update('fee',v)}/>
+      <div className="field-block"><span>Already paid</span><strong>{money(enrollmentBalance(draft,live.payments).received)}</strong></div>
+      <Field label="Add payment this visit" type="number" min="0" step="0.01" value={draft.newPayment} onChange={v => update('newPayment',v)}/>
+      <Field label="Payment date" type="date" value={draft.paymentDate} onChange={v => update('paymentDate',v)}/>
+      <div className="field-block"><span>Pending amount (automatic)</span><strong>{money(Math.max(0, Number(draft.fee || 0) - enrollmentBalance(draft,live.payments).received - Number(draft.newPayment || 0)))}</strong></div>
+      {(draft.paymentEntries || []).length > 0 && <div className="care-full"><h3>Payment history</h3>{draft.paymentEntries.map(entry => <p key={entry.id}>{dateLabel(entry.date)} · {money(entry.amount)}</p>)}</div>}
       <Field label="Installment date" type="date" value={draft.installmentDate} onChange={v => update('installmentDate',v)}/>
+      <Field label="Feedback taken?" value={draft.feedbackTaken} onChange={v => update('feedbackTaken',v)} options={completionOptions}/>
+      <Field label="Google review given?" value={draft.reviewGiven} onChange={v => update('reviewGiven',v)} options={completionOptions}/>
       <Field label="Feedback taken by" value={draft.feedbackBy} onChange={v => update('feedbackBy',v)}/><Field label="Feedback date" type="date" value={draft.feedbackDate} onChange={v => update('feedbackDate',v)}/>
       <Field label="Google review taken by" value={draft.reviewBy} onChange={v => update('reviewBy',v)}/><Field label="Google review date" type="date" value={draft.reviewDate} onChange={v => update('reviewDate',v)}/>
     </Modal>}
