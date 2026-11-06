@@ -758,13 +758,13 @@ function SearchablePresetInput({ label, value, options, onChange, onSelect, onCo
           placeholder={placeholder}
           autoComplete="off"
           role="combobox"
-          aria-expanded={focused && Boolean(query)}
+          aria-expanded={focused && matches.length > 0}
           aria-autocomplete="list"
         />
         {action}
       </div>
       {helperText && <small className="field-help">{helperText}</small>}
-      {focused && query && (
+      {focused && matches.length > 0 && (
         <div className="searchable-preset-results" role="listbox">
           {matches.length ? matches.map((option) => (
             <button
@@ -783,18 +783,19 @@ function SearchablePresetInput({ label, value, options, onChange, onSelect, onCo
   );
 }
 
-function ClinicalAutocompleteTextarea({ label, value, options, onChange, rows }) {
+function ClinicalAutocompleteTextarea({ label, value, options, onChange, rows, individualSymptoms = false }) {
   const [focused, setFocused] = useState(false);
-  const currentLine = String(value ?? '').split('\n').at(-1)?.trim() ?? '';
+  const currentLine = String(value ?? '').split(individualSymptoms ? /[,;\n]/ : /\n/).at(-1)?.trim() ?? '';
   const query = currentLine.toLowerCase();
   const matches = query
     ? options.filter((option) => option.toLowerCase().includes(query) && option.toLowerCase() !== query).slice(0, 7)
     : [];
 
   const selectOption = (option) => {
-    const lines = String(value ?? '').split('\n');
-    lines[lines.length - 1] = option;
-    onChange(lines.join('\n'));
+    const text = String(value ?? '');
+    const tokenStart = individualSymptoms ? Math.max(text.lastIndexOf(','), text.lastIndexOf(';'), text.lastIndexOf('\n')) + 1 : text.lastIndexOf('\n') + 1;
+    const whitespace = text.slice(tokenStart).match(/^\s*/)?.[0] ?? '';
+    onChange(text.slice(0, tokenStart) + whitespace + option);
     setFocused(false);
   };
 
@@ -817,10 +818,10 @@ function ClinicalAutocompleteTextarea({ label, value, options, onChange, rows })
         }}
         autoComplete="off"
         role="combobox"
-        aria-expanded={focused && Boolean(query)}
+        aria-expanded={focused && matches.length > 0}
         aria-autocomplete="list"
       />
-      {focused && query && (
+      {focused && matches.length > 0 && (
         <div className="clinical-autocomplete-results" role="listbox">
           {matches.map((option) => <button type="button" role="option" key={option} onMouseDown={(event) => event.preventDefault()} onClick={() => selectOption(option)}>{option}</button>)}
         </div>
@@ -1243,13 +1244,13 @@ export function ClientJourneyPage() {
     .filter((visit) => clinicalPrintVisitIds.includes(visit.id))
     .sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate))), [journeyVisits, clinicalPrintVisitIds]);
   const consultationSuggestions = useMemo(() => {
-    const collectLines = (value) => String(value ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
+    const collectValues = (value, field) => String(value ?? '').split(field === 'complaint' ? /[,;\n]+/ : /\n/).map((line) => line.trim()).filter(Boolean);
     const allVisits = Object.values(journeys).flatMap((record) => normalizeJourneyRecord(record).visits);
     const optionsFor = (field) => {
       const values = [
-        ...allVisits.map((visit) => visit.consultationData?.[field]),
+        ...allVisits.flatMap((visit) => consultationSectionsFromData(visit.consultationData).map((section) => section[field])),
         ...consultationTemplates.map((template) => template?.[field]),
-      ].flatMap(collectLines);
+      ].flatMap((value) => collectValues(value, field));
       return [...new Map(values.map((item) => [item.toLocaleLowerCase(), item])).values()];
     };
     return { complaint: optionsFor('complaint'), notes: optionsFor('notes') };
@@ -3333,6 +3334,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                   <div className="detail-grid">
                     <ClinicalAutocompleteTextarea
                       label="Presenting Complaints"
+                      individualSymptoms
                       rows="4"
                       value={sec.complaint}
                       options={consultationSuggestions.complaint}
