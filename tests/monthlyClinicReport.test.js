@@ -60,3 +60,33 @@ test('file charge collections count received amounts by mode and exclude other f
   assert.equal(cash.collections.length, 1);
   assert.equal(cash.collections[0].amount, 200);
 });
+
+
+test('appointment New/Old selection includes returning Skin and Garbhsanskar patients', () => {
+  const appointments = [
+    ['Skin patient', '111', '2026-11-06', '10:00', 'Skin', 'Offline', 'Confirmed', 'Old'],
+    ['Skin patient', '111', '2026-11-07', '10:00', 'Skin', 'Offline', 'Confirmed', 'Old'],
+    ['Garbh patient', '222', '2026-11-06', '11:00', 'Garbhsanskar', 'Online', 'Confirmed', 'Old'],
+    ['New patient', '333', '2026-11-06', '12:00', 'Skin', 'Offline', 'Confirmed', 'New'],
+    ['Cancelled', '444', '2026-11-06', '13:00', 'Skin', 'Offline', 'Cancelled', 'Old'],
+  ];
+  const data = { appointments, clients: [{ name: 'Skin patient', mobile: '111', service: 'Consultation', visitDate: '2026-11-01' }] };
+  assert.equal(buildMonthlyClinicReport(data, '2026-11', { type: 'Old' }).patients.length, 2);
+  assert.equal(buildMonthlyClinicReport(data, '2026-11', { type: 'Old', service: 'Skin' }).patients.length, 1);
+  assert.equal(buildMonthlyClinicReport(data, '2026-11', { type: 'Old', service: 'Garbhsanskar' }).patients.length, 1);
+  assert.equal(buildMonthlyClinicReport(data, '2026-11', { type: 'New' }).patients.length, 1);
+  assert.equal(buildMonthlyClinicReport(data, '2026-10').patients.length, 0);
+});
+
+
+test('patient registration New/Old survives reload and classifies existing patients correctly', () => {
+  const data = JSON.parse(JSON.stringify({ clients: [
+    { name: 'Returning', patientType: 'Old', visitDate: '2026-11-06', service: 'Skin' },
+    { name: 'First visit', patientType: 'New', visitDate: '2026-11-06', service: 'Garbhsanskar' },
+    ['M-0090', 'Imported old', '123', '2026-11-06', '', '', '', '', 'Skin', '', '', '', '', 'Old'],
+  ], appointments: [['First visit', '', '2026-12-06', '', 'Garbhsanskar', 'Offline', 'Confirmed']] }));
+  const report = buildMonthlyClinicReport(data, '2026-11');
+  assert.equal(report.patients.filter(p => p.type === 'Old').length, 2);
+  assert.equal(report.patients.filter(p => p.type === 'New').length, 1);
+  assert.equal(buildMonthlyClinicReport(data, '2026-12').patients[0].type, 'Old');
+});

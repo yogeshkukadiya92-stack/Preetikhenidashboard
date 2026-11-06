@@ -451,9 +451,9 @@ function normalizeAppointmentRows(rows = []) {
     if (!Array.isArray(row)) return row;
     if (row.length >= 7) {
       const savedMode = /^(online|offline)$/i.test(String(row[5] ?? '')) ? row[5] : 'Offline';
-      return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', savedMode, row[6] ?? row[5] ?? 'Pending'];
+      return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', savedMode, row[6] ?? row[5] ?? 'Pending', row[7] ?? ''];
     }
-    return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', 'Offline', row[5] ?? 'Pending'];
+    return [row[0] ?? '', row[1] ?? '', row[2] ?? '', row[3] ?? '', row[4] ?? '', 'Offline', row[5] ?? 'Pending', ''];
   });
 }
 
@@ -2238,7 +2238,7 @@ function ClientMonthlySummary({ rows, rowToValues }) {
     <Card title="Monthly Patient Summary" subtitle="Visit date, new patients, and disease/service wise count in one view.">
       <div className="client-summary-grid">
         <div className="mini-stat"><span>This Month Patients</span><strong>{monthRows.length}</strong></div>
-        <div className="mini-stat"><span>New Today</span><strong>{todayRows.length}</strong></div>
+        <div className="mini-stat"><span>New Today</span><strong>{todayRows.filter(row => row['Patient Type'] !== 'Old').length}</strong></div>
         <div className="mini-stat"><span>Disease / Service Types</span><strong>{serviceEntries.length}</strong></div>
       </div>
       <div className="client-summary-split">
@@ -2282,13 +2282,14 @@ export function ClientsPage() {
         { label: 'Treatment Plans', value: String(savedTreatmentRows.length) },
         { label: 'Services', value: getSavedServiceNames(branchKey, currentBranch).length },
       ]}
-      headers={['Client ID', 'Client', 'Mobile', 'Visit Date', 'Birthday', 'Age', 'Gender', 'Address', 'Service', 'Reference', 'Reference Number', 'File Charge', 'Payment Mode']}
+      headers={['Client ID', 'Client', 'Mobile', 'Visit Date', 'Birthday', 'Age', 'Gender', 'Address', 'Service', 'Reference', 'Reference Number', 'File Charge', 'Payment Mode', 'Patient Type']}
       seedRows={clients}
       filenameBase="ayurflow-clients"
-      fieldOptions={{ Gender: ['Female', 'Male', 'Other'], Service: getSavedServiceNames(branchKey, currentBranch), 'Payment Mode': ['Cash', 'GPay'] }}
+      fieldOptions={{ 'Patient Type': ['New', 'Old'], Gender: ['Female', 'Male', 'Other'], Service: getSavedServiceNames(branchKey, currentBranch), 'Payment Mode': ['Cash', 'GPay'] }}
       fieldTypes={{ Mobile: 'tel', 'Reference Number': 'tel', Age: 'number', Birthday: 'date', 'Visit Date': 'date', 'File Charge': 'number' }}
       filterPresets={[
         { label: 'Name wise', column: 'Client' },
+        { label: 'New / Old wise', column: 'Patient Type' },
         { label: 'ID wise', column: 'Client ID' },
         { label: 'Mobile wise', column: 'Mobile' },
         { label: 'Reference wise', column: 'Reference' },
@@ -2312,10 +2313,12 @@ export function ClientsPage() {
         'Reference Number': row.referenceNumber ?? '',
         'File Charge': row.fileCharge,
         'Payment Mode': row.paymentMode,
+        'Patient Type': row.patientType ?? '',
       })}
       parseRow={(entry) => {
         const source = Array.isArray(entry)
           ? {
+              'Patient Type': entry[13] ?? '',
               'Client ID': entry.length >= 7 ? entry[0] : '',
               Client: entry.length >= 7 ? entry[1] : entry[0],
               Mobile: entry.length >= 7 ? entry[2] : entry[1],
@@ -2348,6 +2351,7 @@ export function ClientsPage() {
           referenceNumber: source['Reference Number'] ?? source.referenceNumber ?? source['Reference Mobile'] ?? source.referenceMobile ?? source.refMobile ?? source.refNumber ?? '',
           fileCharge: formatMoneyValue(source['File Charge'] ?? source.fileCharge ?? source.FileCharge ?? source.file_charge ?? ''),
           paymentMode: source['Payment Mode'] ?? source.paymentMode ?? source.PaymentMode ?? source.payment_mode ?? '',
+          patientType: ['New', 'Old'].find(type => type.toLowerCase() === String(source['Patient Type'] ?? source.patientType ?? '').trim().toLowerCase()) || '',
           birthday,
         };
       }}
@@ -2358,6 +2362,7 @@ export function ClientsPage() {
           Mobile: row.mobile,
         })),
         'Visit Date': todayIsoDate(),
+        'Patient Type': 'New',
         Reference: '',
         'Reference Number': '',
       })}
@@ -4260,10 +4265,10 @@ export function AppointmentsPage() {
         { label: 'Confirmed', value: '0' },
         { label: 'Pending', value: '0' },
       ]}
-      columns={['Client', 'Mobile', 'Date', 'Time', 'Type', 'Mode', 'Status']}
+      columns={['Patient', 'Mobile', 'Date', 'Time', 'Type', 'Mode', 'Status', 'Patient type']}
       rows={[]}
-      fieldOptions={{ Type: appointmentServiceOptions, Mode: ['Offline', 'Online'] }}
-      searchableFieldOptions={{ Client: patientOptions }}
+      fieldOptions={{ Type: appointmentServiceOptions, Mode: ['Offline', 'Online'], 'Patient type': ['New', 'Old'] }}
+      searchableFieldOptions={{ Patient: patientOptions }}
       fieldTypes={{ Mobile: 'tel', Date: 'date', Time: 'time' }}
       normalizeRows={normalizeAppointmentRows}
       sortRows={compareAppointmentsNewestFirst}
@@ -4271,7 +4276,8 @@ export function AppointmentsPage() {
         { label: 'Date wise', column: 'Date' },
         { label: 'Type wise', column: 'Type' },
         { label: 'Mobile wise', column: 'Mobile' },
-        { label: 'Client wise', column: 'Client' },
+        { label: 'Patient wise', column: 'Patient' },
+        { label: 'New / Old wise', column: 'Patient type' },
       ]}
       viewPresets={[
         {

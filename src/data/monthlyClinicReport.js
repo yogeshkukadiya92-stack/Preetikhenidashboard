@@ -26,6 +26,7 @@ export function buildMonthlyClinicReport({ clients = [], appointments = [], paym
       firstDate: reportDate(a ? row.length >= 8 ? row[3] : '' : row.visitDate ?? row['Visit Date'] ?? row.createdAt),
       service: serviceGroup(a ? row[row.length >= 13 ? 8 : row.length >= 8 ? 7 : hasId ? 6 : 5] : row.service ?? row.Service ?? row.program),
       source: String(a ? row.length >= 13 ? row[9] ?? '' : '' : row.reference ?? row.Reference ?? row.source ?? row.referredBy ?? ''),
+      registeredType: key(a ? row[13] : row.patientType ?? row['Patient Type']),
       dates: [],
     };
     if (!patient.name) return;
@@ -48,9 +49,30 @@ export function buildMonthlyClinicReport({ clients = [], appointments = [], paym
   appointments.forEach(row => {
     const a = Array.isArray(row);
     if (/cancel|no.show/.test(key(a ? row[6] ?? row[5] : row.status ?? row.Status))) return;
-    const patient = match(a ? '' : row.clientId, a ? row[0] : row.client ?? row.name ?? row.Client, a ? row[1] : row.mobile);
+    let patient = match(a ? '' : row.clientId, a ? row[0] : row.patient ?? row.client ?? row.name ?? row.Client, a ? row[1] : row.mobile);
     const date = reportDate(a ? row[2] : row.date ?? row.appointmentDate);
-    if (patient && date) { patient.dates.push(date); if (!patient.firstDate || date < patient.firstDate) patient.firstDate = date; }
+    const name = String(a ? row[0] ?? '' : row.patient ?? row.client ?? row.name ?? row.Client ?? '').trim();
+    const mobile = String(a ? row[1] ?? '' : row.mobile ?? '');
+    const service = serviceGroup(a ? row[4] : row.type ?? row.service);
+    if (!patient && name && date) {
+      const identity = `person:${key(name)}:${key(mobile)}`;
+      patient = patients.get(identity);
+      if (!patient) {
+        patient = { key: identity, id: '', name, mobile, service, source: '', firstDate: date, dates: [] };
+        patients.set(identity, patient);
+        names.set(key(name), [...(names.get(key(name)) ?? []), patient]);
+      }
+    }
+    if (patient && date) {
+      patient.dates.push(date);
+      if (!patient.firstDate || date < patient.firstDate) patient.firstDate = date;
+      if (service !== 'Unassigned') patient.services = [...new Set([...(patient.services || [patient.service]), service])];
+      const type = key(a ? row[7] : row.patientType ?? row['Patient type']);
+      if (date.slice(0, 7) === month && ['new', 'old'].includes(type)) {
+        // An explicit returning visit wins when the month contains both visit types.
+        if (type === 'old' || !patient.appointmentType) patient.appointmentType = type === 'old' ? 'Old' : 'New';
+      }
+    }
   });
   (carePrograms.enrollments ?? []).forEach(e => {
     const patient = match(e.clientId, e.patientName, e.mobile);
@@ -65,7 +87,7 @@ export function buildMonthlyClinicReport({ clients = [], appointments = [], paym
       const matches = leads.filter(l => key(l.name) === key(p.name) && (!l.mobile || key(l.mobile) === key(p.mobile)));
       if (matches.length === 1) p.source = matches[0].source ?? '';
     }
-    p.type = !p.firstDate ? 'Unknown' : p.firstDate.slice(0, 7) === month ? 'New' : 'Old';
+    p.type = p.appointmentType || (p.registeredType === 'old' ? 'Old' : !p.firstDate ? (p.registeredType === 'new' ? 'New' : 'Unknown') : p.firstDate.slice(0, 7) === month ? 'New' : 'Old');
     p.sourceGroup = social(p.source) ? 'Social Media' : p.source ? 'Other' : 'Unknown';
   });
   const fits = p => (!filters.type || p.type === filters.type) && (!filters.source || p.sourceGroup === filters.source) && (!filters.service || (p.services || [p.service]).includes(filters.service) || ((p.services || [p.service]).includes('Skin & Hair') && ['Skin', 'Hair'].includes(filters.service)));

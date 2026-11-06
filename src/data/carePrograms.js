@@ -42,7 +42,7 @@ export function receivedAmount(p) {
   return Math.max(0, explicit !== undefined && explicit !== '' ? parseLiveAmount(explicit) : String(p.status ?? p.Status).toLowerCase() === 'paid' ? parseLiveAmount(p.amount ?? p['Total Amount']) : 0);
 }
 export function enrollmentBalance(enrollment, payments) {
-  const linked = payments.filter(p => p.careEnrollmentId === enrollment.id);
+  const linked = enrollment.id ? payments.filter(p => p.careEnrollmentId === enrollment.id) : [];
   const legacy = String(enrollment.payment || '').split('/').reduce((sum, part) => sum + (Number(part.replace(/[,₹\s]/g, '')) || 0), 0);
   // Older forms copied linked receipts into the payment text; count those only once.
   const copiedReceipts = linked.length && String(enrollment.payment || '') === linked.map(p => p.paidAmount || '').join(' / ');

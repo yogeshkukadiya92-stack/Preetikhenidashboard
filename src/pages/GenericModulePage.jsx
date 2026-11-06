@@ -190,7 +190,7 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
     const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const localTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     setDraftRow(columns.map((column) => {
-      if (column === 'Client') return searchParams.get('client') ?? '';
+      if (column === 'Client' || column === 'Patient') return searchParams.get('client') ?? '';
       if (column === 'Mobile') return searchParams.get('mobile') ?? '';
       if (title === 'Appointments' && column === 'Date') return localDate;
       if (title === 'Appointments' && column === 'Time') return localTime;
