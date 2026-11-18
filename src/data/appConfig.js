@@ -77,6 +77,16 @@ export const forms = [];
 export const formResponses = [];
 
 export const services = [
+  'WEIGHT LOSS AND THYROID',
+  'Irregular periods',
+  'PADA ABHYANGA',
+  'Yog basti',
+  'Shirodhara',
+  'Facial Treatment',
+  'Nasya treatment',
+  'Uttar Basti',
+  'Matra basti',
+  'Leech Treatment',
   'Consultation',
   'Follow-up',
   'Weight Loss',

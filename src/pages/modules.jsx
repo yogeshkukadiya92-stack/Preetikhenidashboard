@@ -1168,7 +1168,21 @@ function ImportExportModule({
               {headers.map((header) => (
                 <label className="field-block" key={header}>
                   <span>{displayHeader(header)}</span>
-                  {Object.prototype.hasOwnProperty.call(fieldOptions, header) ? (
+                  {isClientModule && header === 'Service' ? (
+                    <>
+                      <input
+                        className="lead-input"
+                        type="text"
+                        list="patient-service-add"
+                        value={draftRecord[header] ?? ''}
+                        onChange={(event) => updateRecordField(setDraftRecord, header, event.target.value)}
+                        placeholder="Select service or type specific disease"
+                      />
+                      <datalist id="patient-service-add">
+                        {(fieldOptions.Service ?? []).map((option) => <option key={option} value={option} />)}
+                      </datalist>
+                    </>
+                  ) : Object.prototype.hasOwnProperty.call(fieldOptions, header) ? (
                     <select
                       className="lead-input"
                       value={draftRecord[header] ?? ''}
@@ -1220,7 +1234,21 @@ function ImportExportModule({
               {headers.map((header) => (
                 <label className="field-block" key={header}>
                   <span>{displayHeader(header)}</span>
-                  {Object.prototype.hasOwnProperty.call(fieldOptions, header) ? (
+                  {isClientModule && header === 'Service' ? (
+                    <>
+                      <input
+                        className="lead-input"
+                        type="text"
+                        list="patient-service-edit"
+                        value={editRecord[header] ?? ''}
+                        onChange={(event) => updateRecordField(setEditRecord, header, event.target.value)}
+                        placeholder="Select service or type specific disease"
+                      />
+                      <datalist id="patient-service-edit">
+                        {(fieldOptions.Service ?? []).map((option) => <option key={option} value={option} />)}
+                      </datalist>
+                    </>
+                  ) : Object.prototype.hasOwnProperty.call(fieldOptions, header) ? (
                     <select
                       className="lead-input"
                       value={editRecord[header] ?? ''}
