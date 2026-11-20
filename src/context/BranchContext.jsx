@@ -1,6 +1,6 @@
 import { createContext, Fragment, useContext, useEffect, useMemo, useState } from 'react';
 import { readCurrentBranch } from '../data/branchStore.js';
-import { getAuthSession } from '../data/auth.js';
+import { getAllUsers, getAuthSession } from '../data/auth.js';
 
 const BranchContext = createContext(null);
 const SINGLE_BRANCH = 'Main Branch';
@@ -111,10 +111,11 @@ export function BranchProvider({ children }) {
   };
 
   const deleteBranch = (name) => {
-    if (branches.length === 1 || !branches.includes(name)) return false;
+    if (!getAuthSession()?.isAdmin || name === SINGLE_BRANCH || !branches.includes(name)) return false;
+    if (getAllUsers().some((user) => user.branch === name)) return false;
     const next = branches.filter((branch) => branch !== name);
     persistBranches(next);
-    if (currentBranch === name) setCurrentBranch(next[0]);
+    if (currentBranch === name) selectBranch(SINGLE_BRANCH);
     return true;
   };
 

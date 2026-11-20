@@ -6518,7 +6518,7 @@ export function IntegrationsPage() {
 
 export function BranchesPage() {
   const navigate = useNavigate();
-  const { branches, currentBranch, setCurrentBranch, addBranch } = useBranch();
+  const { branches, currentBranch, setCurrentBranch, addBranch, deleteBranch } = useBranch();
   const [branchName, setBranchName] = useState('');
   const [message, setMessage] = useState('Add a branch to keep its records separate.');
   const [usersList, setUsersList] = useState(getAllUsers);
@@ -6565,6 +6565,17 @@ export function BranchesPage() {
     if (!addBranch(branchName)) return setMessage('Enter a unique branch name.');
     setMessage(`${branchName.trim()} added and selected.`);
     setBranchName('');
+  };
+
+  const confirmBranchDeletion = (branch) => {
+    if (!window.confirm(`Remove "${branch}" from the workspace? Its records will be retained.`)) return;
+    try {
+      setMessage(deleteBranch(branch)
+        ? `"${branch}" was removed from the workspace.`
+        : `Could not remove "${branch}". Check its assigned logins and try again.`);
+    } catch {
+      setMessage(`Could not save the removal of "${branch}". Please try again.`);
+    }
   };
 
   const openBranchLoginModal = (branch) => {
@@ -6750,7 +6761,15 @@ export function BranchesPage() {
                     🔑 Login & Permissions
                   </button>
                   <button className="pill" type="button" disabled title="Branch names are linked to stored records and accounts. Contact an administrator to migrate them safely.">Rename</button>
-                  <button className="pill danger-action" type="button" disabled title="Branch deletion requires a verified data migration and account review.">Delete</button>
+                  <button
+                    className="pill danger-action"
+                    type="button"
+                    disabled={!getAuthSession()?.isAdmin || branch === 'Main Branch' || Boolean(account)}
+                    title={branch === 'Main Branch' ? 'Main Branch is required.' : account ? 'Remove or reassign all branch logins first.' : 'Remove this branch from the workspace.'}
+                    onClick={() => confirmBranchDeletion(branch)}
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             );
