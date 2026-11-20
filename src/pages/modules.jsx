@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import { ChevronRight } from '../components/icons.jsx';
 import { ActionMenu, Card, StatusPill, Tag } from '../components/ui.jsx';
@@ -616,6 +616,7 @@ function ImportExportModule({
   actionsPosition = undefined,
 }) {
   const navigate = useNavigate();
+  const { state } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { branchKey, currentBranch } = useBranch();
   const isMainBranch = currentBranch === 'Main Branch';
@@ -671,6 +672,14 @@ function ImportExportModule({
       setMessage('Local browser storage is full or blocked.');
     }
   }, [rows, storageKey]);
+
+  const dismissAddRecord = () => {
+    if (isClientModule && searchParams.get('action') === 'add' && state?.openedFromPatientJourney) {
+      navigate(-1);
+      return;
+    }
+    setAddOpen(false);
+  };
 
   const openAddRecord = () => {
     const defaults = typeof createDefaultRecord === 'function' ? createDefaultRecord(rows) : {};
@@ -1155,14 +1164,14 @@ function ImportExportModule({
       </div>
 
       {addOpen && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setAddOpen(false)}>
+        <div className="modal-backdrop" role="presentation" onClick={dismissAddRecord}>
           <div className="modal-shell modal-small" role="dialog" aria-modal="true" aria-label={`Add ${displayTitle}`} onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
               <div>
                 <h2>Add {displayTitle}</h2>
                 <p>Fill the fields and save this record.</p>
               </div>
-              <button className="icon-btn" type="button" onClick={() => setAddOpen(false)} aria-label="Close modal">x</button>
+              <button className="icon-btn" type="button" onClick={dismissAddRecord} aria-label="Close modal">x</button>
             </div>
             <div className="modal-body detail-grid">
               {headers.map((header) => (
@@ -1213,7 +1222,7 @@ function ImportExportModule({
             </div>
             {draftSaveError && <p className="field-error form-submit-error patient-save-error" role="alert" aria-live="assertive">{draftSaveError}</p>}
             <div className="modal-actions">
-              <button className="pill" type="button" onClick={() => setAddOpen(false)}>Cancel</button>
+              <button className="pill" type="button" onClick={dismissAddRecord}>Cancel</button>
               <button className="pill" type="button" onClick={saveDraftRecord}>Save <ChevronRight /></button>
             </div>
           </div>

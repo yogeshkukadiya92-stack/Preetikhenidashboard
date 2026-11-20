@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { SearchableFieldPicker } from './GenericModulePage.jsx';
 import { Card } from '../components/ui.jsx';
 import { useBranch } from '../context/BranchContext.jsx';
 import { loadAllLocalResponses, loadForms } from '../data/formStore.js';
@@ -456,6 +457,42 @@ export const CLINICAL_DIET_PRESETS = [
       { time: '21:30', meal: 'Bedtime Drink', food: 'Warm milk with 1 tsp Ashwagandha & pinch of nutmeg', notes: 'Tissue regeneration (Rasayana)' },
     ],
   },
+  {
+    id: 'nonVegChickenEggs',
+    label: '🍗 Non-Veg · Chicken & Eggs',
+    goal: 'Balanced meals with chicken and eggs',
+    calories: 'Individualized',
+    water: 'Individualized',
+    duration: '7 days',
+    service: 'Diet Counseling',
+    weekLabel: 'Week 1',
+    instructions: 'Adjust portions, meal times, and daily targets to the patient’s needs. Use fully cooked eggs and chicken.',
+    meals: [
+      { time: '08:30', meal: 'Breakfast', food: 'Vegetable omelette with whole-grain toast and seasonal fruit', notes: '' },
+      { time: '11:00', meal: 'Mid-Morning Snack', food: 'Plain curd with fruit', notes: '' },
+      { time: '13:30', meal: 'Lunch', food: 'Grilled chicken with jowar rotla and cooked vegetables', notes: '' },
+      { time: '17:00', meal: 'Evening Snack', food: 'Roasted chana with unsweetened chaas', notes: '' },
+      { time: '19:30', meal: 'Dinner', food: 'Moong dal khichdi with vegetables and a boiled egg', notes: '' },
+    ],
+  },
+  {
+    id: 'nonVegFishEggs',
+    label: '🐟 Non-Veg · Fish & Eggs',
+    goal: 'Balanced meals with fish and eggs',
+    calories: 'Individualized',
+    water: 'Individualized',
+    duration: '7 days',
+    service: 'Diet Counseling',
+    weekLabel: 'Week 1',
+    instructions: 'Adjust portions, meal times, and daily targets to the patient’s needs. Use fully cooked fish and eggs.',
+    meals: [
+      { time: '08:30', meal: 'Breakfast', food: 'Egg bhurji with vegetable poha', notes: '' },
+      { time: '11:00', meal: 'Mid-Morning Snack', food: 'Seasonal fruit with plain curd', notes: '' },
+      { time: '13:30', meal: 'Lunch', food: 'Grilled fish with rice and cooked greens', notes: '' },
+      { time: '17:00', meal: 'Evening Snack', food: 'Roasted makhana with unsweetened tea', notes: '' },
+      { time: '19:30', meal: 'Dinner', food: 'Moong dal with roti, mixed vegetables, and a boiled egg', notes: '' },
+    ],
+  },
 ];
 
 export const QUICK_MEAL_SLOTS = [
@@ -498,7 +535,7 @@ function fileSafeDietName(value) {
   return String(value || 'diet-plan').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'diet-plan';
 }
 
-function buildDietPlanPrintHtml(plan) {
+function buildDietPlanPrintHtml(plan, { autoPrint = true } = {}) {
   const mealRows = (plan.meals ?? []).map((meal) => `
     <tr>
       <td style="font-weight:700;color:#138f86;white-space:nowrap;padding:10px 12px;border-bottom:1px solid #e2ece8;">${escapeDietHtml(meal.time)}</td>
@@ -592,11 +629,11 @@ function buildDietPlanPrintHtml(plan) {
     <span>Consult doctor before modifying prescription.</span>
   </div>
 
-  <script>
+  ${autoPrint ? `<script>
     window.addEventListener('load', function() {
       setTimeout(function() { window.print(); }, 400);
     });
-  </script>
+  </script>` : ''}
 </body>
 </html>`;
 }
@@ -911,6 +948,7 @@ export function ClientJourneyPage() {
   const [journeys, setJourneys] = useState(() => loadValue(journeysKey, {}));
   const [selectedClient, setSelectedClient] = useState(() => searchParams.get('client') ?? '');
   const [selectedVisitId, setSelectedVisitId] = useState('');
+  const [timelineService, setTimelineService] = useState('');
   const [patientViewTab, setPatientViewTab] = useState('workflow');
   const [showMobileList, setShowMobileList] = useState(false);
   const [search, setSearch] = useState('');
@@ -1211,6 +1249,18 @@ export function ClientJourneyPage() {
     ? selectedVisitId
     : defaultActiveVisitId;
   const journey = journeyVisits.find((visit) => visit.id === activeVisitId) ?? {};
+  const timelineVisits = [...journeyVisits]
+    .sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate)))
+    .map((visit, index) => ({
+      visit,
+      service: visit.appointmentData?.type?.trim() || (index === 0 ? 'Latest Visit' : 'Follow-up'),
+    }));
+  const timelineServices = new Map(
+    [...serviceOptions, ...timelineVisits.map(({ service }) => service)].map((service) => [service.toLowerCase(), service]),
+  );
+  const filteredTimelineVisits = timelineVisits.filter(({ service }) =>
+    !timelineService || service.toLowerCase() === timelineService.toLowerCase(),
+  );
   const activeVisitIndex = journeyVisits.findIndex((visit) => visit.id === activeVisitId);
   const previousConsultationVisit = (activeVisitIndex >= 0 ? journeyVisits.slice(0, activeVisitIndex) : journeyVisits)
     .slice()
@@ -2449,6 +2499,10 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
     if (stage === 'appointment' || stage === 'forms' || stage === 'consultation' || stage === 'treatment' || stage === 'diet' || stage === 'billing' || stage === 'followup') openStageModal(stage);
   };
 
+  const openPatientRegistration = () => {
+    navigate('/clients?action=add', { state: { openedFromPatientJourney: true } });
+  };
+
   const completedStageCount = STAGES.filter(([id]) => stageDone(id)).length;
   const totalStageCount = STAGES.length;
   const progressPercentage = Math.round((completedStageCount / totalStageCount) * 100);
@@ -2466,7 +2520,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
             title="Reception Desk"
             subtitle="Search an existing patient or register a new walk-in."
             className="reception-card"
-            action={<button className="pill primary-action" type="button" onClick={() => navigate('/clients?action=add')}>+ Register Patient</button>}
+            action={<button className="pill primary-action" type="button" onClick={openPatientRegistration}>+ Register Patient</button>}
           >
             <div className="journey-search-wrap">
               <input
@@ -2515,6 +2569,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                     key={id || name}
                     onClick={() => {
                       setSelectedClient(name);
+                      if (name !== selectedClient) setTimelineService('');
                       setShowMobileList(false);
                     }}
                   >
@@ -2632,11 +2687,31 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                   <span className="visit-icon">🗓️</span>
                   <div>
                     <strong>Visits Timeline</strong>
-                    <small>{journeyVisits.length} {journeyVisits.length === 1 ? 'visit' : 'visits'} on record</small>
+                    <small>{timelineService ? `${filteredTimelineVisits.length} of ` : ''}{journeyVisits.length} {journeyVisits.length === 1 ? 'visit' : 'visits'} on record</small>
                   </div>
                 </div>
+                <div className="visit-service-filter">
+                  <label className="field-block">
+                    <span>Service</span>
+                    <SearchableFieldPicker
+                      key={selectedClient}
+                      searchOnly
+                      value={timelineService || 'All Services'}
+                      placeholder="Search services..."
+                      emptyMessage="No matching services found."
+                      options={[
+                        { label: 'All Services', value: '' },
+                        ...Array.from(timelineServices.values(), (service) => ({ label: service, value: service })),
+                      ]}
+                      onSelect={(option) => setTimelineService(option.value)}
+                    />
+                  </label>
+                  {timelineService && (
+                    <button className="pill" type="button" onClick={() => setTimelineService('')}>All Services</button>
+                  )}
+                </div>
                 <div className="visit-selector-chips" role="tablist" aria-label="Visit timeline">
-                  {[...journeyVisits].sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate))).map((visit, index) => {
+                  {filteredTimelineVisits.map(({ visit, service }) => {
                     const isSelected = activeVisitId === visit.id;
                     return (
                       <button
@@ -2648,10 +2723,11 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                         onClick={() => setSelectedVisitId(visit.id)}
                       >
                         <strong>{formatResponseDate(visit.visitDate)}</strong>
-                        <span>{visit.appointmentData?.type || (index === 0 ? 'Latest Visit' : 'Follow-up')}</span>
+                        <span>{service}</span>
                       </button>
                     );
                   })}
+                  {timelineService && !filteredTimelineVisits.length && <span className="subtle">No visits for this service.</span>}
                   <button className="journey-visit-add-chip" type="button" onClick={openReturningVisit}>
                     + New Visit
                   </button>
@@ -2717,6 +2793,11 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
                             <p className="journey-stage-summary-text">{info.summary}</p>
                           </div>
                           <div className="journey-stage-action-wrap">
+                            {id === 'diet' && journey.dietPlanData && (
+                              <button className="pill" type="button" onClick={() => setStageModal('diet-preview')}>
+                                View Plan
+                              </button>
+                            )}
                             <button
                               className={`pill ${info.statusTone === 'current' ? 'primary-action' : ''}`}
                               type="button"
@@ -2889,7 +2970,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
               <p style={{ color: 'var(--muted)', maxWidth: '380px', margin: '6px auto 16px' }}>
                 Select an existing patient from the Reception Desk on the left, or register a new patient to run the complete clinical workflow.
               </p>
-              <button className="pill primary-action" type="button" onClick={() => navigate('/clients?action=add')}>
+              <button className="pill primary-action" type="button" onClick={openPatientRegistration}>
                 + Register New Patient
               </button>
             </div>
@@ -3198,6 +3279,23 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
             {[...new Set([...serviceOptions, ...pastTreatmentOptions.map((option) => option.service)].filter(Boolean))].map((option) => <option key={option} value={option} />)}
           </datalist>
         </JourneyModal>
+      )}
+
+      {stageModal === 'diet-preview' && journey.dietPlanData && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setStageModal('')}>
+          <div className="modal-shell" role="dialog" aria-modal="true" aria-labelledby="diet-preview-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <h2 id="diet-preview-title">View Diet Plan</h2>
+              <button className="icon-btn" type="button" onClick={() => setStageModal('')} aria-label="Close diet plan preview">x</button>
+            </div>
+            <iframe
+              className="journey-diet-preview"
+              title="Patient diet plan"
+              sandbox="allow-scripts allow-modals"
+              srcDoc={buildDietPlanPrintHtml(journey.dietPlanData, { autoPrint: false })}
+            />
+          </div>
+        </div>
       )}
 
       {stageModal === 'diet' && (

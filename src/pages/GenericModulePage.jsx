@@ -45,43 +45,64 @@ function asImportRows(value) {
   return [];
 }
 
-function SearchableFieldPicker({ value, options, placeholder, onChange, onSelect }) {
+export function SearchableFieldPicker({ value, options, placeholder, onChange, onSelect, searchOnly = false, emptyMessage }) {
   const [open, setOpen] = useState(false);
-  const query = String(value ?? '').trim().toLowerCase();
+  const [search, setSearch] = useState('');
+  const query = String(searchOnly ? search : value ?? '').trim().toLowerCase();
+  const showResults = open && (!searchOnly || Boolean(query));
+  const selectOption = (option) => {
+    onSelect(option);
+    setSearch('');
+    setOpen(false);
+  };
+  const terms = searchOnly ? query.split(/\s+/) : [query];
   const matches = options
-    .filter((option) => !query || `${option.label} ${option.searchText ?? ''}`.toLowerCase().includes(query))
+    .filter((option) => {
+      const text = `${option.label} ${option.searchText ?? ''}`.toLowerCase();
+      return terms.every((term) => text.includes(term));
+    })
     .slice(0, 8);
 
   return (
     <div className="searchable-field-picker">
       <input
         className="lead-input"
-        value={value}
-        onChange={(event) => { onChange(event.target.value); setOpen(true); }}
+        value={searchOnly && open ? search : value}
+        onChange={(event) => {
+          if (searchOnly) setSearch(event.target.value);
+          else onChange(event.target.value);
+          setOpen(true);
+        }}
         onFocus={() => setOpen(true)}
-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onBlur={() => {
+          if (searchOnly) {
+            setSearch('');
+            setOpen(false);
+          } else {
+            window.setTimeout(() => setOpen(false), 120);
+          }
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Escape') setOpen(false);
-          if (event.key === 'Enter' && matches[0]) {
+          if (event.key === 'Enter' && showResults && matches[0]) {
             event.preventDefault();
-            onSelect(matches[0]);
-            setOpen(false);
+            selectOption(matches[0]);
           }
         }}
         placeholder={placeholder}
         autoComplete="off"
         role="combobox"
-        aria-expanded={open}
+        aria-expanded={showResults}
         aria-autocomplete="list"
       />
-      {open && (
+      {showResults && (
         <div className="searchable-field-results" role="listbox">
           {matches.length ? matches.map((option) => (
-            <button type="button" role="option" key={option.key ?? option.value} onMouseDown={(event) => event.preventDefault()} onClick={() => { onSelect(option); setOpen(false); }}>
+            <button type="button" role="option" key={option.key ?? option.value} onMouseDown={(event) => event.preventDefault()} onClick={() => selectOption(option)}>
               <strong>{option.label}</strong>
               {option.description && <small>{option.description}</small>}
             </button>
-          )) : <div className="searchable-field-empty">No patient found. Search by Patient ID, name, or mobile.</div>}
+          )) : <div className="searchable-field-empty">{emptyMessage ?? 'No patient found. Search by Patient ID, name, or mobile.'}</div>}
         </div>
       )}
     </div>
@@ -450,7 +471,16 @@ export function GenericModulePage({ title, description, stats, columns, rows, fi
               {columns.map((column, index) => (
                 <label className="field-block" key={column}>
                   <span>{column}</span>
-                  {searchableFieldOptions[column]?.length ? (
+                  {isAppointmentsPage && column === 'Type' && fieldOptions.Type?.length ? (
+                    <SearchableFieldPicker
+                      searchOnly
+                      value={draftRow[index] ?? ''}
+                      options={fieldOptions.Type.map((type) => ({ label: type, value: type }))}
+                      placeholder="Search appointment type..."
+                      emptyMessage="No matching types found."
+                      onSelect={(option) => setDraftRow((current) => current.map((cell, cellIndex) => (cellIndex === index ? option.value : cell)))}
+                    />
+                  ) : searchableFieldOptions[column]?.length ? (
                     <SearchableFieldPicker
                       value={draftRow[index] ?? ''}
                       options={searchableFieldOptions[column]}
