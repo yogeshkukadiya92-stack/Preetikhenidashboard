@@ -6154,3 +6154,32 @@ textarea.lead-input,
 
 .panchkarma-details-box { min-width: 0; border: 1px solid #cbd9d2; border-radius: 14px; background: #fafcfb; }
 .panchkarma-details-box > legend { padding: 0 8px; font-weight: 700; color: #285847; }
+
+.installment-table-scroll {
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.installment-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+}
+.installment-table th,
+.installment-table td {
+  border: 1px solid #cbded8;
+  padding: 8px;
+  text-align: left;
+}
+.installment-table thead {
+  background: #edf6f2;
+}
+.installment-table .lead-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.installment-table input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: #138f86;
+}

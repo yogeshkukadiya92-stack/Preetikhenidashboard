@@ -1,3 +1,5 @@
+import Installments, { missingInstallmentDate } from '../components/Installments.jsx';
+import { sortMeals } from '../data/sortMeals.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SearchableFieldPicker } from './GenericModulePage.jsx';
@@ -536,7 +538,7 @@ function fileSafeDietName(value) {
 }
 
 function buildDietPlanPrintHtml(plan, { autoPrint = true } = {}) {
-  const mealRows = (plan.meals ?? []).map((meal) => `
+  const mealRows = sortMeals(plan.meals).map((meal) => `
     <tr>
       <td style="font-weight:700;color:#138f86;white-space:nowrap;padding:10px 12px;border-bottom:1px solid #e2ece8;">${escapeDietHtml(meal.time)}</td>
       <td style="font-weight:700;color:#1f6b4a;white-space:nowrap;padding:10px 12px;border-bottom:1px solid #e2ece8;">${escapeDietHtml(meal.meal)}</td>
@@ -2015,13 +2017,13 @@ export function ClientJourneyPage() {
         service: serviceOptions.find((service) => /nutrition|diet|fat|weight|muscle/i.test(service)) ?? defaultService,
         ...savedDietPlan,
         client: selectedClient,
-        meals: Array.isArray(savedDietPlan.meals) && savedDietPlan.meals.length ? savedDietPlan.meals : DEFAULT_DIET_MEALS.map((meal) => ({ ...meal })),
+        meals: Array.isArray(savedDietPlan.meals) && savedDietPlan.meals.length ? sortMeals(savedDietPlan.meals) : DEFAULT_DIET_MEALS.map((meal) => ({ ...meal })),
       } : { ...newDietPlan(selectedClient), service: serviceOptions.find((service) => /nutrition|diet|fat|weight|muscle/i.test(service)) ?? defaultService });
     }
     if (stage === 'followup') {
       setFollowupForm(journey.followupData ?? { date: addDays(7), time: currentSlot().time, notes: '', status: 'Confirmed' });
     }
-    if (stage === 'payment' || stage === 'billing') setPaymentForm(journey.paymentData ?? { invoice: nextInvoice(payments), amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
+    if (stage === 'payment' || stage === 'billing') setPaymentForm(payments.find(row => journey.paymentData?.invoice && row.invoice === journey.paymentData.invoice && row.client === selectedClient) ?? journey.paymentData ?? { invoice: nextInvoice(payments), amount: '', paidAmount: '', pendingAmount: '', status: 'Paid', paidOn: new Date().toISOString().slice(0, 10) });
     setStageModal(stage);
   };
 
@@ -2295,7 +2297,7 @@ export function ClientJourneyPage() {
     const plan = {
       ...dietPlanForm,
       client: selectedClient,
-      meals: dietPlanForm.meals.filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())),
+      meals: sortMeals(dietPlanForm.meals).filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())),
       updatedAt: new Date().toISOString(),
     };
     const savedPlans = loadValue(dietPlansKey, []);
@@ -2317,7 +2319,7 @@ export function ClientJourneyPage() {
   const addQuickMealSlot = (slot) => {
     setDietPlanForm((current) => ({
       ...current,
-      meals: [...current.meals, { time: slot.time || '', meal: slot.meal || 'Meal', food: slot.food || '', notes: slot.notes || '' }],
+      meals: sortMeals([...current.meals, { time: slot.time || '', meal: slot.meal || 'Meal', food: slot.food || '', notes: slot.notes || '' }]),
     }));
   };
 
@@ -2389,7 +2391,7 @@ export function ClientJourneyPage() {
       calories: dietPlanForm.calories,
       water: dietPlanForm.water,
       instructions: dietPlanForm.instructions,
-      meals: dietPlanForm.meals.filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())),
+      meals: sortMeals(dietPlanForm.meals).filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())),
     };
     const nextTemplates = [template, ...dietTemplates.filter((t) => t.name.toLowerCase() !== template.name.toLowerCase())];
     setDietTemplates(nextTemplates);
@@ -2433,7 +2435,7 @@ export function ClientJourneyPage() {
   };
 
   const copyDietForWhatsApp = (plan) => {
-    const mealText = (plan.meals || []).map((m, i) =>
+    const mealText = sortMeals(plan.meals).map((m, i) =>
       `⏰ *${m.time || '—'} - ${m.meal || `Meal ${i + 1}`}*\n🥗 ${m.food || '—'}${m.notes ? `\n📝 _${m.notes}_` : ''}`
     ).join('\n\n');
 
@@ -2472,7 +2474,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
     if (!paymentForm.amount) return;
     const current = loadValue(paymentsKey, []);
     const row = normalizeJourneyPayment({ client: selectedClient, clientId: clientId(selectedClientRecord), ...paymentForm });
-    window.localStorage.setItem(paymentsKey, JSON.stringify([row, ...current]));
+    window.localStorage.setItem(paymentsKey, JSON.stringify([row, ...current.filter(item => item.invoice !== row.invoice || item.client !== row.client)]));
     updateJourney({ billing: true, paymentData: paymentForm, paidAt: new Date().toISOString() });
     setStageModal('');
   };
@@ -3327,7 +3329,7 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
         />
       )}
 
-      {stageModal === 'billing' && <JourneyModal title="Add Payment" client={selectedClient} onClose={() => setStageModal('')} onSave={savePayment} saveLabel="Save Payment"><div className="quick-preset-row">{PAYMENT_AMOUNTS.map((amount) => <button className="pill" type="button" key={amount} onClick={() => setPaymentForm((value) => ({ ...value, amount, paidAmount: value.status === 'Paid' ? amount : value.paidAmount, pendingAmount: calculatePaymentPending(amount, value.status === 'Paid' ? amount : value.paidAmount, value.status) }))}>Rs {amount}</button>)}</div><label className="field-block"><span>Invoice</span><input className="lead-input" value={paymentForm.invoice} readOnly /></label><label className="field-block"><span>Total Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.amount} onChange={(event) => setPaymentForm((value) => ({ ...value, amount: event.target.value, paidAmount: value.status === 'Paid' ? event.target.value : value.paidAmount, pendingAmount: calculatePaymentPending(event.target.value, value.status === 'Paid' ? event.target.value : value.paidAmount, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Paid Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.paidAmount} onChange={(event) => setPaymentForm((value) => ({ ...value, paidAmount: event.target.value, pendingAmount: calculatePaymentPending(value.amount, event.target.value, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Pending Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.pendingAmount} readOnly placeholder="Auto calculated" /></label><label className="field-block"><span>Status</span><select className="lead-input" value={paymentForm.status} onChange={(event) => setPaymentForm((value) => { const paidAmount = event.target.value === 'Paid' ? value.amount : event.target.value === 'Pending' ? '' : value.paidAmount; return { ...value, status: event.target.value, paidAmount, pendingAmount: calculatePaymentPending(value.amount, paidAmount, event.target.value) }; })}><option>Paid</option><option>Partial</option><option>Pending</option></select></label><label className="field-block"><span>Paid On</span><input className="lead-input" type="date" value={paymentForm.paidOn} onChange={(event) => setPaymentForm((value) => ({ ...value, paidOn: event.target.value }))} /></label><label className="field-block"><span>Fee Type</span><select className="lead-input" value={paymentForm.feeType || 'Unclassified'} onChange={e => setPaymentForm(v => ({ ...v, feeType: e.target.value }))}>{['Unclassified', 'Consultation', 'File Charge', 'Medicine', 'Treatment', 'Other'].map(type => <option key={type}>{type}</option>)}</select></label><label className="field-block"><span>Payment Mode</span><select className="lead-input" value={paymentForm.paymentMode || ''} onChange={e => setPaymentForm(v => ({ ...v, paymentMode: e.target.value }))}><option value="">Select mode</option><option>Cash</option><option>GPay</option></select></label></JourneyModal>}
+      {stageModal === 'billing' && <JourneyModal title="Add Payment" client={selectedClient} onClose={() => setStageModal('')} onSave={savePayment} saveDisabled={missingInstallmentDate(paymentForm)} saveLabel="Save Payment"><div className="quick-preset-row">{PAYMENT_AMOUNTS.map((amount) => <button className="pill" type="button" key={amount} onClick={() => setPaymentForm((value) => ({ ...value, amount, paidAmount: value.status === 'Paid' ? amount : value.paidAmount, pendingAmount: calculatePaymentPending(amount, value.status === 'Paid' ? amount : value.paidAmount, value.status) }))}>Rs {amount}</button>)}</div><label className="field-block"><span>Invoice</span><input className="lead-input" value={paymentForm.invoice} readOnly /></label><label className="field-block"><span>Total Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.amount} onChange={(event) => setPaymentForm((value) => ({ ...value, amount: event.target.value, paidAmount: value.status === 'Paid' ? event.target.value : value.paidAmount, pendingAmount: calculatePaymentPending(event.target.value, value.status === 'Paid' ? event.target.value : value.paidAmount, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Paid Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.paidAmount} onChange={(event) => setPaymentForm((value) => ({ ...value, paidAmount: event.target.value, pendingAmount: calculatePaymentPending(value.amount, event.target.value, value.status) }))} placeholder="0" /></label><label className="field-block"><span>Pending Amount</span><input className="lead-input" type="number" min="0" value={paymentForm.pendingAmount} readOnly placeholder="Auto calculated" /></label><label className="field-block"><span>Status</span><select className="lead-input" value={paymentForm.status} onChange={(event) => setPaymentForm((value) => { const paidAmount = event.target.value === 'Paid' ? value.amount : event.target.value === 'Pending' ? '' : value.paidAmount; return { ...value, status: event.target.value, paidAmount, pendingAmount: calculatePaymentPending(value.amount, paidAmount, event.target.value) }; })}><option>Paid</option><option>Partial</option><option>Pending</option></select></label><label className="field-block"><span>Paid On</span><input className="lead-input" type="date" value={paymentForm.paidOn} onChange={(event) => setPaymentForm((value) => ({ ...value, paidOn: event.target.value }))} /></label><label className="field-block"><span>Fee Type</span><select className="lead-input" value={paymentForm.feeType || 'Unclassified'} onChange={e => setPaymentForm(v => ({ ...v, feeType: e.target.value }))}>{['Unclassified', 'Consultation', 'File Charge', 'Medicine', 'Treatment', 'Other'].map(type => <option key={type}>{type}</option>)}</select></label><label className="field-block"><span>Payment Mode</span><select className="lead-input" value={paymentForm.paymentMode || ''} onChange={e => setPaymentForm(v => ({ ...v, paymentMode: e.target.value }))}><option value="">Select mode</option><option>Cash</option><option>GPay</option></select></label><Installments form={paymentForm} setForm={setPaymentForm}/></JourneyModal>}
 
       {stageModal === 'followup' && <JourneyModal title="Schedule Next Follow-up" client={selectedClient} onClose={() => setStageModal('')} onSave={saveFollowup} saveLabel="Save Follow-up"><div className="quick-preset-row"><button className="pill" type="button" onClick={() => setFollowupForm((value) => ({ ...value, date: addDays(7) }))}>After 7 days</button><button className="pill" type="button" onClick={() => setFollowupForm((value) => ({ ...value, date: addDays(15) }))}>After 15 days</button><button className="pill" type="button" onClick={() => setFollowupForm((value) => ({ ...value, date: addDays(30) }))}>After 30 days</button></div><label className="field-block"><span>Follow-up Date</span><input className="lead-input" type="date" value={followupForm.date} onChange={(event) => setFollowupForm((value) => ({ ...value, date: event.target.value }))} /></label><label className="field-block"><span>Follow-up Time</span><input className="lead-input" type="time" value={followupForm.time} onChange={(event) => setFollowupForm((value) => ({ ...value, time: event.target.value }))} /></label><label className="field-block full-field"><span>Follow-up Notes</span><textarea className="lead-input" rows="3" value={followupForm.notes} onChange={(event) => setFollowupForm((value) => ({ ...value, notes: event.target.value }))} placeholder="Reason, instructions, or reminder note..." /></label><label className="field-block"><span>Status</span><select className="lead-input" value={followupForm.status} onChange={(event) => setFollowupForm((value) => ({ ...value, status: event.target.value }))}><option>Confirmed</option><option>Pending</option></select></label></JourneyModal>}
 

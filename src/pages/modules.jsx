@@ -1,3 +1,5 @@
+import Installments, { missingInstallmentDate } from '../components/Installments.jsx';
+import { sortMeals } from '../data/sortMeals.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
@@ -272,6 +274,7 @@ function normalizePaymentRecord(entry) {
     : sourcePendingAmount;
   return {
     id: source.id,
+    installments: source.installments ?? [],
     careProgramId: source.careProgramId,
     careEnrollmentId: source.careEnrollmentId,
     note: source.note,
@@ -1219,11 +1222,12 @@ function ImportExportModule({
                   )}
                 </label>
               ))}
+            {isPaymentsModule && <Installments form={draftRecord} setForm={setDraftRecord}/>}
             </div>
             {draftSaveError && <p className="field-error form-submit-error patient-save-error" role="alert" aria-live="assertive">{draftSaveError}</p>}
             <div className="modal-actions">
               <button className="pill" type="button" onClick={dismissAddRecord}>Cancel</button>
-              <button className="pill" type="button" onClick={saveDraftRecord}>Save <ChevronRight /></button>
+              <button className="pill" type="button" disabled={missingInstallmentDate(draftRecord)} onClick={saveDraftRecord}>Save <ChevronRight /></button>
             </div>
           </div>
         </div>
@@ -1285,11 +1289,12 @@ function ImportExportModule({
                   )}
                 </label>
               ))}
+            {isPaymentsModule && <Installments form={editRecord} setForm={setEditRecord}/>}
             </div>
             {editSaveError && <p className="field-error form-submit-error patient-save-error" role="alert" aria-live="assertive">{editSaveError}</p>}
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setEditOpen(false)}>Cancel</button>
-              <button className="pill" type="button" onClick={saveEditRecord}>Save Changes <ChevronRight /></button>
+              <button className="pill" type="button" disabled={missingInstallmentDate(editRecord)} onClick={saveEditRecord}>Save Changes <ChevronRight /></button>
             </div>
           </div>
         </div>
@@ -2241,10 +2246,11 @@ function ClientProfile({ client, onBack }) {
                 <span>Paid On</span>
                 <input className="lead-input" type="date" value={payForm.paidOn} onChange={(e) => setPayForm((f) => ({ ...f, paidOn: e.target.value }))} />
               </label>
+            <Installments form={payForm} setForm={setPayForm}/>
             </div>
             <div className="modal-actions">
               <button className="pill" type="button" onClick={() => setPayModal(false)}>Cancel</button>
-              <button className="pill" type="button" onClick={savePayment}>Save <span aria-hidden="true">→</span></button>
+              <button className="pill" type="button" disabled={missingInstallmentDate(payForm)} onClick={savePayment}>Save <span aria-hidden="true">→</span></button>
             </div>
           </div>
         </div>
@@ -2444,6 +2450,7 @@ export function PaymentsPage() {
       createDefaultRecord={(rows) => ({ Invoice: nextInvoiceNumber(rows), Status: 'Paid', 'Paid On': new Date().toISOString().slice(0, 10) })}
       rowToValues={(row) => ({
         id: row.id,
+        installments: row.installments ?? [],
         careProgramId: row.careProgramId,
         careEnrollmentId: row.careEnrollmentId,
         clientId: row.clientId,
@@ -4598,7 +4605,7 @@ export function TreatmentPlansPage() {
   const addDietMeal = (slot) => {
     setDietForm((current) => ({
       ...current,
-      meals: [...current.meals, { time: slot?.time || '', meal: slot?.meal || '', food: slot?.food || '', notes: slot?.notes || '' }],
+      meals: sortMeals([...current.meals, { time: slot?.time || '', meal: slot?.meal || '', food: slot?.food || '', notes: slot?.notes || '' }]),
     }));
   };
 
@@ -4654,7 +4661,7 @@ export function TreatmentPlansPage() {
   };
 
   const copyDietForWhatsApp = () => {
-    const mealText = (dietForm.meals || [])
+    const mealText = sortMeals(dietForm.meals)
       .filter((m) => m.meal || m.food)
       .map((m) => `⏰ *${m.time || '--:--'} - ${m.meal}*\n🍽️ ${m.food}${m.notes ? `\n💡 _Note:_ ${m.notes}` : ''}`)
       .join('\n\n');
@@ -4692,7 +4699,7 @@ export function TreatmentPlansPage() {
   };
 
   const openEditDietPlan = (plan, index) => {
-    setDietForm({ ...blankDietPlan, ...plan, planDate: plan.planDate ?? '', weekLabel: plan.weekLabel ?? '', meals: Array.isArray(plan.meals) && plan.meals.length ? plan.meals : blankDietMeals });
+    setDietForm({ ...blankDietPlan, ...plan, planDate: plan.planDate ?? '', weekLabel: plan.weekLabel ?? '', meals: Array.isArray(plan.meals) && plan.meals.length ? sortMeals(plan.meals) : blankDietMeals });
     setDietTemplateName('');
     setSelectedDietPreset('');
     setToastMessage('');
@@ -4730,7 +4737,7 @@ export function TreatmentPlansPage() {
       calories: dietForm.calories,
       water: dietForm.water,
       instructions: dietForm.instructions,
-      meals: dietForm.meals.filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())),
+      meals: sortMeals(dietForm.meals).filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())),
     };
     setDietTemplates((current) => {
       const existingIndex = current.findIndex((item) => String(item.name ?? '').toLowerCase() === template.name.toLowerCase());
@@ -4740,7 +4747,7 @@ export function TreatmentPlansPage() {
   };
 
   const saveDietPlan = () => {
-    const plan = { ...dietForm, meals: dietForm.meals.filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())) };
+    const plan = { ...dietForm, meals: sortMeals(dietForm.meals).filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())) };
     setDietPlans((current) => editingDietIndex === null ? [plan, ...current] : current.map((item, index) => (index === editingDietIndex ? plan : item)));
     setDietModal(false);
     setEditingDietIndex(null);
@@ -4751,7 +4758,7 @@ export function TreatmentPlansPage() {
   const fileSafeName = (value) => String(value || 'diet-plan').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'diet-plan';
 
   const buildDietPlanPrintHtml = (plan) => {
-    const mealRows = (plan.meals ?? []).map((meal) => `<tr><td>${escapeHtml(meal.time)}</td><td>${escapeHtml(meal.meal)}</td><td>${escapeHtml(meal.food)}</td><td>${escapeHtml(meal.notes)}</td></tr>`).join('');
+    const mealRows = sortMeals(plan.meals).map((meal) => `<tr><td>${escapeHtml(meal.time)}</td><td>${escapeHtml(meal.meal)}</td><td>${escapeHtml(meal.food)}</td><td>${escapeHtml(meal.notes)}</td></tr>`).join('');
     return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(plan.client || 'Diet Plan')}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#163f33}h1{margin:0 0 8px}h2{margin:16px 0 8px}p{margin:4px 0 12px;color:#4f6f65;white-space:pre-wrap}.toolbar{display:flex;gap:10px;margin-bottom:20px}.toolbar button{border:1px solid #bcd4cc;background:#087c68;color:#fff;border-radius:8px;padding:10px 14px;font-weight:700}.summary{margin:12px 0 6px;padding:7px 0;border-top:1px solid #d6e4df;border-bottom:1px solid #d6e4df;color:#365e52;font-size:11px;line-height:1.6}.summary strong{color:#163f33}.summary span{white-space:nowrap}.summary span:not(:last-child)::after{content:'  •  ';color:#8aa59d}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #d6e4df;padding:8px;text-align:left;vertical-align:top;white-space:pre-wrap}th{background:#eaf5f1}@page{margin:16mm}@media print{.toolbar{display:none}body{margin:0;color:#163f33}thead th{background:#eaf5f1!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><h1>Diet Plan</h1><p>Mom's Pathshala</p><div class="summary"><span><strong>Patient:</strong> ${escapeHtml(plan.client)}</span><span><strong>Service:</strong> ${escapeHtml(plan.service)}</span><span><strong>Goal:</strong> ${escapeHtml(plan.goal)}</span><span><strong>Duration:</strong> ${escapeHtml(plan.duration)}</span><br><span><strong>Date:</strong> ${escapeHtml(plan.planDate)}</span><span><strong>Week / Phase:</strong> ${escapeHtml(plan.weekLabel)}</span><span><strong>Calories:</strong> ${escapeHtml(plan.calories)}</span><span><strong>Water:</strong> ${escapeHtml(plan.water)}</span></div><h2>Meal Schedule</h2><table><thead><tr><th>Time</th><th>Meal</th><th>Food</th><th>Notes</th></tr></thead><tbody>${mealRows || '<tr><td colspan="4">No meals added.</td></tr>'}</tbody></table><h2>Instructions</h2><p>${escapeHtml(plan.instructions)}</p><script>window.addEventListener('load',function(){setTimeout(function(){window.print()},500)});<\/script></body></html>`;
   };
 

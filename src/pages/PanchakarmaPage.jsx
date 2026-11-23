@@ -25,7 +25,29 @@ export function PanchakarmaPage() {
   const state = useMemo(() => readCareState(window.localStorage, currentBranch), [currentBranch, revision]);
   const live = useMemo(() => loadLiveDashboardData(currentBranch), [currentBranch, revision]);
   const patients = carePatients(live.clients);
-  const rows = state.enrollments.filter(e => e.program === 'panchakarma' && `${e.patientName} ${e.name}`.toLowerCase().includes(search.toLowerCase()));
+  const automaticPatients = [];
+  const enrollments = state.enrollments.filter(e => e.program === 'panchakarma');
+  const identity = value => String(value || '').trim().toLowerCase();
+  const phone = value => String(value || '').replace(/\D/g, '').slice(-10);
+  const samePatient = (entry, name, mobile) => mobile && phone(entry.mobile)
+    ? phone(entry.mobile) === phone(mobile)
+    : identity(entry.patientName) === identity(name);
+  live.appointments.forEach(appointment => {
+    const name = Array.isArray(appointment) ? appointment[0] : appointment.Client ?? appointment.client ?? appointment.patientName;
+    const mobile = Array.isArray(appointment) ? appointment[1] : appointment.Mobile ?? appointment.mobile;
+    const service = Array.isArray(appointment) ? appointment[4] : appointment.Service ?? appointment.service ?? appointment.Type ?? appointment.type;
+    if (!/panch(?:a)?karma/i.test(String(service || '')) || !name) return;
+    if ([...enrollments, ...automaticPatients].some(entry => samePatient(entry, name, mobile))) return;
+    const patient = patients.find(entry => samePatient({ patientName: entry.name, mobile: entry.mobile }, name, mobile));
+    automaticPatients.push({
+      id: `appointment-panchakarma:${patient?.key || phone(mobile) || identity(name)}`,
+      program: 'panchakarma', patientName: patient?.name || name,
+      patientKey: patient?.key || '', clientId: patient?.id || '', mobile: patient?.mobile || mobile || '',
+      name: 'Panchakarma', totalSessions: 1, serviceIds: [], status: 'Active',
+      treatmentDays: [], paymentEntries: [], openingPaidAmount: 0, fee: '', remainingPayment: 0,
+    });
+  });
+  const rows = [...enrollments, ...automaticPatients].filter(e => `${e.patientName} ${e.name}`.toLowerCase().includes(search.toLowerCase()));
   const update = (key, value) => setDraft(d => ({ ...d, [key]: value }));
   const open = row => {
     setError('');
