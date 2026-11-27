@@ -5511,6 +5511,15 @@ textarea.lead-input,
   gap: 10px;
 }
 
+.diet-draft-status {
+  color: #1f6b4a;
+  font-size: 13px;
+}
+
+.diet-draft-status:not(:empty) {
+  margin-top: 4px;
+}
+
 .diet-toast-msg {
   font-size: 13px;
   font-weight: 600;

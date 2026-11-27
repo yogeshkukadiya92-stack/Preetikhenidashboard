@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import { ChevronRight } from '../components/icons.jsx';
 import { ActionMenu, Card, StatusPill, Tag } from '../components/ui.jsx';
+import { clearDietDraft, dietDraftKey, useDietDraft } from '../components/useDietDraft.js';
 import { useBranch } from '../context/BranchContext.jsx';
 import { readCareState, validateCareReceiptEdit } from '../data/carePrograms.js';
 import { GenericModulePage } from './GenericModulePage.jsx';
@@ -4477,7 +4478,8 @@ export function TreatmentPlansPage() {
   const [templateMedicineError, setTemplateMedicineError] = useState('');
   const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
   const [dietModal, setDietModal] = useState(false);
-  const [dietForm, setDietForm] = useState(blankDietPlan);
+  const { editor: dietEditor, open: openDietDraft, update: setDietForm } = useDietDraft();
+  const dietForm = dietEditor?.form;
   const [dietTemplateName, setDietTemplateName] = useState('');
   const [editingDietIndex, setEditingDietIndex] = useState(null);
   const [selectedDietPreset, setSelectedDietPreset] = useState('');
@@ -4486,7 +4488,6 @@ export function TreatmentPlansPage() {
   const [dietWhatsAppUrl, setDietWhatsAppUrl] = useState('');
   const hasMountedTreatmentPlans = useRef(false);
   const hasMountedPlanTemplates = useRef(false);
-  const hasMountedDietPlans = useRef(false);
   const hasMountedDietTemplates = useRef(false);
 
   useEffect(() => {
@@ -4504,14 +4505,6 @@ export function TreatmentPlansPage() {
     }
     try { window.localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates)); } catch {}
   }, [templates]);
-
-  useEffect(() => {
-    if (!hasMountedDietPlans.current) {
-      hasMountedDietPlans.current = true;
-      return;
-    }
-    try { window.localStorage.setItem(DIET_PLANS_KEY, JSON.stringify(dietPlans)); } catch {}
-  }, [dietPlans, DIET_PLANS_KEY]);
 
   useEffect(() => {
     if (!hasMountedDietTemplates.current) {
@@ -4690,7 +4683,7 @@ export function TreatmentPlansPage() {
   };
 
   const openNewDietPlan = () => {
-    setDietForm(blankDietPlan);
+    openDietDraft(dietDraftKey(currentBranch, 'plans', 'new'), blankDietPlan);
     setDietTemplateName('');
     setSelectedDietPreset('');
     setToastMessage('');
@@ -4699,7 +4692,15 @@ export function TreatmentPlansPage() {
   };
 
   const openEditDietPlan = (plan, index) => {
-    setDietForm({ ...blankDietPlan, ...plan, planDate: plan.planDate ?? '', weekLabel: plan.weekLabel ?? '', meals: Array.isArray(plan.meals) && plan.meals.length ? sortMeals(plan.meals) : blankDietMeals });
+    const serialized = JSON.stringify(plan);
+    // Older plans have no ID. Use their contents and duplicate order so unrelated rows can move.
+    let fingerprint = 0;
+    for (let offset = 0; offset < serialized.length; offset += 1) {
+      fingerprint = Math.imul(31, fingerprint) + serialized.charCodeAt(offset) | 0;
+    }
+    const duplicateIndex = dietPlans.slice(0, index).filter((item) => JSON.stringify(item) === serialized).length;
+    const key = dietDraftKey(currentBranch, 'plans', 'edit', fingerprint, duplicateIndex);
+    openDietDraft(key, { ...blankDietPlan, ...plan, planDate: plan.planDate ?? '', weekLabel: plan.weekLabel ?? '', meals: Array.isArray(plan.meals) && plan.meals.length ? sortMeals(plan.meals) : blankDietMeals });
     setDietTemplateName('');
     setSelectedDietPreset('');
     setToastMessage('');
@@ -4748,10 +4749,28 @@ export function TreatmentPlansPage() {
 
   const saveDietPlan = () => {
     const plan = { ...dietForm, meals: sortMeals(dietForm.meals).filter((meal) => [meal.time, meal.meal, meal.food, meal.notes].some((value) => String(value ?? '').trim())) };
-    setDietPlans((current) => editingDietIndex === null ? [plan, ...current] : current.map((item, index) => (index === editingDietIndex ? plan : item)));
+    try {
+      const current = loadSavedArray(DIET_PLANS_KEY, []);
+      let next = [plan, ...current];
+      if (editingDietIndex !== null) {
+        const original = JSON.stringify(dietPlans[editingDietIndex]);
+        const occurrence = dietPlans.slice(0, editingDietIndex).filter((item) => JSON.stringify(item) === original).length;
+        const index = current.map((item, index) => JSON.stringify(item) === original ? index : -1).filter((index) => index >= 0)[occurrence];
+        if (index === undefined) {
+          setToastMessage('This plan changed in another view. Your draft is still open.');
+          return;
+        }
+        next = current.map((item, rowIndex) => rowIndex === index ? plan : item);
+      }
+      window.localStorage.setItem(DIET_PLANS_KEY, JSON.stringify(next));
+      setDietPlans(next);
+    } catch {
+      setToastMessage('The plan could not be saved. Please try again.');
+      return;
+    }
+    clearDietDraft(dietEditor.key, dietForm);
     setDietModal(false);
     setEditingDietIndex(null);
-    setDietForm(blankDietPlan);
   };
 
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -5160,7 +5179,7 @@ export function TreatmentPlansPage() {
       )}
 
       {dietModal && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setDietModal(false)}>
+        <div className="modal-backdrop" role="presentation">
           <div
             className="modal-shell diet-builder-modal"
             role="dialog"
@@ -5180,6 +5199,7 @@ export function TreatmentPlansPage() {
                     <span className="patient-name-tag">{dietForm.client || 'New Patient'}</span>
                     <span>• Date: {dietForm.planDate || new Date().toISOString().slice(0, 10)}</span>
                   </div>
+                  <div className="diet-draft-status" role="status">{dietEditor.status}</div>
                 </div>
               </div>
               <button className="icon-btn" type="button" onClick={() => setDietModal(false)} aria-label="Close modal">✕</button>
@@ -5526,7 +5546,7 @@ export function TreatmentPlansPage() {
 
               <div className="diet-builder-foot-right">
                 <button className="pill" type="button" onClick={() => setDietModal(false)}>
-                  Cancel
+                  Close
                 </button>
                 <button
                   className="pill primary-action"

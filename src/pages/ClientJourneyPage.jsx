@@ -1,9 +1,10 @@
 import Installments, { missingInstallmentDate } from '../components/Installments.jsx';
 import { sortMeals } from '../data/sortMeals.js';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SearchableFieldPicker } from './GenericModulePage.jsx';
 import { Card } from '../components/ui.jsx';
+import { clearDietDraft, dietDraftKey, useDietDraft } from '../components/useDietDraft.js';
 import { useBranch } from '../context/BranchContext.jsx';
 import { loadAllLocalResponses, loadForms } from '../data/formStore.js';
 import { services as defaultServiceNames } from '../data/appConfig.js';
@@ -993,7 +994,9 @@ export function ClientJourneyPage() {
   const [appointmentForm, setAppointmentForm] = useState(() => ({ mobile: '', ...currentSlot(), type: defaultService, status: 'Pending' }));
   const [requiredForm, setRequiredForm] = useState('Patient Intake Form');
   const [treatmentForm, setTreatmentForm] = useState({ service: defaultService, goal: '', duration: '30 days', medicine: '', dose: '', timing: '', status: 'Active' });
-  const [dietPlanForm, setDietPlanForm] = useState(() => ({ ...newDietPlan(), service: serviceOptions.find((service) => /nutrition|diet|fat|weight|muscle/i.test(service)) ?? defaultService }));
+  const { editor: dietEditor, open: openDietDraft, update: setDietPlanForm } = useDietDraft();
+  const dietPlanForm = dietEditor?.form;
+  const pendingDietDraftClear = useRef(null);
   const [treatmentMedicineRows, setTreatmentMedicineRows] = useState([{ medicine: '', dose: '', timing: '' }]);
   const [treatmentSections, setTreatmentSections] = useState(() => [
     { id: 't-1', service: defaultService, goal: '', duration: '30 days', status: 'Active', medicines: [{ medicine: '', dose: '', timing: '' }] }
@@ -1088,6 +1091,11 @@ export function ClientJourneyPage() {
 
   useEffect(() => {
     window.localStorage.setItem(journeysKey, JSON.stringify(journeys));
+    const pending = pendingDietDraftClear.current;
+    if (pending && normalizeJourneyRecord(journeys[pending.client]).visits.some((visit) => visit.dietPlanData === pending.plan)) {
+      clearDietDraft(pending.key, pending.form);
+      pendingDietDraftClear.current = null;
+    }
   }, [journeys, journeysKey]);
 
   useEffect(() => {
@@ -1251,6 +1259,7 @@ export function ClientJourneyPage() {
     ? selectedVisitId
     : defaultActiveVisitId;
   const journey = journeyVisits.find((visit) => visit.id === activeVisitId) ?? {};
+  const activeDietDraftKey = selectedClient && dietDraftKey(currentBranch, 'journey', clientId(selectedClientRecord) || selectedClient, activeVisitId);
   const timelineVisits = [...journeyVisits]
     .sort((a, b) => String(b.visitDate).localeCompare(String(a.visitDate)))
     .map((visit, index) => ({
@@ -2012,13 +2021,19 @@ export function ClientJourneyPage() {
     }
     if (stage === 'diet') {
       const savedDietPlan = journey.dietPlanData || previousDietVisit?.dietPlanData;
-      setDietPlanForm(savedDietPlan ? {
+      const initialPlan = {
         ...newDietPlan(selectedClient),
         service: serviceOptions.find((service) => /nutrition|diet|fat|weight|muscle/i.test(service)) ?? defaultService,
+      };
+      openDietDraft(activeDietDraftKey, savedDietPlan ? {
+        ...initialPlan,
         ...savedDietPlan,
         client: selectedClient,
-        meals: Array.isArray(savedDietPlan.meals) && savedDietPlan.meals.length ? sortMeals(savedDietPlan.meals) : DEFAULT_DIET_MEALS.map((meal) => ({ ...meal })),
-      } : { ...newDietPlan(selectedClient), service: serviceOptions.find((service) => /nutrition|diet|fat|weight|muscle/i.test(service)) ?? defaultService });
+        meals: Array.isArray(savedDietPlan.meals) && savedDietPlan.meals.length ? sortMeals(savedDietPlan.meals) : initialPlan.meals,
+      } : initialPlan);
+      setDietTemplateName('');
+      setSelectedDietPreset('');
+      setDietToastMessage('');
     }
     if (stage === 'followup') {
       setFollowupForm(journey.followupData ?? { date: addDays(7), time: currentSlot().time, notes: '', status: 'Confirmed' });
@@ -2293,7 +2308,7 @@ export function ClientJourneyPage() {
   };
 
   const saveDietPlan = () => {
-    if (!dietPlanForm.goal.trim()) return;
+    if (dietEditor.key !== activeDietDraftKey || !dietPlanForm.goal.trim()) return;
     const plan = {
       ...dietPlanForm,
       client: selectedClient,
@@ -2305,6 +2320,7 @@ export function ClientJourneyPage() {
       ? savedPlans.map((item) => item?.id === journey.dietPlanData.id ? plan : item)
       : [plan, ...(Array.isArray(savedPlans) ? savedPlans : [])];
     window.localStorage.setItem(dietPlansKey, JSON.stringify(nextPlans));
+    pendingDietDraftClear.current = { key: dietEditor.key, form: dietPlanForm, client: selectedClient, plan };
     updateJourney({ diet: true, dietPlanData: plan, dietAt: new Date().toISOString() });
     setStageModal('');
   };
@@ -3300,12 +3316,13 @@ ${plan.instructions || 'Follow warm hydration and healthy sleep habits.'}
         </div>
       )}
 
-      {stageModal === 'diet' && (
+      {stageModal === 'diet' && dietEditor?.key === activeDietDraftKey && (
         <DietPlanModal
           client={selectedClient}
           clientRecord={selectedClientRecord}
           serviceOptions={serviceOptions}
           dietPlanForm={dietPlanForm}
+          draftStatus={dietEditor.status}
           setDietPlanForm={setDietPlanForm}
           onClose={() => setStageModal('')}
           onSave={saveDietPlan}
@@ -3541,6 +3558,7 @@ export function DietPlanModal({
   clientRecord,
   serviceOptions,
   dietPlanForm,
+  draftStatus,
   setDietPlanForm,
   onClose,
   onSave,
@@ -3568,7 +3586,7 @@ export function DietPlanModal({
   const ageGender = patientAgeGender(clientRecord);
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="modal-backdrop" role="presentation">
       <div
         className="modal-shell diet-builder-modal"
         role="dialog"
@@ -3589,6 +3607,7 @@ export function DietPlanModal({
                 {ageGender && <span>• {ageGender}</span>}
                 <span>• Date: {dietPlanForm.planDate || currentSlot().date}</span>
               </div>
+              <div className="diet-draft-status" role="status">{draftStatus}</div>
             </div>
           </div>
           <button className="icon-btn" type="button" onClick={onClose} aria-label="Close modal">✕</button>
@@ -3924,7 +3943,7 @@ export function DietPlanModal({
 
           <div className="diet-builder-foot-right">
             <button className="pill" type="button" onClick={onClose}>
-              Cancel
+              Close
             </button>
             <button
               className="pill primary-action"
